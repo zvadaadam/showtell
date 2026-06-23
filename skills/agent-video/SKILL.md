@@ -41,9 +41,15 @@ reads the file. Pasting code is wrong and will drift from the source.
    - Make narration match what's on screen — don't claim something the frame
      doesn't show.
 3. **Validate**: `agent-video validate spec.json` — fix any errors (each has a `hint`).
-4. **Render / preview**: `agent-video preview spec.json` — returns a stable
-   `watchUrl` and serves a local watch page.
-5. **Report**: reply with the `watchUrl` and one sentence describing the video.
+4. **Render**: `agent-video render spec.json --frames-only` first (fast, no
+   audio) and **look at the PNG frames**. Fix any scene where the narration
+   describes something the frame doesn't show — this is the #1 quality problem.
+   In particular: `diff` shows raw diff text (not a chart); `chart` data is
+   **literal numbers you supply** (the renderer does not compute git stats); a
+   `code` excerpt shows only its `file:line` window. Make the words match the pixels.
+5. **Preview**: `agent-video preview spec.json` — returns a stable `watchUrl`
+   and serves a local watch page.
+6. **Report**: reply with the `watchUrl` and one sentence describing the video.
 
 ## The spec
 ```jsonc
