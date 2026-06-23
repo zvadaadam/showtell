@@ -7,8 +7,10 @@ import type { Tok } from "../highlight.ts";
 
 /**
  * Draw a code card: a window-chrome bar with the file path, then line numbers
- * and Shiki-colored tokens. Focus lines get a highlight band. Long content is
- * clipped to the card (v1a: static still; scrolling/animation is v1b).
+ * and Shiki-colored tokens. Focus lines get a highlight band. Long excerpts are
+ * windowed to a legible line cap (centered on the focus line) with a "+N more
+ * lines" footer — the font stays readable and never clips. The full requested
+ * range is still read live for the contract sha; only the display is windowed.
  */
 export function drawCode(
   ctx: SKRSContext2D,
@@ -64,17 +66,37 @@ export function drawCode(
   ctx.clip();
 
   const innerPad = Math.round(pad * 0.6);
-  // Auto-fit the font so all lines fit the card (no bottom clip, no right-edge truncation).
-  const gutterChars = String(resolved.endLine).length + 2; // "NN " + gap
-  const maxContent = Math.max(1, ...tokens.map((line) => line.reduce((n, t) => n + t.content.length, 0)));
-  const areaH = codeH - innerPad * 2;
+  const base = Math.min(dims.width, dims.height);
+
+  // Window to a legible number of lines (a fixed card can't show 40 lines big).
+  // Center the window on the focus line; keep the full range for the sha.
+  const MAX_LINES = 22;
+  let view = tokens;
+  let startLineNo = resolved.startLine;
+  let hiddenNote = "";
+  if (tokens.length > MAX_LINES) {
+    let s = 0;
+    if (resolved.focus.length) {
+      const fi = resolved.focus[0]! - resolved.startLine;
+      s = Math.max(0, Math.min(tokens.length - MAX_LINES, fi - Math.floor(MAX_LINES / 2)));
+    }
+    view = tokens.slice(s, s + MAX_LINES);
+    startLineNo = resolved.startLine + s;
+    const hidden = tokens.length - view.length;
+    hiddenNote = `+${hidden} more line${hidden > 1 ? "s" : ""}`;
+  }
+
+  const gutterChars = String(startLineNo + view.length - 1).length + 2;
+  const maxContent = Math.max(1, ...view.map((line) => line.reduce((n, t) => n + t.content.length, 0)));
+  const noteH = hiddenNote ? Math.round(base * 0.03) : 0;
+  const areaH = codeH - innerPad * 2 - noteH;
   const { fontSize, lineH } = fitMonoFont(ctx, {
     longestChars: gutterChars + maxContent,
-    lineCount: tokens.length,
+    lineCount: view.length,
     areaW: codeW - innerPad * 2,
     areaH,
-    maxFont: Math.round(Math.min(dims.width, dims.height) * 0.026),
-    minFont: Math.round(Math.min(dims.width, dims.height) * 0.018),
+    maxFont: Math.round(base * 0.03),
+    minFont: Math.round(base * 0.02),
     lineHeightRatio: 1.5,
     family: THEME.mono,
   });
@@ -86,29 +108,33 @@ export function drawCode(
   const startX = codeX + innerPad;
   const codeStartX = startX + gutterW;
   // Center the block vertically when it doesn't fill the card.
-  const topOffset = Math.max(0, (areaH - tokens.length * lineH) / 2);
+  const topOffset = Math.max(0, (areaH - view.length * lineH) / 2);
   let y = codeY + innerPad + topOffset + lineH / 2;
 
   const focus = new Set(resolved.focus);
-
-  for (let i = 0; i < tokens.length; i++) {
-    const absLine = resolved.startLine + i;
+  for (let i = 0; i < view.length; i++) {
+    const absLine = startLineNo + i;
     if (focus.has(absLine)) {
       ctx.fillStyle = THEME.focus;
       ctx.fillRect(codeX, y - lineH / 2, codeW, lineH);
     }
-    // line number
     ctx.fillStyle = THEME.gutter;
     ctx.fillText(String(absLine), startX, y);
-    // tokens
     let x = codeStartX;
-    for (const tok of tokens[i]!) {
+    for (const tok of view[i]!) {
       ctx.fillStyle = tok.color;
       ctx.fillText(tok.content, x, y);
       x += ctx.measureText(tok.content).width;
     }
     y += lineH;
-    if (y > codeY + codeH) break;
+  }
+
+  if (hiddenNote) {
+    ctx.font = `${Math.round(noteH * 0.6)}px '${THEME.sans}'`;
+    ctx.fillStyle = THEME.subtle;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(hiddenNote, codeX + codeW - innerPad, codeY + codeH - innerPad * 0.4);
   }
 
   ctx.restore();

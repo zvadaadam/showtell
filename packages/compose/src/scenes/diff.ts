@@ -57,16 +57,27 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
   ctx.clip();
 
   const innerPad = Math.round(pad * 0.5);
-  // Auto-fit so the whole diff fits (no bottom clip, no right-edge truncation).
-  const longestChars = 2 + Math.max(1, ...diff.lines.map((l) => l.content.length));
-  const areaH = codeH - innerPad * 2;
+  // Window long diffs to a legible cap (font stays readable, never clips).
+  const base = Math.min(dims.width, dims.height);
+  const MAX_LINES = 22;
+  let view = diff.lines;
+  let hiddenNote = "";
+  if (diff.lines.length > MAX_LINES) {
+    view = diff.lines.slice(0, MAX_LINES);
+    const hidden = diff.lines.length - view.length;
+    hiddenNote = `+${hidden} more line${hidden > 1 ? "s" : ""}`;
+  }
+
+  const longestChars = 2 + Math.max(1, ...view.map((l) => l.content.length));
+  const noteH = hiddenNote ? Math.round(base * 0.03) : 0;
+  const areaH = codeH - innerPad * 2 - noteH;
   const { fontSize, lineH } = fitMonoFont(ctx, {
     longestChars,
-    lineCount: diff.lines.length,
+    lineCount: view.length,
     areaW: cardW - innerPad * 2,
     areaH,
-    maxFont: Math.round(Math.min(dims.width, dims.height) * 0.024),
-    minFont: Math.round(Math.min(dims.width, dims.height) * 0.018),
+    maxFont: Math.round(base * 0.028),
+    minFont: Math.round(base * 0.02),
     lineHeightRatio: 1.5,
     family: THEME.mono,
   });
@@ -75,11 +86,10 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
 
   const markerX = cardX + innerPad;
   const textX = markerX + ctx.measureText("M").width * 2;
-  const topOffset = Math.max(0, (areaH - diff.lines.length * lineH) / 2);
+  const topOffset = Math.max(0, (areaH - view.length * lineH) / 2);
   let y = codeY + innerPad + topOffset + lineH / 2;
 
-  for (const line of diff.lines) {
-    if (y > codeY + codeH) break;
+  for (const line of view) {
     if (line.kind === "add" || line.kind === "del") {
       ctx.fillStyle = line.kind === "add" ? ADD_BG : DEL_BG;
       ctx.fillRect(cardX, y - lineH / 2, cardW, lineH);
@@ -103,6 +113,14 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
       ctx.fillText(line.content, textX, y);
     }
     y += lineH;
+  }
+
+  if (hiddenNote) {
+    ctx.font = `${Math.round(noteH * 0.6)}px '${THEME.sans}'`;
+    ctx.fillStyle = THEME.subtle;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(hiddenNote, cardX + cardW - innerPad, codeY + codeH - innerPad * 0.4);
   }
 
   ctx.restore();
