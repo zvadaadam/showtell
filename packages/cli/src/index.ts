@@ -9,8 +9,9 @@
  */
 import { readFileSync, existsSync } from "node:fs";
 import { basename } from "node:path";
+import { createHash } from "node:crypto";
 import { validateSpec, videoSpecJsonSchema, IMPLEMENTED_SCENE_KINDS, type VideoSpec, type AspectRatio } from "@agent-video/core";
-import { renderFrames, renderVideo } from "@agent-video/render";
+import { renderFrames, renderVideo, startPreviewServer } from "@agent-video/render";
 
 const VERSION = "0.0.0";
 
@@ -160,6 +161,55 @@ async function cmdRender(args: Args): Promise<never> {
   }
 }
 
+function specVideoId(spec: VideoSpec): string {
+  return createHash("sha256").update(JSON.stringify(spec)).digest("hex").slice(0, 32);
+}
+
+async function cmdPreview(args: Args): Promise<void> {
+  const usage = "Usage: agent-video preview <spec.json> [--port N] [--repo PATH] [--aspect 16:9,9:16] [--serve-seconds N]";
+  const file = args.positional[0]!;
+  const spec = loadSpecOrFail(file, usage);
+  const repoPath = (typeof args.flags.repo === "string" ? args.flags.repo : undefined) ?? spec.meta.repo.path;
+  const outDir = ".agent-video/out";
+  const baseName = basename(file).replace(/\.json$/, "").replace(/\.spec$/, "");
+
+  let aspectRatios: AspectRatio[] | undefined;
+  if (typeof args.flags.aspect === "string") {
+    const requested = args.flags.aspect.split(",").map((s) => s.trim());
+    const bad = requested.filter((a) => !(VALID_ASPECTS as string[]).includes(a));
+    if (bad.length) fail(`Invalid aspect ratio(s): ${bad.join(", ")}`, `Valid: ${VALID_ASPECTS.join(", ")}.`);
+    aspectRatios = requested as AspectRatio[];
+  }
+
+  let result;
+  try {
+    result = await renderVideo(spec, { repoPath, outDir, baseName, aspectRatios });
+  } catch (e) {
+    fail(`Render failed: ${(e as Error).message}`, "Fix the spec/repo, then re-run preview.");
+  }
+
+  const videoId = specVideoId(spec);
+  const port = typeof args.flags.port === "string" ? parseInt(args.flags.port, 10) : undefined;
+  const handle = startPreviewServer({ outputs: result.outputs, title: spec.meta.title, videoId, port });
+
+  // Agent-first: emit the result (stable watchUrl) immediately, then keep serving.
+  process.stdout.write(
+    JSON.stringify(
+      { ok: true, videoId, status: "success", watchUrl: handle.watchUrl, url: handle.url, port: handle.port, outputs: result.outputs },
+      null,
+      2,
+    ) + "\n",
+  );
+
+  const serveSeconds = typeof args.flags["serve-seconds"] === "string" ? parseInt(args.flags["serve-seconds"], 10) : undefined;
+  if (serveSeconds && serveSeconds > 0) {
+    await Bun.sleep(serveSeconds * 1000);
+    handle.stop();
+    process.exit(0);
+  }
+  await new Promise<void>(() => {}); // serve until killed
+}
+
 function cmdSchema(): never {
   ok(videoSpecJsonSchema());
 }
@@ -176,13 +226,15 @@ USAGE
 COMMANDS
   validate <spec.json>   Validate a spec against the contract. Structured JSON out;
                          errors include a 'hint' for each fix.
-  render <spec.json>     Render the spec. Flags: --out DIR, --repo PATH,
-                         --aspect 16:9,9:16. v1a: still frames for title/code.
+  render <spec.json>     Render the spec to mp4 (both ratios). Flags: --out DIR,
+                         --repo PATH, --aspect 16:9,9:16, --frames-only.
+  preview <spec.json>    Render, then serve a localhost watch page. Returns a
+                         stable watchUrl. Flags: --port N, --serve-seconds N.
   schema                 Print the published JSON Schema for spec.json.
   help                   Show this help.
   version                Print the version as JSON.
 
-  (coming next: preview, capture, eval)
+  (coming next: capture, eval)
 
 THE CONTRACT (author only this; never write ffmpeg or paste source)
   A spec.json is { "meta": {...}, "scenes": [ ... ] }.
@@ -226,6 +278,9 @@ async function main(): Promise<void> {
       break;
     case "render":
       await cmdRender(args);
+      break;
+    case "preview":
+      await cmdPreview(args);
       break;
     case "schema":
       cmdSchema();

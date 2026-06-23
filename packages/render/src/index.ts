@@ -12,6 +12,7 @@ import { synthesize, probeDurationMs } from "@agent-video/providers";
 import { imageAudioToClip, concatClips } from "./ffmpeg.ts";
 
 export { probeDurationMs } from "@agent-video/providers";
+export { startPreviewServer, type PreviewHandle, type PreviewOutput } from "./preview.ts";
 
 function isComposable(kind: string): boolean {
   return (COMPOSABLE_KINDS as readonly string[]).includes(kind);
