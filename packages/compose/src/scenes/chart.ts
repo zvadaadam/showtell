@@ -3,7 +3,10 @@ import type { ChartScene } from "@agent-video/core";
 import { THEME } from "../theme.ts";
 import type { Dims } from "../dims.ts";
 
-const SERIES_COLORS = ["#7c8cff", "#7ee787", "#ffb86c", "#ff9492", "#79c0ff", "#d2a8ff"];
+const SERIES_COLORS = [
+  "#7c8cff", "#7ee787", "#ffb86c", "#ff9492", "#79c0ff", "#d2a8ff",
+  "#f2cc60", "#56d4bc", "#ff7b9c", "#9d8cff",
+];
 
 interface Parsed {
   labels: string[];
@@ -45,15 +48,10 @@ export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims): vo
   drawLegend(ctx, p, dims, base, pad);
 }
 
-function niceMax(v: number): number {
-  if (v <= 0) return 1;
-  const mag = Math.pow(10, Math.floor(Math.log10(v)));
-  return Math.ceil(v / mag) * mag;
-}
-
 function drawBarOrLine(ctx: SKRSContext2D, p: Parsed, plot: { x: number; y: number; w: number; h: number }, base: number, kind: "bar" | "line"): void {
   const allVals = p.series.flatMap((s) => s.values);
-  const max = niceMax(Math.max(1, ...allVals));
+  // Headroom so the tallest bar fills ~85% and value labels have room above.
+  const max = Math.max(1, ...allVals) * 1.18;
   const axisFont = Math.round(base * 0.022);
   const chartH = plot.h - axisFont * 2.5;
   const baseY = plot.y + chartH;
@@ -81,11 +79,22 @@ function drawBarOrLine(ctx: SKRSContext2D, p: Parsed, plot: { x: number; y: numb
     if (kind === "bar") {
       const barGap = groupW * 0.18;
       const barW = (groupW - barGap * 2) / p.series.length;
+      const single = p.series.length === 1;
       p.series.forEach((s, si) => {
-        const h = (s.values[g]! / max) * chartH;
-        ctx.fillStyle = SERIES_COLORS[si % SERIES_COLORS.length]!;
-        ctx.fillRect(gx + barGap + barW * si, baseY - h, barW * 0.86, h);
+        const v = s.values[g]!;
+        const h = (v / max) * chartH;
+        const x = gx + barGap + barW * si;
+        // Single series → color per label (matches the label legend); multi → per series.
+        ctx.fillStyle = SERIES_COLORS[(single ? g : si) % SERIES_COLORS.length]!;
+        ctx.fillRect(x, baseY - h, barW * 0.86, h);
+        // value label above the bar
+        ctx.fillStyle = THEME.fg;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(String(v), x + barW * 0.43, baseY - h - axisFont * 0.3);
       });
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
     }
   }
 

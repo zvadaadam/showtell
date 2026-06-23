@@ -2,7 +2,7 @@ import type { SKRSContext2D } from "@napi-rs/canvas";
 import type { CodeScene, ResolvedCode } from "@agent-video/core";
 import { THEME } from "../theme.ts";
 import type { Dims } from "../dims.ts";
-import { roundRect } from "../draw.ts";
+import { roundRect, fitMonoFont } from "../draw.ts";
 import type { Tok } from "../highlight.ts";
 
 /**
@@ -63,14 +63,24 @@ export function drawCode(
   ctx.rect(codeX, codeY, codeW, codeH);
   ctx.clip();
 
-  const fontSize = Math.round(Math.min(dims.width, dims.height) * 0.026);
-  const lineH = Math.round(fontSize * 1.5);
+  const innerPad = Math.round(pad * 0.6);
+  // Auto-fit the font so all lines fit the card (no bottom clip, no right-edge truncation).
+  const gutterChars = String(resolved.endLine).length + 2; // "NN " + gap
+  const maxContent = Math.max(1, ...tokens.map((line) => line.reduce((n, t) => n + t.content.length, 0)));
+  const { fontSize, lineH } = fitMonoFont(ctx, {
+    longestChars: gutterChars + maxContent,
+    lineCount: tokens.length,
+    areaW: codeW - innerPad * 2,
+    areaH: codeH - innerPad * 2,
+    maxFont: Math.round(Math.min(dims.width, dims.height) * 0.026),
+    lineHeightRatio: 1.5,
+    family: THEME.mono,
+  });
   ctx.font = `${fontSize}px '${THEME.mono}'`;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
 
-  const innerPad = Math.round(pad * 0.6);
-  const gutterW = ctx.measureText(String(resolved.endLine).padStart(2, " ") + "  ").width;
+  const gutterW = gutterChars * ctx.measureText("M").width;
   const startX = codeX + innerPad;
   const codeStartX = startX + gutterW;
   let y = codeY + innerPad + lineH / 2;

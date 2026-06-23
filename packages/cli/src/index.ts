@@ -281,7 +281,8 @@ COMMANDS
   validate <spec.json>   Validate a spec against the contract. Structured JSON out;
                          errors include a 'hint' for each fix.
   render <spec.json>     Render the spec to mp4 (both ratios). Flags: --out DIR,
-                         --repo PATH, --aspect 16:9,9:16, --frames-only.
+                         --repo PATH, --aspect 16:9,9:16, --frames-only
+                         (--frames-only = PNG per scene, skips TTS + mux).
   preview <spec.json>    Render, then serve a localhost watch page. Returns a
                          stable watchUrl. Flags: --port N, --serve-seconds N.
   capture                Record the screen (macOS) into a capture session for a

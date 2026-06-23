@@ -2,7 +2,7 @@ import type { SKRSContext2D } from "@napi-rs/canvas";
 import type { DiffScene, ResolvedDiff } from "@agent-video/core";
 import { THEME } from "../theme.ts";
 import type { Dims } from "../dims.ts";
-import { roundRect } from "../draw.ts";
+import { roundRect, fitMonoFont } from "../draw.ts";
 
 const ADD_BG = "rgba(46,160,67,0.18)";
 const DEL_BG = "rgba(248,81,73,0.18)";
@@ -56,14 +56,23 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
   ctx.rect(cardX, codeY, cardW, codeH);
   ctx.clip();
 
-  const fontSize = Math.round(Math.min(dims.width, dims.height) * 0.024);
-  const lineH = Math.round(fontSize * 1.5);
+  const innerPad = Math.round(pad * 0.5);
+  // Auto-fit so the whole diff fits (no bottom clip, no right-edge truncation).
+  const longestChars = 2 + Math.max(1, ...diff.lines.map((l) => l.content.length));
+  const { fontSize, lineH } = fitMonoFont(ctx, {
+    longestChars,
+    lineCount: diff.lines.length,
+    areaW: cardW - innerPad * 2,
+    areaH: codeH - innerPad * 2,
+    maxFont: Math.round(Math.min(dims.width, dims.height) * 0.024),
+    lineHeightRatio: 1.5,
+    family: THEME.mono,
+  });
   ctx.font = `${fontSize}px '${THEME.mono}'`;
   ctx.textAlign = "left";
 
-  const innerPad = Math.round(pad * 0.5);
   const markerX = cardX + innerPad;
-  const textX = markerX + ctx.measureText("+ ").width;
+  const textX = markerX + ctx.measureText("M").width * 2;
   let y = codeY + innerPad + lineH / 2;
 
   for (const line of diff.lines) {

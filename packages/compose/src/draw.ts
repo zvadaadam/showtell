@@ -39,6 +39,24 @@ export function wrapText(ctx: SKRSContext2D, text: string, maxWidth: number): st
   return lines;
 }
 
+/**
+ * Pick a monospace font size so `lineCount` lines of up to `longestChars`
+ * characters fit within areaW × areaH — prevents code/diff clipping (bottom and
+ * right edge). Monospace ⇒ uniform char width, so this is exact.
+ */
+export function fitMonoFont(
+  ctx: SKRSContext2D,
+  opts: { longestChars: number; lineCount: number; areaW: number; areaH: number; maxFont: number; lineHeightRatio: number; family: string; minFont?: number },
+): { fontSize: number; lineH: number } {
+  const probe = 100;
+  ctx.font = `${probe}px '${opts.family}'`;
+  const charWPerPx = ctx.measureText("M").width / probe;
+  const byWidth = opts.longestChars > 0 ? opts.areaW / (opts.longestChars * charWPerPx) : opts.maxFont;
+  const byHeight = opts.lineCount > 0 ? opts.areaH / (opts.lineCount * opts.lineHeightRatio) : opts.maxFont;
+  const fontSize = Math.max(opts.minFont ?? 12, Math.min(opts.maxFont, byWidth, byHeight));
+  return { fontSize, lineH: fontSize * opts.lineHeightRatio };
+}
+
 /** Rounded-rect path (canvas has roundRect, but keep it explicit for older builds). */
 export function roundRect(
   ctx: SKRSContext2D,

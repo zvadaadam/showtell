@@ -45,7 +45,7 @@ reads the file. Pasting code is wrong and will drift from the source.
 {
   "meta": {
     "title": "PR #482: idempotency keys",
-    "aspectRatios": ["16:9", "9:16"],   // desktop + mobile (default: ["16:9"])
+    "aspectRatios": ["16:9", "9:16"],   // desktop, mobile, or "1:1" (default: ["16:9"])
     "tts": { "provider": "say" },         // local default; BYO-API later
     "repo": { "path": ".", "baseRef": "main", "headRef": "HEAD" }
   },
@@ -62,7 +62,9 @@ reads the file. Pasting code is wrong and will drift from the source.
 - **talking-points** — `content: { heading?, points: string[] }`. Bulleted list
   (e.g. what reviewers should check).
 - **chart** — `content: { chartType: "bar"|"line"|"pie", title?, data: object[] }`.
-  Each datum: one label string + numeric series, e.g. `{ "file": "a.ts", "added": 10, "removed": 2 }`.
+  Each datum has **exactly one string key** (the axis label) and one or more
+  numeric keys (the series), e.g. `{ "file": "a.ts", "added": 10, "removed": 2 }`.
+  One numeric key → one bar per label; multiple → grouped bars + a series legend.
 - **screencap** — `content: { source: "app"|"browser"|"desktop", sessionRef }`.
   Composites a screen recording. First record one: `agent-video capture --id NAME --seconds N`,
   then set `sessionRef: "NAME"`.
