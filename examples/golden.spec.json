@@ -1,0 +1,61 @@
+{
+  "$schema": "../packages/core/schema.json",
+  "meta": {
+    "title": "agent-video — golden walkthrough",
+    "aspectRatios": ["16:9", "9:16"],
+    "tts": { "provider": "say" },
+    "repo": { "path": ".", "baseRef": "main", "headRef": "HEAD" }
+  },
+  "scenes": [
+    {
+      "kind": "title",
+      "content": { "heading": "agent-video", "subtitle": "A repo-aware walkthrough, rendered locally" },
+      "narration": "Here's a quick tour of agent-video — every scene kind, rendered from this real repository.",
+      "duration": "auto"
+    },
+    {
+      "kind": "code",
+      "content": { "file": "packages/core/src/repo.ts", "lineStart": 1, "lineEnd": 6, "focus": [4] },
+      "narration": "The local advantage: code scenes reference the repo, and the renderer reads the live bytes, so the code on screen is always ground truth.",
+      "duration": "auto"
+    },
+    {
+      "kind": "diff",
+      "content": { "file": "packages/cli/package.json", "ref": "19d15aa..HEAD" },
+      "narration": "Diff scenes come straight from git. Here the CLI grew its render and capture dependencies.",
+      "duration": "auto"
+    },
+    {
+      "kind": "chart",
+      "content": {
+        "chartType": "bar",
+        "title": "Scene kinds shipped",
+        "data": [
+          { "phase": "v1a", "kinds": 2 },
+          { "phase": "v1b", "kinds": 4 }
+        ]
+      },
+      "narration": "Two scene kinds in the v1a skeleton, four more in v1b — six in total.",
+      "duration": "auto"
+    },
+    {
+      "kind": "screencap",
+      "content": { "source": "desktop", "sessionRef": "demo" },
+      "narration": "Screencap scenes composite a real screen recording into the timeline.",
+      "duration": "auto"
+    },
+    {
+      "kind": "talking-points",
+      "content": {
+        "heading": "What makes it different",
+        "points": [
+          "Local and repo-aware: it reads the real diff and files.",
+          "The agent authors only a spec; the renderer owns every pixel.",
+          "Deterministic, cached, and watermarked — desktop and mobile."
+        ]
+      },
+      "narration": "It's local, the agent only writes a spec, and every render is deterministic and cached.",
+      "duration": "auto"
+    }
+  ]
+}

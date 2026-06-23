@@ -36,13 +36,13 @@ test("pasted-extra keys are rejected (strict)", () => {
   expect(r.ok).toBe(false);
 });
 
-test("a not-yet-renderable kind validates but warns", () => {
+test("all six scene kinds are implemented (no not-yet-renderable warnings)", () => {
   const r = validateSpec({
     ...good,
-    scenes: [{ kind: "screencap", content: { source: "app" }, narration: "x" }],
+    scenes: [{ kind: "screencap", content: { source: "app", sessionRef: "s" }, narration: "x" }],
   });
   expect(r.ok).toBe(true);
-  if (r.ok) expect(r.warnings[0]!.path).toContain("kind");
+  if (r.ok) expect(r.warnings).toHaveLength(0);
 });
 
 test("json schema generates", () => {
