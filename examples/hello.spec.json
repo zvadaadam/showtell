@@ -1,0 +1,32 @@
+{
+  "$schema": "../packages/core/schema.json",
+  "meta": {
+    "title": "agent-video — hello",
+    "fps": 30,
+    "aspectRatios": ["16:9", "9:16"],
+    "tts": { "provider": "say" },
+    "repo": { "path": "." }
+  },
+  "scenes": [
+    {
+      "kind": "title",
+      "content": {
+        "heading": "agent-video",
+        "subtitle": "Loom for agents — a local, repo-aware video renderer"
+      },
+      "narration": "agent-video turns a coding agent's work into a short narrated walkthrough, rendered locally so it can read your real code.",
+      "duration": "auto"
+    },
+    {
+      "kind": "code",
+      "content": {
+        "file": "packages/core/src/spec.ts",
+        "lineStart": 1,
+        "lineEnd": 14,
+        "focus": [13]
+      },
+      "narration": "The spec is the contract: the agent authors scenes, and the renderer reads the live file bytes so the code on screen is always ground-truth.",
+      "duration": "auto"
+    }
+  ]
+}
