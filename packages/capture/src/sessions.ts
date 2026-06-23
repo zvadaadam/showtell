@@ -1,5 +1,6 @@
 /** Capture session store: recordings live at <root>/.agent-video/captures/<id>.mp4. */
 import { existsSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join, isAbsolute } from "node:path";
 
 export function capturesDir(root = "."): string {
@@ -14,6 +15,21 @@ export function ensureCapturesDir(root = "."): string {
 
 export function sessionPath(id: string, root = "."): string {
   return join(capturesDir(root), `${id}.mp4`);
+}
+
+/** Provision a synthetic capture session (ffmpeg testsrc) if one doesn't exist.
+ *  Used by `agent-video eval` so the self-test renders screencap scenes without
+ *  Screen Recording permission. */
+export function ensureSyntheticSession(id: string, root = ".", seconds = 4): string {
+  const p = sessionPath(id, root);
+  if (existsSync(p)) return p;
+  ensureCapturesDir(root);
+  execFileSync(
+    "ffmpeg",
+    ["-y", "-loglevel", "error", "-f", "lavfi", "-i", `testsrc=size=1440x900:rate=30:duration=${seconds}`, "-pix_fmt", "yuv420p", p],
+    { stdio: ["ignore", "pipe", "pipe"] },
+  );
+  return p;
 }
 
 /** Resolve a screencap scene's sessionRef to a real recording path. */

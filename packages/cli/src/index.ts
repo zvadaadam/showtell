@@ -12,7 +12,7 @@ import { basename } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { validateSpec, videoSpecJsonSchema, IMPLEMENTED_SCENE_KINDS, type VideoSpec, type AspectRatio } from "@agent-video/core";
 import { renderFrames, renderVideo, startPreviewServer } from "@agent-video/render";
-import { recordScreen, ensureCapturesDir, sessionPath } from "@agent-video/capture";
+import { recordScreen, ensureCapturesDir, sessionPath, ensureSyntheticSession } from "@agent-video/capture";
 
 const VERSION = "0.0.0";
 
@@ -226,6 +226,44 @@ function cmdCapture(args: Args): never {
   }
 }
 
+async function cmdEval(args: Args): Promise<never> {
+  const file = (typeof args.flags.spec === "string" ? args.flags.spec : undefined) ?? "examples/golden.spec.json";
+  const spec = loadSpecOrFail(file, "Usage: agent-video eval [--spec PATH]");
+  const repoPath = spec.meta.repo.path;
+
+  // Provision synthetic capture sessions so screencap scenes render without
+  // Screen Recording permission (the self-test is deterministic + offline).
+  for (const s of spec.scenes) {
+    if (s.kind === "screencap" && s.content.sessionRef) ensureSyntheticSession(s.content.sessionRef, repoPath);
+  }
+
+  let result;
+  try {
+    result = await renderVideo(spec, { repoPath, outDir: ".agent-video/eval", baseName: "eval", aspectRatios: ["16:9", "9:16"] });
+  } catch (e) {
+    fail(`Self-test render failed: ${(e as Error).message}`, "Fix the spec/repo and re-run `agent-video eval`.");
+  }
+
+  const ars = result.outputs.map((o) => o.aspectRatio);
+  const gates: Record<string, boolean> = {
+    rendersBothRatios: ars.includes("16:9") && ars.includes("9:16"),
+    validMp4: result.outputs.length > 0 && result.outputs.every((o) => o.durationMs > 0),
+    allKindsRendered: result.skipped.length === 0,
+    refsReadLive: result.resolvedCode.length > 0,
+    durationsSynced: result.scenes.filter((s) => s.auto).every((s) => Math.abs(s.durationSec - (s.narrationMs / 1000 + 0.6)) < 0.05),
+  };
+  const allPass = Object.values(gates).every(Boolean);
+  const payload = {
+    ok: allPass,
+    gates,
+    sceneKinds: [...new Set(spec.scenes.map((s) => s.kind))],
+    outputs: result.outputs,
+    resolvedRefs: result.resolvedCode.map((r) => ({ scene: r.scene, file: r.file })),
+  };
+  if (!allPass) fail("Self-test gates failed.", "See `gates` for which check failed.", payload);
+  ok(payload);
+}
+
 function cmdSchema(): never {
   ok(videoSpecJsonSchema());
 }
@@ -248,11 +286,11 @@ COMMANDS
                          stable watchUrl. Flags: --port N, --serve-seconds N.
   capture                Record the screen (macOS) into a capture session for a
                          screencap scene. Flags: --seconds N, --id NAME, --fps N.
+  eval                   Self-test: render the golden example (or --spec PATH) in
+                         both ratios and assert every gate. Returns pass/fail JSON.
   schema                 Print the published JSON Schema for spec.json.
   help                   Show this help.
   version                Print the version as JSON.
-
-  (coming next: eval)
 
 THE CONTRACT (author only this; never write ffmpeg or paste source)
   A spec.json is { "meta": {...}, "scenes": [ ... ] }.
@@ -302,6 +340,9 @@ async function main(): Promise<void> {
       break;
     case "capture":
       cmdCapture(args);
+      break;
+    case "eval":
+      await cmdEval(args);
       break;
     case "schema":
       cmdSchema();
