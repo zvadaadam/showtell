@@ -9,9 +9,10 @@
  */
 import { readFileSync, existsSync } from "node:fs";
 import { basename } from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { validateSpec, videoSpecJsonSchema, IMPLEMENTED_SCENE_KINDS, type VideoSpec, type AspectRatio } from "@agent-video/core";
 import { renderFrames, renderVideo, startPreviewServer } from "@agent-video/render";
+import { recordScreen, ensureCapturesDir, sessionPath } from "@agent-video/capture";
 
 const VERSION = "0.0.0";
 
@@ -210,6 +211,21 @@ async function cmdPreview(args: Args): Promise<void> {
   await new Promise<void>(() => {}); // serve until killed
 }
 
+function cmdCapture(args: Args): never {
+  const seconds = typeof args.flags.seconds === "string" ? parseInt(args.flags.seconds, 10) : 5;
+  const fps = typeof args.flags.fps === "string" ? parseInt(args.flags.fps, 10) : 30;
+  const repoRoot = typeof args.flags.repo === "string" ? args.flags.repo : ".";
+  const id = typeof args.flags.id === "string" ? args.flags.id : `cap-${randomBytes(4).toString("hex")}`;
+  ensureCapturesDir(repoRoot);
+  const out = sessionPath(id, repoRoot);
+  try {
+    const r = recordScreen({ outPath: out, durationSec: seconds, fps });
+    ok({ ok: true, sessionId: id, path: r.outPath, bytes: r.bytes, seconds, hint: `Reference it in a spec: { "kind": "screencap", "content": { "source": "desktop", "sessionRef": "${id}" } }` });
+  } catch (e) {
+    fail(`Capture failed: ${(e as Error).message}`, "Grant Screen Recording permission (System Settings → Privacy & Security → Screen Recording), then retry. macOS only.");
+  }
+}
+
 function cmdSchema(): never {
   ok(videoSpecJsonSchema());
 }
@@ -230,11 +246,13 @@ COMMANDS
                          --repo PATH, --aspect 16:9,9:16, --frames-only.
   preview <spec.json>    Render, then serve a localhost watch page. Returns a
                          stable watchUrl. Flags: --port N, --serve-seconds N.
+  capture                Record the screen (macOS) into a capture session for a
+                         screencap scene. Flags: --seconds N, --id NAME, --fps N.
   schema                 Print the published JSON Schema for spec.json.
   help                   Show this help.
   version                Print the version as JSON.
 
-  (coming next: capture, eval)
+  (coming next: eval)
 
 THE CONTRACT (author only this; never write ffmpeg or paste source)
   A spec.json is { "meta": {...}, "scenes": [ ... ] }.
@@ -281,6 +299,9 @@ async function main(): Promise<void> {
       break;
     case "preview":
       await cmdPreview(args);
+      break;
+    case "capture":
+      cmdCapture(args);
       break;
     case "schema":
       cmdSchema();

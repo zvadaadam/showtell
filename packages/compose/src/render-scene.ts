@@ -74,3 +74,13 @@ export async function renderSceneToPng(scene: Scene, opts: RenderSceneOpts): Pro
 
   return { png: canvas.toBuffer("image/png"), width: dims.width, height: dims.height, resolved };
 }
+
+/** A full-frame transparent PNG with just the watermark — to overlay on video. */
+export function renderWatermarkPng(aspectRatio: AspectRatio, text = "agent-video.dev"): Buffer {
+  ensureFonts();
+  const dims = dimsFor(aspectRatio);
+  const canvas = createCanvas(dims.width, dims.height);
+  const ctx = canvas.getContext("2d");
+  drawWatermark(ctx, dims, text);
+  return canvas.toBuffer("image/png");
+}

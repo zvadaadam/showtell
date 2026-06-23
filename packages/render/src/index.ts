@@ -7,8 +7,9 @@ import { mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import type { VideoSpec, AspectRatio } from "@agent-video/core";
-import { renderSceneToPng, COMPOSABLE_KINDS } from "@agent-video/compose";
+import { renderSceneToPng, renderWatermarkPng, dimsFor, COMPOSABLE_KINDS } from "@agent-video/compose";
 import { synthesize, probeDurationMs } from "@agent-video/providers";
+import { resolveSession, compositeScreencap } from "@agent-video/capture";
 import { imageAudioToClip, concatClips } from "./ffmpeg.ts";
 
 export { probeDurationMs } from "@agent-video/providers";
@@ -16,6 +17,11 @@ export { startPreviewServer, type PreviewHandle, type PreviewOutput } from "./pr
 
 function isComposable(kind: string): boolean {
   return (COMPOSABLE_KINDS as readonly string[]).includes(kind);
+}
+
+/** Scene kinds the renderer can turn into a clip (compose stills + capture video). */
+function isRenderable(kind: string): boolean {
+  return isComposable(kind) || kind === "screencap";
 }
 
 function sha256(text: string): string {
@@ -136,16 +142,16 @@ export async function renderVideo(
   const workDir = join(opts.outDir, ".work");
   mkdirSync(workDir, { recursive: true });
 
-  // Pass 1 — TTS per composable scene (audio is aspect-ratio independent).
-  const composable = spec.scenes.map((s, i) => ({ s, i })).filter(({ s }) => isComposable(s.kind));
+  // Pass 1 — TTS per renderable scene (audio is aspect-ratio independent).
+  const renderable = spec.scenes.map((s, i) => ({ s, i })).filter(({ s }) => isRenderable(s.kind));
   const skipped = spec.scenes
     .map((s, i) => ({ s, i }))
-    .filter(({ s }) => !isComposable(s.kind))
-    .map(({ s, i }) => ({ scene: i, kind: s.kind, reason: "kind not composable yet (v1a: title, code)" }));
+    .filter(({ s }) => !isRenderable(s.kind))
+    .map(({ s, i }) => ({ scene: i, kind: s.kind, reason: "scene kind not renderable yet" }));
 
   const timings: SceneTiming[] = [];
   const audioByScene = new Map<number, string>();
-  for (const { s, i } of composable) {
+  for (const { s, i } of renderable) {
     const syn = await synthesize({ text: s.narration, voice, model }, { provider, cacheDir: join(cacheDir, "tts") });
     const auto = s.duration === "auto";
     const durationSec = auto ? syn.durationMs / 1000 + TAIL_SEC : (s.duration as number);
@@ -165,10 +171,35 @@ export async function renderVideo(
   const resolvedCode: ResolvedInfo[] = [];
   for (const ar of ratios) {
     const clips: string[] = [];
+    const dims = dimsFor(ar);
+    // One watermark overlay PNG per ratio (for screencap video clips).
+    let wmPng: string | undefined;
+    if (wm !== false) {
+      wmPng = join(workDir, `wm-${ar.replace(":", "x")}.png`);
+      writeFileSync(wmPng, renderWatermarkPng(ar, wm)); // wm is a string here (watermarkText returns string | false)
+    }
     for (const t of timings) {
       const scene = spec.scenes[t.scene]!;
-      const rendered = await renderSceneToPng(scene, { repoPath: opts.repoPath, aspectRatio: ar, watermark: wm });
       const tag = `s${String(t.scene).padStart(3, "0")}-${ar.replace(":", "x")}`;
+      const clip = join(workDir, `${tag}.mp4`);
+
+      if (scene.kind === "screencap") {
+        const source = resolveSession(scene.content.sessionRef ?? "", opts.repoPath);
+        compositeScreencap({
+          source,
+          outPath: clip,
+          width: dims.width,
+          height: dims.height,
+          durationSec: t.durationSec,
+          fps,
+          audio: audioByScene.get(t.scene),
+          watermarkPng: wmPng,
+        });
+        clips.push(clip);
+        continue;
+      }
+
+      const rendered = await renderSceneToPng(scene, { repoPath: opts.repoPath, aspectRatio: ar, watermark: wm });
       const png = join(workDir, `${tag}.png`);
       writeFileSync(png, rendered.png);
       if (rendered.resolved && ar === ratios[0]) {
@@ -179,7 +210,6 @@ export async function renderVideo(
           sha256: sha256(rendered.resolved.text),
         });
       }
-      const clip = join(workDir, `${tag}.mp4`);
       imageAudioToClip({ image: png, audio: audioByScene.get(t.scene)!, durationSec: t.durationSec, fps, outPath: clip });
       clips.push(clip);
     }

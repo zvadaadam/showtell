@@ -10,6 +10,10 @@
         "typescript": "^5.7.0",
       },
     },
+    "packages/capture": {
+      "name": "@agent-video/capture",
+      "version": "0.0.0",
+    },
     "packages/cli": {
       "name": "@agent-video/cli",
       "version": "0.0.0",
@@ -17,6 +21,7 @@
         "agent-video": "./src/index.ts",
       },
       "dependencies": {
+        "@agent-video/capture": "workspace:*",
         "@agent-video/core": "workspace:*",
         "@agent-video/render": "workspace:*",
       },
@@ -48,6 +53,7 @@
       "name": "@agent-video/render",
       "version": "0.0.0",
       "dependencies": {
+        "@agent-video/capture": "workspace:*",
         "@agent-video/compose": "workspace:*",
         "@agent-video/core": "workspace:*",
         "@agent-video/providers": "workspace:*",
@@ -55,6 +61,8 @@
     },
   },
   "packages": {
+    "@agent-video/capture": ["@agent-video/capture@workspace:packages/capture"],
+
     "@agent-video/cli": ["@agent-video/cli@workspace:packages/cli"],
 
     "@agent-video/compose": ["@agent-video/compose@workspace:packages/compose"],
