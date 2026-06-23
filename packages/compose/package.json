@@ -1,0 +1,17 @@
+{
+  "name": "@agent-video/compose",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Mode B compose: render a VideoSpec scene to image frames (deterministic). v1a engine = canvas+Shiki; hyperframes/HTML for animated kinds (v1b).",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agent-video/core": "workspace:*",
+    "@fontsource/inter": "^5.1.0",
+    "@fontsource/jetbrains-mono": "^5.1.0",
+    "@napi-rs/canvas": "^0.1.97",
+    "shiki": "^1.24.0"
+  }
+}

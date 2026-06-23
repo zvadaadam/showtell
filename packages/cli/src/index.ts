@@ -8,7 +8,8 @@
  * the whole pipeline from `--help` alone.
  */
 import { readFileSync, existsSync } from "node:fs";
-import { validateSpec, videoSpecJsonSchema, IMPLEMENTED_SCENE_KINDS } from "@agent-video/core";
+import { validateSpec, videoSpecJsonSchema, IMPLEMENTED_SCENE_KINDS, type VideoSpec, type AspectRatio } from "@agent-video/core";
+import { renderFrames } from "@agent-video/render";
 
 const VERSION = "0.0.0";
 
@@ -71,29 +72,24 @@ function parseArgs(argv: string[]): Args {
 // Commands
 // ---------------------------------------------------------------------------
 
-function cmdValidate(args: Args): never {
-  const file = args.positional[0];
-  if (!file) {
-    fail("Missing spec file.", "Usage: agent-video validate <spec.json>");
-  }
+/** Read + parse + validate a spec file, or fail() with structured output. */
+function loadSpecOrFail(file: string | undefined, usage: string): VideoSpec {
+  if (!file) fail("Missing spec file.", usage);
   if (!existsSync(file)) {
     fail(`Spec file not found: ${file}`, "Pass a path to a JSON spec. See `agent-video schema` for the contract.");
   }
-
   let raw: string;
   try {
     raw = readFileSync(file, "utf-8");
   } catch (e) {
     fail(`Could not read ${file}: ${(e as Error).message}`);
   }
-
   let data: unknown;
   try {
     data = JSON.parse(raw);
   } catch (e) {
     fail(`Invalid JSON in ${file}: ${(e as Error).message}`, "Fix the JSON syntax (e.g. trailing commas, unquoted keys).");
   }
-
   const result = validateSpec(data);
   if (!result.ok) {
     fail(`Spec failed validation (${result.errors.length} error(s)).`, "Fix each error below; the schema is strict.", {
@@ -101,6 +97,14 @@ function cmdValidate(args: Args): never {
       warnings: result.warnings,
     });
   }
+  return result.spec;
+}
+
+function cmdValidate(args: Args): never {
+  const file = args.positional[0];
+  const spec = loadSpecOrFail(file, "Usage: agent-video validate <spec.json>");
+  const result = validateSpec(spec); // re-run to surface warnings
+  if (!result.ok) fail("Spec failed validation.", undefined, { errors: result.errors });
 
   ok({
     ok: true,
@@ -111,6 +115,42 @@ function cmdValidate(args: Args): never {
     renderableNow: IMPLEMENTED_SCENE_KINDS,
     warnings: result.warnings,
   });
+}
+
+const VALID_ASPECTS: AspectRatio[] = ["16:9", "9:16", "1:1"];
+
+async function cmdRender(args: Args): Promise<never> {
+  const usage = "Usage: agent-video render <spec.json> [--out DIR] [--repo PATH] [--aspect 16:9,9:16]";
+  const spec = loadSpecOrFail(args.positional[0], usage);
+
+  const repoPath = (typeof args.flags.repo === "string" ? args.flags.repo : undefined) ?? spec.meta.repo.path;
+  const outDir = (typeof args.flags.out === "string" ? args.flags.out : undefined) ?? ".agent-video/frames";
+
+  let aspectRatios: AspectRatio[] | undefined;
+  if (typeof args.flags.aspect === "string") {
+    const requested = args.flags.aspect.split(",").map((s) => s.trim());
+    const bad = requested.filter((a) => !(VALID_ASPECTS as string[]).includes(a));
+    if (bad.length) {
+      fail(`Invalid aspect ratio(s): ${bad.join(", ")}`, `Valid: ${VALID_ASPECTS.join(", ")}.`);
+    }
+    aspectRatios = requested as AspectRatio[];
+  }
+
+  try {
+    const result = await renderFrames(spec, { repoPath, outDir, aspectRatios });
+    ok({
+      ok: true,
+      stage: "frames",
+      outDir: result.outDir,
+      aspectRatios: result.aspectRatios,
+      frameCount: result.frames.length,
+      frames: result.frames,
+      resolvedCode: result.resolvedCode,
+      skipped: result.skipped,
+    });
+  } catch (e) {
+    fail(`Render failed: ${(e as Error).message}`, "Check the failing scene's file/line reference and that the repo path is correct.");
+  }
 }
 
 function cmdSchema(): never {
@@ -129,11 +169,13 @@ USAGE
 COMMANDS
   validate <spec.json>   Validate a spec against the contract. Structured JSON out;
                          errors include a 'hint' for each fix.
+  render <spec.json>     Render the spec. Flags: --out DIR, --repo PATH,
+                         --aspect 16:9,9:16. v1a: still frames for title/code.
   schema                 Print the published JSON Schema for spec.json.
   help                   Show this help.
   version                Print the version as JSON.
 
-  (coming next: render, preview, capture, eval)
+  (coming next: preview, capture, eval)
 
 THE CONTRACT (author only this; never write ffmpeg or paste source)
   A spec.json is { "meta": {...}, "scenes": [ ... ] }.
@@ -164,24 +206,31 @@ EXAMPLES
 // Main
 // ---------------------------------------------------------------------------
 
-const args = parseArgs(process.argv);
+async function main(): Promise<void> {
+  const args = parseArgs(process.argv);
 
-if (args.flags.help || args.command === "help" || args.command === "--help" || args.command === "-h") {
-  cmdHelp();
+  if (args.flags.help || args.command === "help" || args.command === "--help" || args.command === "-h") {
+    cmdHelp();
+  }
+
+  switch (args.command) {
+    case "validate":
+      cmdValidate(args);
+      break;
+    case "render":
+      await cmdRender(args);
+      break;
+    case "schema":
+      cmdSchema();
+      break;
+    case "version":
+    case "--version":
+    case "-v":
+      ok({ name: "agent-video", version: VERSION });
+      break;
+    default:
+      fail(`Unknown command: '${args.command}'`, "Run `agent-video help`. Commands: validate, render, schema, help, version.");
+  }
 }
 
-switch (args.command) {
-  case "validate":
-    cmdValidate(args);
-    break;
-  case "schema":
-    cmdSchema();
-    break;
-  case "version":
-  case "--version":
-  case "-v":
-    ok({ name: "agent-video", version: VERSION });
-    break;
-  default:
-    fail(`Unknown command: '${args.command}'`, "Run `agent-video help`. Commands: validate, schema, help, version.");
-}
+main().catch((e) => fail(e instanceof Error ? e.message : String(e)));

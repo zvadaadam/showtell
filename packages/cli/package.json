@@ -8,6 +8,7 @@
     "agent-video": "./src/index.ts"
   },
   "dependencies": {
-    "@agent-video/core": "workspace:*"
+    "@agent-video/core": "workspace:*",
+    "@agent-video/render": "workspace:*"
   }
 }
