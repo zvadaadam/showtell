@@ -51,9 +51,14 @@ export function fitMonoFont(
   const probe = 100;
   ctx.font = `${probe}px '${opts.family}'`;
   const charWPerPx = ctx.measureText("M").width / probe;
+  const minFont = opts.minFont ?? 12;
   const byWidth = opts.longestChars > 0 ? opts.areaW / (opts.longestChars * charWPerPx) : opts.maxFont;
   const byHeight = opts.lineCount > 0 ? opts.areaH / (opts.lineCount * opts.lineHeightRatio) : opts.maxFont;
-  const fontSize = Math.max(opts.minFont ?? 12, Math.min(opts.maxFont, byWidth, byHeight));
+  // Prefer filling the height (keeps the font readable); only shrink for very
+  // long lines, and never below a readable minimum (rare long lines then clip).
+  let fontSize = Math.min(opts.maxFont, byHeight);
+  if (byWidth < fontSize) fontSize = Math.max(minFont, byWidth);
+  fontSize = Math.max(minFont, Math.min(opts.maxFont, fontSize));
   return { fontSize, lineH: fontSize * opts.lineHeightRatio };
 }
 

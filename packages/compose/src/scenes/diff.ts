@@ -59,12 +59,14 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
   const innerPad = Math.round(pad * 0.5);
   // Auto-fit so the whole diff fits (no bottom clip, no right-edge truncation).
   const longestChars = 2 + Math.max(1, ...diff.lines.map((l) => l.content.length));
+  const areaH = codeH - innerPad * 2;
   const { fontSize, lineH } = fitMonoFont(ctx, {
     longestChars,
     lineCount: diff.lines.length,
     areaW: cardW - innerPad * 2,
-    areaH: codeH - innerPad * 2,
+    areaH,
     maxFont: Math.round(Math.min(dims.width, dims.height) * 0.024),
+    minFont: Math.round(Math.min(dims.width, dims.height) * 0.018),
     lineHeightRatio: 1.5,
     family: THEME.mono,
   });
@@ -73,7 +75,8 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
 
   const markerX = cardX + innerPad;
   const textX = markerX + ctx.measureText("M").width * 2;
-  let y = codeY + innerPad + lineH / 2;
+  const topOffset = Math.max(0, (areaH - diff.lines.length * lineH) / 2);
+  let y = codeY + innerPad + topOffset + lineH / 2;
 
   for (const line of diff.lines) {
     if (y > codeY + codeH) break;

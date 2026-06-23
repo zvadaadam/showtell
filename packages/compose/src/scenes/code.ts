@@ -67,12 +67,14 @@ export function drawCode(
   // Auto-fit the font so all lines fit the card (no bottom clip, no right-edge truncation).
   const gutterChars = String(resolved.endLine).length + 2; // "NN " + gap
   const maxContent = Math.max(1, ...tokens.map((line) => line.reduce((n, t) => n + t.content.length, 0)));
+  const areaH = codeH - innerPad * 2;
   const { fontSize, lineH } = fitMonoFont(ctx, {
     longestChars: gutterChars + maxContent,
     lineCount: tokens.length,
     areaW: codeW - innerPad * 2,
-    areaH: codeH - innerPad * 2,
+    areaH,
     maxFont: Math.round(Math.min(dims.width, dims.height) * 0.026),
+    minFont: Math.round(Math.min(dims.width, dims.height) * 0.018),
     lineHeightRatio: 1.5,
     family: THEME.mono,
   });
@@ -83,7 +85,9 @@ export function drawCode(
   const gutterW = gutterChars * ctx.measureText("M").width;
   const startX = codeX + innerPad;
   const codeStartX = startX + gutterW;
-  let y = codeY + innerPad + lineH / 2;
+  // Center the block vertically when it doesn't fill the card.
+  const topOffset = Math.max(0, (areaH - tokens.length * lineH) / 2);
+  let y = codeY + innerPad + topOffset + lineH / 2;
 
   const focus = new Set(resolved.focus);
 

@@ -87,11 +87,13 @@ function drawBarOrLine(ctx: SKRSContext2D, p: Parsed, plot: { x: number; y: numb
         // Single series → color per label (matches the label legend); multi → per series.
         ctx.fillStyle = SERIES_COLORS[(single ? g : si) % SERIES_COLORS.length]!;
         ctx.fillRect(x, baseY - h, barW * 0.86, h);
-        // value label above the bar
-        ctx.fillStyle = THEME.fg;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillText(String(v), x + barW * 0.43, baseY - h - axisFont * 0.3);
+        // value label above the bar (skip zeros — they'd float with no bar)
+        if (v > 0) {
+          ctx.fillStyle = THEME.fg;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(String(v), x + barW * 0.43, baseY - h - axisFont * 0.3);
+        }
       });
       ctx.textAlign = "center";
       ctx.textBaseline = "top";

@@ -35,6 +35,11 @@ reads the file. Pasting code is wrong and will drift from the source.
 2. **Author `spec.json`**: an ordered list of scenes, each with `narration`.
    Keep narration to ~1–2 sentences per scene; the video paces itself to the
    spoken audio (`"duration": "auto"`).
+   - **For legibility**, keep `code` excerpts focused (~6–25 lines, lines ≤ ~90
+     chars) and point `focus` at the lines your narration calls out. The
+     renderer auto-fits the font, so smaller, tighter excerpts read far better.
+   - Make narration match what's on screen — don't claim something the frame
+     doesn't show.
 3. **Validate**: `agent-video validate spec.json` — fix any errors (each has a `hint`).
 4. **Render / preview**: `agent-video preview spec.json` — returns a stable
    `watchUrl` and serves a local watch page.
