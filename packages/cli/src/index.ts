@@ -8,8 +8,9 @@
  * the whole pipeline from `--help` alone.
  */
 import { readFileSync, existsSync } from "node:fs";
+import { basename } from "node:path";
 import { validateSpec, videoSpecJsonSchema, IMPLEMENTED_SCENE_KINDS, type VideoSpec, type AspectRatio } from "@agent-video/core";
-import { renderFrames } from "@agent-video/render";
+import { renderFrames, renderVideo } from "@agent-video/render";
 
 const VERSION = "0.0.0";
 
@@ -120,36 +121,42 @@ function cmdValidate(args: Args): never {
 const VALID_ASPECTS: AspectRatio[] = ["16:9", "9:16", "1:1"];
 
 async function cmdRender(args: Args): Promise<never> {
-  const usage = "Usage: agent-video render <spec.json> [--out DIR] [--repo PATH] [--aspect 16:9,9:16]";
-  const spec = loadSpecOrFail(args.positional[0], usage);
+  const usage = "Usage: agent-video render <spec.json> [--out DIR] [--repo PATH] [--aspect 16:9,9:16] [--frames-only]";
+  const file = args.positional[0]!;
+  const spec = loadSpecOrFail(file, usage);
 
   const repoPath = (typeof args.flags.repo === "string" ? args.flags.repo : undefined) ?? spec.meta.repo.path;
-  const outDir = (typeof args.flags.out === "string" ? args.flags.out : undefined) ?? ".agent-video/frames";
+  const framesOnly = args.flags["frames-only"] === true;
+  const outDir =
+    (typeof args.flags.out === "string" ? args.flags.out : undefined) ??
+    (framesOnly ? ".agent-video/frames" : ".agent-video/out");
 
   let aspectRatios: AspectRatio[] | undefined;
   if (typeof args.flags.aspect === "string") {
     const requested = args.flags.aspect.split(",").map((s) => s.trim());
     const bad = requested.filter((a) => !(VALID_ASPECTS as string[]).includes(a));
-    if (bad.length) {
-      fail(`Invalid aspect ratio(s): ${bad.join(", ")}`, `Valid: ${VALID_ASPECTS.join(", ")}.`);
-    }
+    if (bad.length) fail(`Invalid aspect ratio(s): ${bad.join(", ")}`, `Valid: ${VALID_ASPECTS.join(", ")}.`);
     aspectRatios = requested as AspectRatio[];
   }
 
   try {
-    const result = await renderFrames(spec, { repoPath, outDir, aspectRatios });
+    if (framesOnly) {
+      const result = await renderFrames(spec, { repoPath, outDir, aspectRatios });
+      ok({ ok: true, stage: "frames", outDir: result.outDir, frameCount: result.frames.length, frames: result.frames, resolvedCode: result.resolvedCode, skipped: result.skipped });
+    }
+    const baseName = basename(file).replace(/\.json$/, "").replace(/\.spec$/, "");
+    const result = await renderVideo(spec, { repoPath, outDir, baseName, aspectRatios });
     ok({
       ok: true,
-      stage: "frames",
-      outDir: result.outDir,
-      aspectRatios: result.aspectRatios,
-      frameCount: result.frames.length,
-      frames: result.frames,
+      stage: "video",
+      outDir,
+      outputs: result.outputs,
+      scenes: result.scenes,
       resolvedCode: result.resolvedCode,
       skipped: result.skipped,
     });
   } catch (e) {
-    fail(`Render failed: ${(e as Error).message}`, "Check the failing scene's file/line reference and that the repo path is correct.");
+    fail(`Render failed: ${(e as Error).message}`, "Check the failing scene's file/line reference, the repo path, and that ffmpeg is installed.");
   }
 }
 

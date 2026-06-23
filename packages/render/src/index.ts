@@ -3,11 +3,23 @@
  * ratio (silent). Next stages add TTS, two-pass `auto` durations, and the
  * ffmpeg mux to mp4.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import type { VideoSpec, AspectRatio } from "@agent-video/core";
 import { renderSceneToPng, COMPOSABLE_KINDS } from "@agent-video/compose";
+import { synthesize, probeDurationMs } from "@agent-video/providers";
+import { imageAudioToClip, concatClips } from "./ffmpeg.ts";
+
+export { probeDurationMs } from "@agent-video/providers";
+
+function isComposable(kind: string): boolean {
+  return (COMPOSABLE_KINDS as readonly string[]).includes(kind);
+}
+
+function sha256(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
 
 export interface FrameInfo {
   scene: number;
@@ -76,4 +88,105 @@ export async function renderFrames(
   }
 
   return { outDir: opts.outDir, aspectRatios: ratios, frames, resolvedCode, skipped };
+}
+
+// ---------------------------------------------------------------------------
+// Full video render — two-pass (TTS → durations → frames → clips → concat).
+// ---------------------------------------------------------------------------
+
+/** Tail of silence after narration so the last word isn't clipped. */
+const TAIL_SEC = 0.6;
+
+export interface SceneTiming {
+  scene: number;
+  kind: string;
+  narrationMs: number;
+  durationSec: number;
+  auto: boolean;
+  ttsCached: boolean;
+}
+
+export interface VideoOutput {
+  aspectRatio: AspectRatio;
+  path: string;
+  durationMs: number;
+}
+
+export interface RenderVideoResult {
+  outputs: VideoOutput[];
+  scenes: SceneTiming[];
+  resolvedCode: ResolvedInfo[];
+  skipped: { scene: number; kind: string; reason: string }[];
+}
+
+export async function renderVideo(
+  spec: VideoSpec,
+  opts: { repoPath: string; outDir: string; baseName: string; aspectRatios?: AspectRatio[]; cacheDir?: string },
+): Promise<RenderVideoResult> {
+  const ratios = opts.aspectRatios ?? spec.meta.aspectRatios;
+  const cacheDir = opts.cacheDir ?? ".agent-video/cache";
+  const fps = spec.meta.fps;
+  const provider = spec.meta.tts?.provider ?? "say";
+  const voice = spec.meta.tts?.voice;
+  const model = spec.meta.tts?.model;
+  const wm = watermarkText(spec);
+
+  mkdirSync(opts.outDir, { recursive: true });
+  const workDir = join(opts.outDir, ".work");
+  mkdirSync(workDir, { recursive: true });
+
+  // Pass 1 — TTS per composable scene (audio is aspect-ratio independent).
+  const composable = spec.scenes.map((s, i) => ({ s, i })).filter(({ s }) => isComposable(s.kind));
+  const skipped = spec.scenes
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => !isComposable(s.kind))
+    .map(({ s, i }) => ({ scene: i, kind: s.kind, reason: "kind not composable yet (v1a: title, code)" }));
+
+  const timings: SceneTiming[] = [];
+  const audioByScene = new Map<number, string>();
+  for (const { s, i } of composable) {
+    const syn = await synthesize({ text: s.narration, voice, model }, { provider, cacheDir: join(cacheDir, "tts") });
+    const auto = s.duration === "auto";
+    const durationSec = auto ? syn.durationMs / 1000 + TAIL_SEC : (s.duration as number);
+    timings.push({
+      scene: i,
+      kind: s.kind,
+      narrationMs: syn.durationMs,
+      durationSec: Math.round(durationSec * 1000) / 1000,
+      auto,
+      ttsCached: syn.cached,
+    });
+    audioByScene.set(i, syn.wavPath);
+  }
+
+  // Pass 2 — per aspect ratio: render frames → per-scene clips → concat.
+  const outputs: VideoOutput[] = [];
+  const resolvedCode: ResolvedInfo[] = [];
+  for (const ar of ratios) {
+    const clips: string[] = [];
+    for (const t of timings) {
+      const scene = spec.scenes[t.scene]!;
+      const rendered = await renderSceneToPng(scene, { repoPath: opts.repoPath, aspectRatio: ar, watermark: wm });
+      const tag = `s${String(t.scene).padStart(3, "0")}-${ar.replace(":", "x")}`;
+      const png = join(workDir, `${tag}.png`);
+      writeFileSync(png, rendered.png);
+      if (rendered.resolved && ar === ratios[0]) {
+        resolvedCode.push({
+          scene: t.scene,
+          file: rendered.resolved.file,
+          bytes: Buffer.byteLength(rendered.resolved.text),
+          sha256: sha256(rendered.resolved.text),
+        });
+      }
+      const clip = join(workDir, `${tag}.mp4`);
+      imageAudioToClip({ image: png, audio: audioByScene.get(t.scene)!, durationSec: t.durationSec, fps, outPath: clip });
+      clips.push(clip);
+    }
+    const out = join(opts.outDir, `${opts.baseName}-${ar.replace(":", "x")}.mp4`);
+    if (clips.length === 1) copyFileSync(clips[0]!, out);
+    else concatClips(clips, out, workDir);
+    outputs.push({ aspectRatio: ar, path: out, durationMs: probeDurationMs(out) });
+  }
+
+  return { outputs, scenes: timings, resolvedCode, skipped };
 }

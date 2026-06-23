@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@agent-video/compose": "workspace:*",
-    "@agent-video/core": "workspace:*"
+    "@agent-video/core": "workspace:*",
+    "@agent-video/providers": "workspace:*"
   }
 }

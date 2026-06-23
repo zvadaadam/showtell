@@ -40,12 +40,17 @@
         "zod-to-json-schema": "^3.24.1",
       },
     },
+    "packages/providers": {
+      "name": "@agent-video/providers",
+      "version": "0.0.0",
+    },
     "packages/render": {
       "name": "@agent-video/render",
       "version": "0.0.0",
       "dependencies": {
         "@agent-video/compose": "workspace:*",
         "@agent-video/core": "workspace:*",
+        "@agent-video/providers": "workspace:*",
       },
     },
   },
@@ -55,6 +60,8 @@
     "@agent-video/compose": ["@agent-video/compose@workspace:packages/compose"],
 
     "@agent-video/core": ["@agent-video/core@workspace:packages/core"],
+
+    "@agent-video/providers": ["@agent-video/providers@workspace:packages/providers"],
 
     "@agent-video/render": ["@agent-video/render@workspace:packages/render"],
 
