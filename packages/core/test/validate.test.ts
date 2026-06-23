@@ -39,7 +39,7 @@ test("pasted-extra keys are rejected (strict)", () => {
 test("a not-yet-renderable kind validates but warns", () => {
   const r = validateSpec({
     ...good,
-    scenes: [{ kind: "chart", content: { chartType: "bar", data: [{ a: 1 }] }, narration: "x" }],
+    scenes: [{ kind: "screencap", content: { source: "app" }, narration: "x" }],
   });
   expect(r.ok).toBe(true);
   if (r.ok) expect(r.warnings[0]!.path).toContain("kind");

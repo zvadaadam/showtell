@@ -209,4 +209,4 @@ export type TtsConfig = z.infer<typeof TtsConfig>;
 export type VideoSpec = z.infer<typeof VideoSpec>;
 
 /** The set of scene kinds the renderer can currently produce (grows over v1). */
-export const IMPLEMENTED_SCENE_KINDS: readonly SceneKind[] = ["title", "code", "diff"];
+export const IMPLEMENTED_SCENE_KINDS: readonly SceneKind[] = ["title", "code", "diff", "talking-points", "chart"];

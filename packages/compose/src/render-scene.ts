@@ -9,10 +9,12 @@ import { drawBackground, drawWatermark } from "./draw.ts";
 import { drawTitle } from "./scenes/title.ts";
 import { drawCode } from "./scenes/code.ts";
 import { drawDiff } from "./scenes/diff.ts";
+import { drawTalkingPoints } from "./scenes/talking-points.ts";
+import { drawChart } from "./scenes/chart.ts";
 import { tokenize } from "./highlight.ts";
 
 /** Scene kinds compose can currently rasterize (grows over v1). */
-export const COMPOSABLE_KINDS = ["title", "code", "diff"] as const;
+export const COMPOSABLE_KINDS = ["title", "code", "diff", "talking-points", "chart"] as const;
 
 export interface RenderSceneOpts {
   repoPath: string;
@@ -54,6 +56,12 @@ export async function renderSceneToPng(scene: Scene, opts: RenderSceneOpts): Pro
       resolved = { file: scene.content.file, text: d.rawText };
       break;
     }
+    case "talking-points":
+      drawTalkingPoints(ctx, scene, dims);
+      break;
+    case "chart":
+      drawChart(ctx, scene, dims);
+      break;
     default:
       throw new Error(
         `Scene kind "${scene.kind}" is not composable yet. v1a renders: ${COMPOSABLE_KINDS.join(", ")}.`,

@@ -42,9 +42,9 @@ test("CONTRACT: rendered code == live source bytes", async () => {
 
 test("not-yet-composable kinds are reported in `skipped`, not rendered", async () => {
   const r = await renderFrames(
-    { ...spec, scenes: [{ kind: "chart", content: { chartType: "bar", data: [{ a: 1 }] }, narration: "x", duration: "auto" }] },
+    { ...spec, scenes: [{ kind: "screencap", content: { source: "app" }, narration: "x", duration: "auto" }] },
     { repoPath: ".", outDir },
   );
   expect(r.frames).toHaveLength(0);
-  expect(r.skipped[0]!.kind).toBe("chart");
+  expect(r.skipped[0]!.kind).toBe("screencap");
 });
