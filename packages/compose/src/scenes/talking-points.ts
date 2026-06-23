@@ -10,30 +10,41 @@ export function drawTalkingPoints(ctx: SKRSContext2D, scene: TalkingPointsScene,
   const maxWidth = dims.width - pad * 2;
   const base = Math.min(dims.width, dims.height);
 
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-
-  let y = pad + base * 0.06;
-
-  if (heading) {
-    const hSize = Math.round(base * 0.052);
-    ctx.font = `${hSize}px '${THEME.sansBold}'`;
-    ctx.fillStyle = THEME.fg;
-    for (const line of wrapText(ctx, heading, maxWidth)) {
-      ctx.fillText(line, pad, y);
-      y += hSize * 1.25;
-    }
-    y += base * 0.03;
-  }
-
+  const hSize = Math.round(base * 0.052);
+  const headLineH = hSize * 1.25;
+  const headGap = base * 0.03;
   const ptSize = Math.round(base * 0.036);
   const lineH = ptSize * 1.35;
   const bulletGap = ptSize * 0.9;
   const indent = ptSize * 1.6;
 
-  for (const point of points) {
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+
+  // Pre-measure so the whole block can be vertically centered.
+  ctx.font = `${hSize}px '${THEME.sansBold}'`;
+  const headLines = heading ? wrapText(ctx, heading, maxWidth) : [];
+  ctx.font = `${ptSize}px '${THEME.sans}'`;
+  const pointLines = points.map((p) => wrapText(ctx, p, maxWidth - indent));
+
+  const totalH =
+    (headLines.length ? headLines.length * headLineH + headGap : 0) +
+    pointLines.reduce((sum, lines) => sum + lines.length * lineH + bulletGap, 0);
+
+  let y = Math.max(pad, (dims.height - totalH) / 2) + (headLines.length ? hSize : ptSize);
+
+  if (headLines.length) {
+    ctx.font = `${hSize}px '${THEME.sansBold}'`;
+    ctx.fillStyle = THEME.fg;
+    for (const line of headLines) {
+      ctx.fillText(line, pad, y);
+      y += headLineH;
+    }
+    y += headGap;
+  }
+
+  for (const lines of pointLines) {
     ctx.font = `${ptSize}px '${THEME.sans}'`;
-    const lines = wrapText(ctx, point, maxWidth - indent);
     // bullet
     ctx.fillStyle = THEME.accent;
     ctx.beginPath();
@@ -41,8 +52,8 @@ export function drawTalkingPoints(ctx: SKRSContext2D, scene: TalkingPointsScene,
     ctx.fill();
     // text
     ctx.fillStyle = THEME.fg;
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i]!, pad + indent, y);
+    for (const line of lines) {
+      ctx.fillText(line, pad + indent, y);
       y += lineH;
     }
     y += bulletGap;
