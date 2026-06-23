@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, isAbsolute, extname } from "node:path";
-import type { CodeScene } from "./spec.ts";
+import type { CodeScene, DiffScene } from "./spec.ts";
 
 const EXT_LANG: Record<string, string> = {
   ".ts": "typescript", ".tsx": "tsx", ".js": "javascript", ".jsx": "jsx",
@@ -63,4 +63,75 @@ export function resolveCodeRef(repoPath: string, content: CodeScene["content"]):
     endLine: Math.min(end, lines.length),
     focus: content.focus ?? [],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Diff resolution — read the real `git diff`, never a pasted diff.
+// ---------------------------------------------------------------------------
+
+export type DiffLineKind = "add" | "del" | "context" | "hunk";
+
+export interface DiffLine {
+  kind: DiffLineKind;
+  content: string;
+  oldNo?: number;
+  newNo?: number;
+}
+
+export interface ResolvedDiff {
+  file: string;
+  language: string;
+  lines: DiffLine[];
+  added: number;
+  removed: number;
+  /** The exact `git diff` text (for content-hashing / verification). */
+  rawText: string;
+}
+
+/** Resolve a diff scene to the live `git diff` for its file + ref range. */
+export function resolveDiff(repoPath: string, content: DiffScene["content"]): ResolvedDiff {
+  const rawText = execFileSync(
+    "git",
+    ["-C", repoPath, "diff", "--no-color", content.ref, "--", content.file],
+    { encoding: "utf-8", maxBuffer: 64 * 1024 * 1024 },
+  );
+
+  const lines: DiffLine[] = [];
+  let added = 0;
+  let removed = 0;
+  let oldNo = 0;
+  let newNo = 0;
+  let inHunk = false;
+
+  for (const raw of rawText.split("\n")) {
+    if (raw.startsWith("@@")) {
+      const m = raw.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)/);
+      if (m) {
+        oldNo = parseInt(m[1]!, 10);
+        newNo = parseInt(m[2]!, 10);
+        inHunk = true;
+        lines.push({ kind: "hunk", content: (m[3] ?? "").trim() });
+      }
+      continue;
+    }
+    if (!inHunk) continue; // skip the diff --git / index / +++ / --- preamble
+    if (raw.startsWith("\\")) continue; // "\ No newline at end of file"
+    const marker = raw[0];
+    const text = raw.slice(1);
+    if (marker === "+") {
+      lines.push({ kind: "add", content: text, newNo });
+      newNo++;
+      added++;
+    } else if (marker === "-") {
+      lines.push({ kind: "del", content: text, oldNo });
+      oldNo++;
+      removed++;
+    } else if (marker === " ") {
+      lines.push({ kind: "context", content: text, oldNo, newNo });
+      oldNo++;
+      newNo++;
+    }
+  }
+
+  return { file: content.file, language: inferLanguage(content.file), lines, added, removed, rawText };
 }

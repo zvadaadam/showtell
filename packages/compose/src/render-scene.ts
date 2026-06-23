@@ -1,17 +1,18 @@
 /** Render a single (Mode B) scene to a PNG buffer — deterministic. */
 import { createCanvas } from "@napi-rs/canvas";
 import type { Scene, AspectRatio } from "@agent-video/core";
-import { resolveCodeRef } from "@agent-video/core";
+import { resolveCodeRef, resolveDiff } from "@agent-video/core";
 import { ensureFonts } from "./fonts.ts";
 import { dimsFor } from "./dims.ts";
 import { THEME } from "./theme.ts";
 import { drawBackground, drawWatermark } from "./draw.ts";
 import { drawTitle } from "./scenes/title.ts";
 import { drawCode } from "./scenes/code.ts";
+import { drawDiff } from "./scenes/diff.ts";
 import { tokenize } from "./highlight.ts";
 
 /** Scene kinds compose can currently rasterize (grows over v1). */
-export const COMPOSABLE_KINDS = ["title", "code"] as const;
+export const COMPOSABLE_KINDS = ["title", "code", "diff"] as const;
 
 export interface RenderSceneOpts {
   repoPath: string;
@@ -45,6 +46,12 @@ export async function renderSceneToPng(scene: Scene, opts: RenderSceneOpts): Pro
       const tokens = await tokenize(r.text, r.language, THEME.shikiTheme);
       drawCode(ctx, scene, r, tokens, dims);
       resolved = { file: scene.content.file, text: r.text };
+      break;
+    }
+    case "diff": {
+      const d = resolveDiff(opts.repoPath, scene.content);
+      drawDiff(ctx, scene, d, dims);
+      resolved = { file: scene.content.file, text: d.rawText };
       break;
     }
     default:
