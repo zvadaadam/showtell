@@ -1,6 +1,7 @@
 {
   "name": "@agent-video/compose",
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "description": "Mode B compose: render a VideoSpec scene to image frames (deterministic). v1a engine = canvas+Shiki; hyperframes/HTML for animated kinds (v1b).",
   "license": "MIT",
