@@ -12,9 +12,11 @@ description: >-
 
 Turn your work into a short narrated video. You author a **`spec.json`**; the
 `agent-video` CLI renders it to an MP4 (both desktop 16:9 and mobile 9:16) and
-serves a local watch page. Because it runs locally, code/diff scenes reference
-the repo and the renderer reads the **live bytes** — the code on screen is always
-correct.
+serves a live **web player** — a watch surface with chaptered scenes, a
+click-to-seek transcript, speed control, and the repo metadata. The deliverable
+you hand back is a **running watch URL, not a file**. Because it runs locally,
+code/diff scenes reference the repo and the renderer reads the **live bytes** —
+the code on screen is always correct.
 
 ## Use when
 
@@ -51,9 +53,12 @@ reads the file. Pasting code is wrong and will drift from the source.
    In particular: `diff` shows raw diff text (not a chart); `chart` data is
    **literal numbers you supply** (the renderer does not compute git stats); a
    `code` excerpt shows only its `file:line` window. Make the words match the pixels.
-5. **Preview**: `agent-video preview spec.json` — returns a stable `watchUrl`
-   and serves a local watch page.
-6. **Report**: reply with the `watchUrl` and one sentence describing the video.
+5. **Serve the player**: `agent-video preview spec.json` — renders, then serves
+   the web player (chaptered scenes, click-to-seek transcript, speed, metadata,
+   16:9/9:16) and returns a stable `watchUrl`. Build the player once first:
+   `bun run build:player`.
+6. **Report**: reply with the `watchUrl` — a live local URL the user opens, **not
+   a file path** — and one sentence describing the video.
 
 ## The spec
 
@@ -94,7 +99,7 @@ reads the file. Pasting code is wrong and will drift from the source.
 - `agent-video schema` — print the full JSON Schema for `spec.json`.
 - `agent-video validate <spec.json>` — validate against the contract.
 - `agent-video render <spec.json> [--out DIR] [--aspect 16:9,9:16] [--frames-only]` — render MP4(s).
-- `agent-video preview <spec.json> [--port N]` — render + serve a local watch page; returns `watchUrl`.
+- `agent-video preview <spec.json> [--port N]` — render + serve the web player; returns `watchUrl`. (Build the player once: `bun run build:player`.)
 - `agent-video capture [--id NAME] [--seconds N]` — record the screen (macOS) for a `screencap` scene.
   Run `agent-video help` for the latest.
 
@@ -102,7 +107,7 @@ reads the file. Pasting code is wrong and will drift from the source.
 
 Reply with the `watchUrl` and a one-sentence description. Example:
 
-> Here's a 40s walkthrough of the change: http://localhost:8787/v/<id> — it covers the new idempotency key, the store, and what reviewers should check.
+> Here's a 40s walkthrough of the change: http://localhost:4321/ — it covers the new idempotency key, the store, and what reviewers should check.
 
 ## Example — PR walkthrough
 

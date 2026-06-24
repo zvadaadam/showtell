@@ -1,6 +1,7 @@
-import { type ReactNode, forwardRef, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type ReactNode, forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import type { VideoManifest, ManifestScene } from '@agent-video/core'
 import { cn } from '#/lib/utils'
+import { DEFAULT_THEME_ID, getTheme, listThemes } from '#/lib/themes'
 
 // The bundle (manifest.json + mp4s + thumbnails) is served at this path — by Vite
 // from public/ in dev, and by the agent's render-and-serve command in production.
@@ -92,6 +93,8 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
   const [aspect, setAspect] = useState<string>(ratios.includes('16:9') ? '16:9' : ratios[0]!)
   const [speed, setSpeed] = useState<number>(1)
   const [currentTime, setCurrentTime] = useState(0)
+  const [themeId, setThemeId] = useState(DEFAULT_THEME_ID)
+  const theme = getTheme(themeId) ?? listThemes()[0]!
 
   const output = manifest.outputs.find((o) => o.aspectRatio === aspect) ?? manifest.outputs[0]!
   const src = `${BUNDLE}${output.file}`
@@ -146,7 +149,11 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-200" data-testid="player">
+    <div
+      className="min-h-screen bg-neutral-950 text-neutral-200"
+      style={theme.vars as CSSProperties}
+      data-testid="player"
+    >
       <header className="flex items-center gap-4 border-b border-neutral-800/80 px-6 py-3">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold text-neutral-100" data-testid="title">
@@ -157,6 +164,7 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
         <div className="ml-auto flex items-center gap-2">
           <AspectToggle ratios={ratios} aspect={aspect} onChange={changeAspect} />
           <SpeedControl speed={speed} onChange={setSpeed} />
+          <ThemeSwitcher themeId={themeId} onChange={setThemeId} />
           <ShareButton />
         </div>
       </header>
@@ -251,6 +259,23 @@ function SpeedControl({ speed, onChange }: { speed: number; onChange: (s: number
   )
 }
 
+// Only renders once a pro pack has registered more than the default theme.
+function ThemeSwitcher({ themeId, onChange }: { themeId: string; onChange: (id: string) => void }) {
+  const themes = listThemes()
+  if (themes.length < 2) return null
+  return (
+    <div data-testid="theme">
+      <Segmented>
+        {themes.map((t) => (
+          <SegButton key={t.id} testid={`theme-${t.id}`} active={t.id === themeId} onClick={() => onChange(t.id)}>
+            {t.label}
+          </SegButton>
+        ))}
+      </Segmented>
+    </div>
+  )
+}
+
 function ShareButton() {
   const [state, setState] = useState<'idle' | 'sharing' | 'done'>('idle')
   async function onShare() {
@@ -282,7 +307,9 @@ function ChapterStrip({ scenes, activeIndex, onSeek }: RailProps) {
             <div
               className={cn(
                 'relative h-[72px] w-[128px] overflow-hidden rounded-lg ring-1 transition',
-                i === activeIndex ? 'ring-2 ring-sky-400' : 'ring-neutral-800 group-hover:ring-neutral-600',
+                i === activeIndex
+                  ? 'ring-2 ring-[color:var(--av-accent)]'
+                  : 'ring-neutral-800 group-hover:ring-neutral-600',
               )}
             >
               {scene.thumbnail ? (
@@ -332,7 +359,9 @@ const Transcript = forwardRef<HTMLDivElement, RailProps>(function Transcript({ s
                 <span
                   className={cn(
                     'rounded px-1.5 py-0.5 text-[10px] font-medium',
-                    active ? 'bg-sky-500/20 text-sky-300' : 'bg-neutral-800 text-neutral-400',
+                    active
+                      ? 'bg-[var(--av-accent-soft)] text-[color:var(--av-accent)]'
+                      : 'bg-neutral-800 text-neutral-400',
                   )}
                 >
                   {KIND_LABEL[scene.kind] ?? scene.kind}
@@ -344,7 +373,7 @@ const Transcript = forwardRef<HTMLDivElement, RailProps>(function Transcript({ s
               {scene.refs && (
                 <span
                   data-testid={`ref-${i}`}
-                  className="mt-1.5 inline-block rounded bg-neutral-800/80 px-2 py-0.5 font-mono text-[11px] text-sky-300/90"
+                  className="mt-1.5 inline-block rounded bg-neutral-800/80 px-2 py-0.5 font-mono text-[11px] text-[color:var(--av-accent)]"
                 >
                   {refLabel(scene.refs)}
                 </span>
