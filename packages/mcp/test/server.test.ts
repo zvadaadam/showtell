@@ -20,39 +20,49 @@ const titleSpec = {
   scenes: [{ kind: "title", content: { heading: "Hi" }, narration: "hi.", duration: "auto" }],
 };
 
-test("tools/list exposes the agent-first tools with descriptions", async () => {
+const TOOLS = ["agent_video_get_schema", "agent_video_validate_spec", "agent_video_render", "agent_video_preview", "agent_video_get_video"];
+
+test("tools/list: service-prefixed names, example-rich descriptions, and annotations on every tool", async () => {
   const client = await connect();
   const { tools } = await client.listTools();
   const names = tools.map((t) => t.name);
-  for (const n of ["agent_video_schema", "validate_spec", "render_video", "preview_video", "get_video"]) {
-    expect(names).toContain(n);
-  }
+  for (const n of TOOLS) expect(names).toContain(n);
+  // every tool name carries the service prefix (avoids collisions with other MCP servers)
+  for (const n of names) expect(n.startsWith("agent_video_")).toBe(true);
   // descriptions include an example (agent-first / self-describing)
-  expect(tools.find((t) => t.name === "render_video")!.description).toContain('"kind"');
+  expect(tools.find((t) => t.name === "agent_video_render")!.description).toContain('"kind"');
+  // annotations present on every tool (mcp-builder hard requirement)
+  for (const t of tools) {
+    expect(t.annotations).toBeDefined();
+    expect(typeof t.annotations!.readOnlyHint).toBe("boolean");
+  }
+  // read-only tools are marked as such; render/preview are not
+  expect(tools.find((t) => t.name === "agent_video_get_schema")!.annotations!.readOnlyHint).toBe(true);
+  expect(tools.find((t) => t.name === "agent_video_render")!.annotations!.readOnlyHint).toBe(false);
   await client.close();
 });
 
-test("validate_spec: good → ok, bad → errors with hint", async () => {
+test("agent_video_validate_spec: good → ok, bad → errors with hint", async () => {
   const client = await connect();
-  const good = parse(await client.callTool({ name: "validate_spec", arguments: { spec: titleSpec } })) as { ok: boolean; sceneCount: number };
+  const good = parse(await client.callTool({ name: "agent_video_validate_spec", arguments: { spec: titleSpec } })) as { ok: boolean; sceneCount: number };
   expect(good.ok).toBe(true);
   expect(good.sceneCount).toBe(1);
 
-  const bad = parse(await client.callTool({ name: "validate_spec", arguments: { spec: { meta: { title: "x" }, scenes: [{ kind: "nope", content: {}, narration: "x" }] } } })) as { ok: boolean; errors: { hint?: string }[] };
+  const bad = parse(await client.callTool({ name: "agent_video_validate_spec", arguments: { spec: { meta: { title: "x" }, scenes: [{ kind: "nope", content: {}, narration: "x" }] } } })) as { ok: boolean; errors: { hint?: string }[] };
   expect(bad.ok).toBe(false);
   expect(bad.errors.length).toBeGreaterThan(0);
   await client.close();
 });
 
-test("render_video produces an mp4 output", async () => {
+test("agent_video_render produces an mp4 and returns structuredContent matching outputSchema", async () => {
   const client = await connect();
-  const res = parse(await client.callTool({ name: "render_video", arguments: { spec: titleSpec, aspectRatios: ["16:9"] } })) as {
-    ok: boolean;
-    videoId: string;
-    outputs: { aspectRatio: string; path: string }[];
+  const res = (await client.callTool({ name: "agent_video_render", arguments: { spec: titleSpec, aspectRatios: ["16:9"] } })) as {
+    structuredContent?: { ok: boolean; videoId: string; outputs: { aspectRatio: string }[] };
   };
-  expect(res.ok).toBe(true);
-  expect(res.videoId).toMatch(/^[0-9a-f]{32}$/);
-  expect(res.outputs[0]!.aspectRatio).toBe("16:9");
+  // outputSchema → the SDK validates and returns structuredContent
+  expect(res.structuredContent).toBeDefined();
+  expect(res.structuredContent!.ok).toBe(true);
+  expect(res.structuredContent!.videoId).toMatch(/^[0-9a-f]{32}$/);
+  expect(res.structuredContent!.outputs[0]!.aspectRatio).toBe("16:9");
   await client.close();
 }, 30_000);
