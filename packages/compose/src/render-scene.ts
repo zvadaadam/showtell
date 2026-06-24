@@ -29,6 +29,8 @@ export interface RenderedScene {
   height: number;
   /** Present for code scenes — the exact live bytes that were rendered. */
   resolved?: { file: string; text: string };
+  /** Non-fatal warnings (e.g. a diff scene that resolved to no changes). */
+  warning?: string;
 }
 
 export async function renderSceneToPng(scene: Scene, opts: RenderSceneOpts): Promise<RenderedScene> {
@@ -39,6 +41,7 @@ export async function renderSceneToPng(scene: Scene, opts: RenderSceneOpts): Pro
   drawBackground(ctx, dims);
 
   let resolved: RenderedScene["resolved"];
+  let warning: string | undefined;
   switch (scene.kind) {
     case "title":
       drawTitle(ctx, scene, dims);
@@ -54,6 +57,9 @@ export async function renderSceneToPng(scene: Scene, opts: RenderSceneOpts): Pro
       const d = resolveDiff(opts.repoPath, scene.content);
       drawDiff(ctx, scene, d, dims);
       resolved = { file: scene.content.file, text: d.rawText };
+      if (d.added === 0 && d.removed === 0) {
+        warning = `diff scene for ${scene.content.file} at ref "${scene.content.ref}" is EMPTY (+0 −0). Note "A..B" excludes commit A — if the file changed in the base commit, widen the range.`;
+      }
       break;
     }
     case "talking-points":
@@ -72,7 +78,7 @@ export async function renderSceneToPng(scene: Scene, opts: RenderSceneOpts): Pro
     drawWatermark(ctx, dims, opts.watermark ?? "agent-video.dev");
   }
 
-  return { png: canvas.toBuffer("image/png"), width: dims.width, height: dims.height, resolved };
+  return { png: canvas.toBuffer("image/png"), width: dims.width, height: dims.height, resolved, warning };
 }
 
 /** A full-frame transparent PNG with just the watermark — to overlay on video. */

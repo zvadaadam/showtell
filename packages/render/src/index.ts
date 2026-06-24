@@ -124,6 +124,7 @@ export interface RenderVideoResult {
   scenes: SceneTiming[];
   resolvedCode: ResolvedInfo[];
   skipped: { scene: number; kind: string; reason: string }[];
+  warnings: { scene: number; message: string }[];
 }
 
 export async function renderVideo(
@@ -169,6 +170,7 @@ export async function renderVideo(
   // Pass 2 — per aspect ratio: render frames → per-scene clips → concat.
   const outputs: VideoOutput[] = [];
   const resolvedCode: ResolvedInfo[] = [];
+  const warnings: { scene: number; message: string }[] = [];
   for (const ar of ratios) {
     const clips: string[] = [];
     const dims = dimsFor(ar);
@@ -202,6 +204,7 @@ export async function renderVideo(
       const rendered = await renderSceneToPng(scene, { repoPath: opts.repoPath, aspectRatio: ar, watermark: wm });
       const png = join(workDir, `${tag}.png`);
       writeFileSync(png, rendered.png);
+      if (rendered.warning && ar === ratios[0]) warnings.push({ scene: t.scene, message: rendered.warning });
       if (rendered.resolved && ar === ratios[0]) {
         resolvedCode.push({
           scene: t.scene,
@@ -219,5 +222,5 @@ export async function renderVideo(
     outputs.push({ aspectRatio: ar, path: out, durationMs: probeDurationMs(out) });
   }
 
-  return { outputs, scenes: timings, resolvedCode, skipped };
+  return { outputs, scenes: timings, resolvedCode, skipped, warnings };
 }

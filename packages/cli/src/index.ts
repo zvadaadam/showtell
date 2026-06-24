@@ -156,6 +156,7 @@ async function cmdRender(args: Args): Promise<never> {
       scenes: result.scenes,
       resolvedCode: result.resolvedCode,
       skipped: result.skipped,
+      warnings: result.warnings,
     });
   } catch (e) {
     fail(`Render failed: ${(e as Error).message}`, "Check the failing scene's file/line reference, the repo path, and that ffmpeg is installed.");
