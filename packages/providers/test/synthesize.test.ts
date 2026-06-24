@@ -36,3 +36,16 @@ test("changing the text busts the cache key", async () => {
 test("an unknown provider throws an actionable error", async () => {
   await expect(synthesize({ text: "x" }, { provider: "replicate", cacheDir })).rejects.toThrow(/not available/);
 });
+
+test('"openai" has an adapter but errors without an env key (key never from the spec)', async () => {
+  expect(availableTtsProviders()).toContain("openai");
+  const saved = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    await expect(synthesize({ text: "no key here please." }, { provider: "openai", cacheDir })).rejects.toThrow(
+      /OPENAI_API_KEY/,
+    );
+  } finally {
+    if (saved !== undefined) process.env.OPENAI_API_KEY = saved;
+  }
+});
