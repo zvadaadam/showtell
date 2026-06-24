@@ -25,10 +25,29 @@ afterAll(() => rmSync(repo, { recursive: true, force: true }));
 
 test("an empty diff scene renders but emits a warning", async () => {
   const spec: VideoSpec = {
-    meta: { title: "w", fps: 30, aspectRatios: ["16:9"], watermark: true, tts: { provider: "say" }, repo: { path: "." } },
-    scenes: [{ kind: "diff", content: { file: "stable.ts", ref: "HEAD~1..HEAD", animation: "magic-move" }, narration: "no change.", duration: "auto" }],
+    meta: {
+      title: "w",
+      fps: 30,
+      aspectRatios: ["16:9"],
+      watermark: true,
+      tts: { provider: "say" },
+      repo: { path: "." },
+    },
+    scenes: [
+      {
+        kind: "diff",
+        content: { file: "stable.ts", ref: "HEAD~1..HEAD", animation: "magic-move" },
+        narration: "no change.",
+        duration: "auto",
+      },
+    ],
   };
-  const r = await renderVideo(spec, { repoPath: repo, outDir: join(repo, "out"), baseName: "w", aspectRatios: ["16:9"] });
+  const r = await renderVideo(spec, {
+    repoPath: repo,
+    outDir: join(repo, "out"),
+    baseName: "w",
+    aspectRatios: ["16:9"],
+  });
   expect(r.outputs).toHaveLength(1); // still renders
   expect(r.warnings.length).toBeGreaterThan(0);
   expect(r.warnings[0]!.message).toContain("EMPTY");

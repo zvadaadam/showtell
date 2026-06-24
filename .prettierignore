@@ -1,0 +1,5 @@
+node_modules
+dist
+.agent-video
+bun.lock
+packages/core/schema.json

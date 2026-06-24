@@ -42,19 +42,32 @@ export function recordScreen(opts: RecordOpts): { outPath: string; bytes: number
   const device = opts.screenDevice ?? detectScreenDevice();
   if (!device) {
     throw new Error(
-      "No avfoundation screen device found. Run `ffmpeg -f avfoundation -list_devices true -i \"\"` to inspect, or grant Screen Recording permission.",
+      'No avfoundation screen device found. Run `ffmpeg -f avfoundation -list_devices true -i ""` to inspect, or grant Screen Recording permission.',
     );
   }
   try {
     execFileSync(
       "ffmpeg",
       [
-        "-y", "-f", "avfoundation",
-        "-framerate", String(opts.fps ?? 30),
-        "-capture_cursor", "1",
-        "-i", `${device}:none`,
-        "-t", String(opts.durationSec),
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p",
+        "-y",
+        "-f",
+        "avfoundation",
+        "-framerate",
+        String(opts.fps ?? 30),
+        "-capture_cursor",
+        "1",
+        "-i",
+        `${device}:none`,
+        "-t",
+        String(opts.durationSec),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
         opts.outPath,
       ],
       { stdio: ["ignore", "pipe", "pipe"], timeout: (opts.durationSec + 20) * 1000 },

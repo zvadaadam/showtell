@@ -18,5 +18,11 @@ jobs:
         run: brew install ffmpeg
       - run: bun install --frozen-lockfile
       - run: bun run lint
+      - run: bun run format:check
       - run: bun run typecheck
       - run: bun test
+      - run: bun run gen:schema && git diff --exit-code packages/core/schema.json
+      - name: Build the standalone binary + smoke test
+        run: |
+          bun run build:cli
+          ./dist/agent-video version

@@ -46,7 +46,16 @@ export function wrapText(ctx: SKRSContext2D, text: string, maxWidth: number): st
  */
 export function fitMonoFont(
   ctx: SKRSContext2D,
-  opts: { longestChars: number; lineCount: number; areaW: number; areaH: number; maxFont: number; lineHeightRatio: number; family: string; minFont?: number },
+  opts: {
+    longestChars: number;
+    lineCount: number;
+    areaW: number;
+    areaH: number;
+    maxFont: number;
+    lineHeightRatio: number;
+    family: string;
+    minFont?: number;
+  },
 ): { fontSize: number; lineH: number } {
   const probe = 100;
   ctx.font = `${probe}px '${opts.family}'`;
@@ -63,14 +72,7 @@ export function fitMonoFont(
 }
 
 /** Rounded-rect path (canvas has roundRect, but keep it explicit for older builds). */
-export function roundRect(
-  ctx: SKRSContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-): void {
+export function roundRect(ctx: SKRSContext2D, x: number, y: number, w: number, h: number, r: number): void {
   const radius = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
   ctx.moveTo(x + radius, y);

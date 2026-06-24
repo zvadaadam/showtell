@@ -10,7 +10,7 @@ export function drawTitle(ctx: SKRSContext2D, scene: TitleScene, dims: Dims): vo
   const maxWidth = dims.width * 0.82;
   const cx = dims.width / 2;
 
-  const headSize = Math.round((portrait ? dims.width * 0.072 : dims.width * 0.05));
+  const headSize = Math.round(portrait ? dims.width * 0.072 : dims.width * 0.05);
   const subSize = Math.round(headSize * 0.42);
   const headLineH = headSize * 1.18;
   const gap = headSize * 0.55;
@@ -23,8 +23,7 @@ export function drawTitle(ctx: SKRSContext2D, scene: TitleScene, dims: Dims): vo
   const headLines = wrapText(ctx, heading, maxWidth);
   const subLines = subtitle ? wrapText(setFont(ctx, subSize, THEME.sans), subtitle, maxWidth) : [];
 
-  const totalH =
-    headLines.length * headLineH + (subLines.length ? gap + subLines.length * subSize * 1.3 : 0);
+  const totalH = headLines.length * headLineH + (subLines.length ? gap + subLines.length * subSize * 1.3 : 0);
   let y = dims.height / 2 - totalH / 2 + headLineH / 2;
 
   // Accent rule above

@@ -16,11 +16,22 @@ let browser: Browser;
 
 beforeAll(async () => {
   const spec: VideoSpec = {
-    meta: { title: "Web Gate", fps: 30, aspectRatios: ["16:9"], watermark: true, tts: { provider: "say" }, repo: { path: "." } },
+    meta: {
+      title: "Web Gate",
+      fps: 30,
+      aspectRatios: ["16:9"],
+      watermark: true,
+      tts: { provider: "say" },
+      repo: { path: "." },
+    },
     scenes: [{ kind: "title", content: { heading: "Hello" }, narration: "one two three four.", duration: "auto" }],
   };
   const r = await renderVideo(spec, { repoPath: ".", outDir, baseName: "web", aspectRatios: ["16:9"] });
-  handle = startPreviewServer({ outputs: r.outputs, title: spec.meta.title, videoId: "webgate000000000000000000000abcd" });
+  handle = startPreviewServer({
+    outputs: r.outputs,
+    title: spec.meta.title,
+    videoId: "webgate000000000000000000000abcd",
+  });
   browser = await chromium.launch({ headless: true });
 }, 90_000);
 

@@ -11,7 +11,12 @@ test("COMPOSABLE_KINDS includes the v1b compose kinds", () => {
 });
 
 test("talking-points renders a non-empty PNG", async () => {
-  const scene = { kind: "talking-points", content: { heading: "H", points: ["a", "b"] }, narration: "x", duration: "auto" } as Scene;
+  const scene = {
+    kind: "talking-points",
+    content: { heading: "H", points: ["a", "b"] },
+    narration: "x",
+    duration: "auto",
+  } as Scene;
   const r = await renderSceneToPng(scene, opts);
   expect(r.png.length).toBeGreaterThan(1000);
 });
@@ -21,7 +26,15 @@ test("chart renders for bar / line / pie, both orientations", async () => {
     for (const aspectRatio of ["16:9", "9:16"] as const) {
       const scene = {
         kind: "chart",
-        content: { chartType, title: "T", data: [{ l: "a", v: 1 }, { l: "b", v: 2 }, { l: "c", v: 3 }] },
+        content: {
+          chartType,
+          title: "T",
+          data: [
+            { l: "a", v: 1 },
+            { l: "b", v: 2 },
+            { l: "c", v: 3 },
+          ],
+        },
         narration: "x",
         duration: "auto",
       } as Scene;

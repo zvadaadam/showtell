@@ -10,17 +10,18 @@ description: >-
 
 # agent-video-eval
 
-A self-improvement loop on the agent-facing surface. It answers: *can a fresh
-agent, with only the skill and `--help`, make a good video?* — and feeds back
+A self-improvement loop on the agent-facing surface. It answers: _can a fresh
+agent, with only the skill and `--help`, make a good video?_ — and feeds back
 what to fix.
 
 ## Loop
+
 1. **Pick video types** (≥3): e.g. PR walkthrough, codebase tour, demo, release recap.
 2. **Author (fresh agents, in parallel).** For each type, spawn an agent whose
    ONLY tool knowledge is `skills/agent-video/SKILL.md` + `agent-video help` /
    `agent-video schema`. It gathers real repo context (git diff, file:line),
    authors `spec.json`, runs `validate` (fixing until ok), then `render
-   --frames-only`. It also reports any **friction** it hit.
+--frames-only`. It also reports any **friction** it hit.
 3. **Judge (LLM, per video).** Read the rendered frames + the per-scene
    narration. Score **clarity, visual polish, pacing** 1–5; give an **overall**
    (target **≥4**) and concrete issues.
@@ -32,12 +33,14 @@ what to fix.
    descriptions, or the spec schema. Re-run until green.
 
 ## Deterministic self-test (no agents)
+
 `agent-video eval [--spec PATH]` renders the golden example in both ratios and
 asserts the CLI gates (both ratios, valid mp4, all kinds rendered, refs read
 live, durations synced). Run this on every change; run the full agent loop above
 before shipping SKILL/CLI changes.
 
 ## Notes
+
 - Author agents avoid `screencap` (needs Screen Recording permission); the
   deterministic self-test provisions a synthetic capture session instead.
 - Keep the judge honest: it sees real rendered frames, not the spec's intent.

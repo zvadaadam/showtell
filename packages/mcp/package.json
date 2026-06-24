@@ -14,7 +14,7 @@
   "dependencies": {
     "@agent-video/core": "workspace:*",
     "@agent-video/render": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "zod": "^3.24.4"
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "3.25.76"
   }
 }

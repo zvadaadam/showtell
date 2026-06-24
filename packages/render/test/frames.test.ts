@@ -12,7 +12,12 @@ const spec: VideoSpec = {
   meta: { title: "t", fps: 30, aspectRatios: ["16:9", "9:16"], watermark: true, repo: { path: "." } },
   scenes: [
     { kind: "title", content: { heading: "Hi" }, narration: "intro", duration: "auto" },
-    { kind: "code", content: { file: "packages/core/src/spec.ts", lineStart: 1, lineEnd: 5 }, narration: "code", duration: "auto" },
+    {
+      kind: "code",
+      content: { file: "packages/core/src/spec.ts", lineStart: 1, lineEnd: 5 },
+      narration: "code",
+      duration: "auto",
+    },
   ],
 };
 

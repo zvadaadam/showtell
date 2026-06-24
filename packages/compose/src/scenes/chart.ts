@@ -4,8 +4,16 @@ import { THEME } from "../theme.ts";
 import type { Dims } from "../dims.ts";
 
 const SERIES_COLORS = [
-  "#7c8cff", "#7ee787", "#ffb86c", "#ff9492", "#79c0ff", "#d2a8ff",
-  "#f2cc60", "#56d4bc", "#ff7b9c", "#9d8cff",
+  "#7c8cff",
+  "#7ee787",
+  "#ffb86c",
+  "#ff9492",
+  "#79c0ff",
+  "#d2a8ff",
+  "#f2cc60",
+  "#56d4bc",
+  "#ff7b9c",
+  "#9d8cff",
 ];
 
 interface Parsed {
@@ -48,7 +56,13 @@ export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims): vo
   drawLegend(ctx, p, dims, base, pad);
 }
 
-function drawBarOrLine(ctx: SKRSContext2D, p: Parsed, plot: { x: number; y: number; w: number; h: number }, base: number, kind: "bar" | "line"): void {
+function drawBarOrLine(
+  ctx: SKRSContext2D,
+  p: Parsed,
+  plot: { x: number; y: number; w: number; h: number },
+  base: number,
+  kind: "bar" | "line",
+): void {
   const allVals = p.series.flatMap((s) => s.values);
   // Headroom so the tallest bar fills ~85% and value labels have room above.
   const max = Math.max(1, ...allVals) * 1.18;

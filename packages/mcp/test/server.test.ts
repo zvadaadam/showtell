@@ -20,7 +20,13 @@ const titleSpec = {
   scenes: [{ kind: "title", content: { heading: "Hi" }, narration: "hi.", duration: "auto" }],
 };
 
-const TOOLS = ["agent_video_get_schema", "agent_video_validate_spec", "agent_video_render", "agent_video_preview", "agent_video_get_video"];
+const TOOLS = [
+  "agent_video_get_schema",
+  "agent_video_validate_spec",
+  "agent_video_render",
+  "agent_video_preview",
+  "agent_video_get_video",
+];
 
 test("tools/list: service-prefixed names, example-rich descriptions, and annotations on every tool", async () => {
   const client = await connect();
@@ -44,11 +50,19 @@ test("tools/list: service-prefixed names, example-rich descriptions, and annotat
 
 test("agent_video_validate_spec: good → ok, bad → errors with hint", async () => {
   const client = await connect();
-  const good = parse(await client.callTool({ name: "agent_video_validate_spec", arguments: { spec: titleSpec } })) as { ok: boolean; sceneCount: number };
+  const good = parse(await client.callTool({ name: "agent_video_validate_spec", arguments: { spec: titleSpec } })) as {
+    ok: boolean;
+    sceneCount: number;
+  };
   expect(good.ok).toBe(true);
   expect(good.sceneCount).toBe(1);
 
-  const bad = parse(await client.callTool({ name: "agent_video_validate_spec", arguments: { spec: { meta: { title: "x" }, scenes: [{ kind: "nope", content: {}, narration: "x" }] } } })) as { ok: boolean; errors: { hint?: string }[] };
+  const bad = parse(
+    await client.callTool({
+      name: "agent_video_validate_spec",
+      arguments: { spec: { meta: { title: "x" }, scenes: [{ kind: "nope", content: {}, narration: "x" }] } },
+    }),
+  ) as { ok: boolean; errors: { hint?: string }[] };
   expect(bad.ok).toBe(false);
   expect(bad.errors.length).toBeGreaterThan(0);
   await client.close();
@@ -56,7 +70,10 @@ test("agent_video_validate_spec: good → ok, bad → errors with hint", async (
 
 test("agent_video_render produces an mp4 and returns structuredContent matching outputSchema", async () => {
   const client = await connect();
-  const res = (await client.callTool({ name: "agent_video_render", arguments: { spec: titleSpec, aspectRatios: ["16:9"] } })) as {
+  const res = (await client.callTool({
+    name: "agent_video_render",
+    arguments: { spec: titleSpec, aspectRatios: ["16:9"] },
+  })) as {
     structuredContent?: { ok: boolean; videoId: string; outputs: { aspectRatio: string }[] };
   };
   // outputSchema → the SDK validates and returns structuredContent

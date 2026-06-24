@@ -32,7 +32,10 @@ test("empty narration is rejected with a hint", () => {
 });
 
 test("pasted-extra keys are rejected (strict)", () => {
-  const r = validateSpec({ ...good, scenes: [{ kind: "title", content: { heading: "h", src: "paste" }, narration: "x" }] });
+  const r = validateSpec({
+    ...good,
+    scenes: [{ kind: "title", content: { heading: "h", src: "paste" }, narration: "x" }],
+  });
   expect(r.ok).toBe(false);
 });
 

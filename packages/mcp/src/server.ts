@@ -29,8 +29,15 @@ function specId(spec: unknown): string {
   return createHash("sha256").update(JSON.stringify(spec)).digest("hex").slice(0, 32);
 }
 
-function textResult(data: unknown, isError = false): { content: { type: "text"; text: string }[]; structuredContent?: Record<string, unknown>; isError?: true } {
-  const out: { content: { type: "text"; text: string }[]; structuredContent?: Record<string, unknown>; isError?: true } = {
+function textResult(
+  data: unknown,
+  isError = false,
+): { content: { type: "text"; text: string }[]; structuredContent?: Record<string, unknown>; isError?: true } {
+  const out: {
+    content: { type: "text"; text: string }[];
+    structuredContent?: Record<string, unknown>;
+    isError?: true;
+  } = {
     content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
   };
   if (data && typeof data === "object") out.structuredContent = data as Record<string, unknown>;
@@ -80,7 +87,12 @@ ${SPEC_EXAMPLE}`,
     async ({ spec }) => {
       const r = validateSpec(spec);
       if (!r.ok) return textResult({ ok: false, errors: r.errors });
-      return textResult({ ok: true, sceneCount: r.spec.scenes.length, kinds: r.spec.scenes.map((s) => s.kind), warnings: r.warnings });
+      return textResult({
+        ok: true,
+        sceneCount: r.spec.scenes.length,
+        kinds: r.spec.scenes.map((s) => s.kind),
+        warnings: r.warnings,
+      });
     },
   );
 
@@ -98,7 +110,10 @@ Example spec:
 ${SPEC_EXAMPLE}`,
       inputSchema: {
         spec: z.record(z.unknown()).describe("The spec.json object."),
-        repoPath: z.string().optional().describe("Repo root for resolving file:line / git refs. Default: spec.meta.repo.path."),
+        repoPath: z
+          .string()
+          .optional()
+          .describe("Repo root for resolving file:line / git refs. Default: spec.meta.repo.path."),
         aspectRatios: z.array(ASPECT).optional().describe("Override meta.aspectRatios."),
         outDir: z.string().optional().describe("Output directory. Default: .agent-video/out."),
       },
@@ -126,9 +141,23 @@ ${SPEC_EXAMPLE}`,
           baseName: "video",
           aspectRatios,
         });
-        return textResult({ ok: true, videoId: specId(spec), outputs: result.outputs, scenes: result.scenes, skipped: result.skipped, warnings: result.warnings });
+        return textResult({
+          ok: true,
+          videoId: specId(spec),
+          outputs: result.outputs,
+          scenes: result.scenes,
+          skipped: result.skipped,
+          warnings: result.warnings,
+        });
       } catch (e) {
-        return textResult({ ok: false, error: `Render failed: ${(e as Error).message}`, hint: "Check file/line refs, repo path, and that ffmpeg is installed." }, true);
+        return textResult(
+          {
+            ok: false,
+            error: `Render failed: ${(e as Error).message}`,
+            hint: "Check file/line refs, repo path, and that ffmpeg is installed.",
+          },
+          true,
+        );
       }
     },
   );
@@ -166,10 +195,21 @@ ${SPEC_EXAMPLE}`,
       if (!r.ok) return textResult({ ok: false, error: "Spec failed validation.", errors: r.errors }, true);
       try {
         const videoId = specId(spec);
-        const result = await renderVideo(r.spec as VideoSpec, { repoPath: repoPath ?? r.spec.meta.repo.path, outDir: ".agent-video/out", baseName: "video" });
+        const result = await renderVideo(r.spec as VideoSpec, {
+          repoPath: repoPath ?? r.spec.meta.repo.path,
+          outDir: ".agent-video/out",
+          baseName: "video",
+        });
         const handle = startPreviewServer({ outputs: result.outputs, title: r.spec.meta.title, videoId, port });
         previews.set(videoId, handle);
-        return textResult({ ok: true, videoId, status: "success", watchUrl: handle.watchUrl, outputs: result.outputs, warnings: result.warnings });
+        return textResult({
+          ok: true,
+          videoId,
+          status: "success",
+          watchUrl: handle.watchUrl,
+          outputs: result.outputs,
+          warnings: result.warnings,
+        });
       } catch (e) {
         return textResult({ ok: false, error: `Preview failed: ${(e as Error).message}` }, true);
       }
@@ -180,8 +220,11 @@ ${SPEC_EXAMPLE}`,
     "agent_video_get_video",
     {
       title: "Get a previewed video's status",
-      description: 'Get the status of a previewed video by id (from agent_video_preview). Returns { "videoId": string, "status": "success"|"not_found", "watchUrl"?: string }.',
-      inputSchema: { videoId: z.string().min(1).describe("The 32-char video id from agent_video_render / agent_video_preview.") },
+      description:
+        'Get the status of a previewed video by id (from agent_video_preview). Returns { "videoId": string, "status": "success"|"not_found", "watchUrl"?: string }.',
+      inputSchema: {
+        videoId: z.string().min(1).describe("The 32-char video id from agent_video_render / agent_video_preview."),
+      },
       outputSchema: { videoId: z.string(), status: z.enum(["success", "not_found"]), watchUrl: z.string().optional() },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },

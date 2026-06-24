@@ -41,7 +41,7 @@ test("video bytes are served with video/mp4", async () => {
   const res = await fetch(`http://localhost:${handle.port}/video/agent-video-preview-fixture-16x9.mp4`);
   expect(res.status).toBe(200);
   expect(res.headers.get("content-type")).toBe("video/mp4");
-  expect((await res.text())).toContain("not-a-real-mp4");
+  expect(await res.text()).toContain("not-a-real-mp4");
 });
 
 test("unknown paths 404", async () => {

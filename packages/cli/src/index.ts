@@ -10,7 +10,14 @@
 import { readFileSync, existsSync } from "node:fs";
 import { basename } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
-import { validateSpec, videoSpecJsonSchema, IMPLEMENTED_SCENE_KINDS, type VideoSpec, type AspectRatio, type SpecError } from "@agent-video/core";
+import {
+  validateSpec,
+  videoSpecJsonSchema,
+  IMPLEMENTED_SCENE_KINDS,
+  type VideoSpec,
+  type AspectRatio,
+  type SpecError,
+} from "@agent-video/core";
 import { renderFrames, renderVideo, startPreviewServer } from "@agent-video/render";
 import { recordScreen, ensureCapturesDir, sessionPath, ensureSyntheticSession } from "@agent-video/capture";
 
@@ -91,7 +98,10 @@ function loadSpecOrFail(file: string | undefined, usage: string): { spec: VideoS
   try {
     data = JSON.parse(raw);
   } catch (e) {
-    fail(`Invalid JSON in ${file}: ${(e as Error).message}`, "Fix the JSON syntax (e.g. trailing commas, unquoted keys).");
+    fail(
+      `Invalid JSON in ${file}: ${(e as Error).message}`,
+      "Fix the JSON syntax (e.g. trailing commas, unquoted keys).",
+    );
   }
   const result = validateSpec(data);
   if (!result.ok) {
@@ -141,9 +151,19 @@ async function cmdRender(args: Args): Promise<never> {
   try {
     if (framesOnly) {
       const result = await renderFrames(spec, { repoPath, outDir, aspectRatios });
-      ok({ ok: true, stage: "frames", outDir: result.outDir, frameCount: result.frames.length, frames: result.frames, resolvedCode: result.resolvedCode, skipped: result.skipped });
+      ok({
+        ok: true,
+        stage: "frames",
+        outDir: result.outDir,
+        frameCount: result.frames.length,
+        frames: result.frames,
+        resolvedCode: result.resolvedCode,
+        skipped: result.skipped,
+      });
     }
-    const baseName = basename(file).replace(/\.json$/, "").replace(/\.spec$/, "");
+    const baseName = basename(file)
+      .replace(/\.json$/, "")
+      .replace(/\.spec$/, "");
     const result = await renderVideo(spec, { repoPath, outDir, baseName, aspectRatios });
     ok({
       ok: true,
@@ -156,7 +176,10 @@ async function cmdRender(args: Args): Promise<never> {
       warnings: result.warnings,
     });
   } catch (e) {
-    fail(`Render failed: ${(e as Error).message}`, "Check the failing scene's file/line reference, the repo path, and that ffmpeg is installed.");
+    fail(
+      `Render failed: ${(e as Error).message}`,
+      "Check the failing scene's file/line reference, the repo path, and that ffmpeg is installed.",
+    );
   }
 }
 
@@ -165,12 +188,15 @@ function specVideoId(spec: VideoSpec): string {
 }
 
 async function cmdPreview(args: Args): Promise<void> {
-  const usage = "Usage: agent-video preview <spec.json> [--port N] [--repo PATH] [--aspect 16:9,9:16] [--serve-seconds N]";
+  const usage =
+    "Usage: agent-video preview <spec.json> [--port N] [--repo PATH] [--aspect 16:9,9:16] [--serve-seconds N]";
   const file = args.positional[0]!;
   const { spec } = loadSpecOrFail(file, usage);
   const repoPath = (typeof args.flags.repo === "string" ? args.flags.repo : undefined) ?? spec.meta.repo.path;
   const outDir = ".agent-video/out";
-  const baseName = basename(file).replace(/\.json$/, "").replace(/\.spec$/, "");
+  const baseName = basename(file)
+    .replace(/\.json$/, "")
+    .replace(/\.spec$/, "");
 
   let aspectRatios: AspectRatio[] | undefined;
   if (typeof args.flags.aspect === "string") {
@@ -194,13 +220,22 @@ async function cmdPreview(args: Args): Promise<void> {
   // Agent-first: emit the result (stable watchUrl) immediately, then keep serving.
   process.stdout.write(
     JSON.stringify(
-      { ok: true, videoId, status: "success", watchUrl: handle.watchUrl, url: handle.url, port: handle.port, outputs: result.outputs },
+      {
+        ok: true,
+        videoId,
+        status: "success",
+        watchUrl: handle.watchUrl,
+        url: handle.url,
+        port: handle.port,
+        outputs: result.outputs,
+      },
       null,
       2,
     ) + "\n",
   );
 
-  const serveSeconds = typeof args.flags["serve-seconds"] === "string" ? parseInt(args.flags["serve-seconds"], 10) : undefined;
+  const serveSeconds =
+    typeof args.flags["serve-seconds"] === "string" ? parseInt(args.flags["serve-seconds"], 10) : undefined;
   if (serveSeconds && serveSeconds > 0) {
     await Bun.sleep(serveSeconds * 1000);
     handle.stop();
@@ -218,9 +253,19 @@ function cmdCapture(args: Args): never {
   const out = sessionPath(id, repoRoot);
   try {
     const r = recordScreen({ outPath: out, durationSec: seconds, fps });
-    ok({ ok: true, sessionId: id, path: r.outPath, bytes: r.bytes, seconds, hint: `Reference it in a spec: { "kind": "screencap", "content": { "source": "desktop", "sessionRef": "${id}" } }` });
+    ok({
+      ok: true,
+      sessionId: id,
+      path: r.outPath,
+      bytes: r.bytes,
+      seconds,
+      hint: `Reference it in a spec: { "kind": "screencap", "content": { "source": "desktop", "sessionRef": "${id}" } }`,
+    });
   } catch (e) {
-    fail(`Capture failed: ${(e as Error).message}`, "Grant Screen Recording permission (System Settings → Privacy & Security → Screen Recording), then retry. macOS only.");
+    fail(
+      `Capture failed: ${(e as Error).message}`,
+      "Grant Screen Recording permission (System Settings → Privacy & Security → Screen Recording), then retry. macOS only.",
+    );
   }
 }
 
@@ -237,7 +282,12 @@ async function cmdEval(args: Args): Promise<never> {
 
   let result;
   try {
-    result = await renderVideo(spec, { repoPath, outDir: ".agent-video/eval", baseName: "eval", aspectRatios: ["16:9", "9:16"] });
+    result = await renderVideo(spec, {
+      repoPath,
+      outDir: ".agent-video/eval",
+      baseName: "eval",
+      aspectRatios: ["16:9", "9:16"],
+    });
   } catch (e) {
     fail(`Self-test render failed: ${(e as Error).message}`, "Fix the spec/repo and re-run `agent-video eval`.");
   }
@@ -248,7 +298,9 @@ async function cmdEval(args: Args): Promise<never> {
     validMp4: result.outputs.length > 0 && result.outputs.every((o) => o.durationMs > 0),
     allKindsRendered: result.skipped.length === 0,
     refsReadLive: result.resolvedCode.length > 0,
-    durationsSynced: result.scenes.filter((s) => s.auto).every((s) => Math.abs(s.durationSec - (s.narrationMs / 1000 + 0.6)) < 0.05),
+    durationsSynced: result.scenes
+      .filter((s) => s.auto)
+      .every((s) => Math.abs(s.durationSec - (s.narrationMs / 1000 + 0.6)) < 0.05),
   };
   const allPass = Object.values(gates).every(Boolean);
   const payload = {
@@ -352,7 +404,10 @@ async function main(): Promise<void> {
       ok({ name: "agent-video", version: VERSION });
       break;
     default:
-      fail(`Unknown command: '${args.command}'`, "Run `agent-video help`. Commands: validate, render, schema, help, version.");
+      fail(
+        `Unknown command: '${args.command}'`,
+        "Run `agent-video help`. Commands: validate, render, schema, help, version.",
+      );
   }
 }
 

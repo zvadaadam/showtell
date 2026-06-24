@@ -92,7 +92,12 @@ export async function renderFrames(
       writeFileSync(path, r.png);
       frames.push({ scene: i, kind: scene.kind, aspectRatio: ar, path, width: r.width, height: r.height });
       if (r.resolved && ar === ratios[0]) {
-        resolvedCode.push({ scene: i, file: r.resolved.file, bytes: Buffer.byteLength(r.resolved.text), sha256: sha256(r.resolved.text) });
+        resolvedCode.push({
+          scene: i,
+          file: r.resolved.file,
+          bytes: Buffer.byteLength(r.resolved.text),
+          sha256: sha256(r.resolved.text),
+        });
       }
     }
   }
@@ -216,7 +221,13 @@ export async function renderVideo(
           sha256: sha256(rendered.resolved.text),
         });
       }
-      imageAudioToClip({ image: png, audio: audioByScene.get(t.scene)!, durationSec: t.durationSec, fps, outPath: clip });
+      imageAudioToClip({
+        image: png,
+        audio: audioByScene.get(t.scene)!,
+        durationSec: t.durationSec,
+        fps,
+        outPath: clip,
+      });
       clips.push(clip);
     }
     const out = join(opts.outDir, `${opts.baseName}-${ar.replace(":", "x")}.mp4`);

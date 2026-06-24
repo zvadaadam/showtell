@@ -47,9 +47,20 @@ export function compositeScreencap(o: CompositeOpts): void {
   const args = ["-y", "-loglevel", "error", ...inputs, "-filter_complex", vf, "-map", "[v]"];
   if (audioIdx >= 0) args.push("-map", `${audioIdx}:a`);
   args.push(
-    "-t", o.durationSec.toFixed(3),
-    "-r", String(o.fps),
-    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "medium", "-threads", "1", "-flags:v", "+bitexact",
+    "-t",
+    o.durationSec.toFixed(3),
+    "-r",
+    String(o.fps),
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-preset",
+    "medium",
+    "-threads",
+    "1",
+    "-flags:v",
+    "+bitexact",
   );
   if (audioIdx >= 0) {
     args.push("-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2", "-flags:a", "+bitexact");

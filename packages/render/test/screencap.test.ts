@@ -16,18 +16,37 @@ beforeAll(() => {
   mkdirSync(caps, { recursive: true });
   // Synthetic "screen recording" stands in for a real avfoundation capture.
   execFileSync("ffmpeg", [
-    "-y", "-loglevel", "error", "-f", "lavfi",
-    "-i", "testsrc=size=1280x720:rate=30:duration=3",
-    "-pix_fmt", "yuv420p", join(caps, "syn.mp4"),
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc=size=1280x720:rate=30:duration=3",
+    "-pix_fmt",
+    "yuv420p",
+    join(caps, "syn.mp4"),
   ]);
 });
 afterAll(() => rmSync(repo, { recursive: true, force: true }));
 
 const spec: VideoSpec = {
-  meta: { title: "sc", fps: 30, aspectRatios: ["16:9"], watermark: true, tts: { provider: "say" }, repo: { path: "." } },
+  meta: {
+    title: "sc",
+    fps: 30,
+    aspectRatios: ["16:9"],
+    watermark: true,
+    tts: { provider: "say" },
+    repo: { path: "." },
+  },
   scenes: [
     { kind: "title", content: { heading: "Demo" }, narration: "watch.", duration: "auto" },
-    { kind: "screencap", content: { source: "desktop", sessionRef: "syn" }, narration: "the app runs here.", duration: "auto" },
+    {
+      kind: "screencap",
+      content: { source: "desktop", sessionRef: "syn" },
+      narration: "the app runs here.",
+      duration: "auto",
+    },
   ],
 };
 
@@ -52,6 +71,13 @@ test("screencap composites into a valid mp4 (not skipped)", async () => {
 }, 40_000);
 
 test("missing capture session fails with an actionable error", async () => {
-  const bad: VideoSpec = { ...spec, scenes: [{ kind: "screencap", content: { source: "desktop", sessionRef: "nope" }, narration: "x", duration: "auto" }] };
-  expect(renderVideo(bad, { repoPath: repo, outDir, baseName: "bad", aspectRatios: ["16:9"] })).rejects.toThrow(/not found/);
+  const bad: VideoSpec = {
+    ...spec,
+    scenes: [
+      { kind: "screencap", content: { source: "desktop", sessionRef: "nope" }, narration: "x", duration: "auto" },
+    ],
+  };
+  expect(renderVideo(bad, { repoPath: repo, outDir, baseName: "bad", aspectRatios: ["16:9"] })).rejects.toThrow(
+    /not found/,
+  );
 }, 20_000);

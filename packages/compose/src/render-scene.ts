@@ -69,9 +69,7 @@ export async function renderSceneToPng(scene: Scene, opts: RenderSceneOpts): Pro
       drawChart(ctx, scene, dims);
       break;
     default:
-      throw new Error(
-        `Scene kind "${scene.kind}" is not composable yet. v1a renders: ${COMPOSABLE_KINDS.join(", ")}.`,
-      );
+      throw new Error(`Scene kind "${scene.kind}" is not composable yet. v1a renders: ${COMPOSABLE_KINDS.join(", ")}.`);
   }
 
   if (opts.watermark !== false) {

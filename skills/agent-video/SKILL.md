@@ -17,19 +17,23 @@ the repo and the renderer reads the **live bytes** — the code on screen is alw
 correct.
 
 ## Use when
+
 - The user asks for a video / walkthrough / demo / recap of a change, PR, or codebase.
 - A short narrated explainer would communicate better than text.
 
 ## Don't use when
+
 - The user wants a written answer, or there's nothing visual/temporal to show.
 
 ## The one rule
+
 You author **only** the `spec.json` (scenes + narration). You **never** write
 ffmpeg, frame math, or paste source code into the spec. `code`/`diff` scenes
 carry **references** (`file`, `lineStart`/`lineEnd`, git `ref`); the renderer
 reads the file. Pasting code is wrong and will drift from the source.
 
 ## Workflow
+
 1. **Gather context** from the real repo: `git diff`, `git log`, changed
    `file:line` ranges, PR/commit messages, test output, README.
 2. **Author `spec.json`**: an ordered list of scenes, each with `narration`.
@@ -52,19 +56,23 @@ reads the file. Pasting code is wrong and will drift from the source.
 6. **Report**: reply with the `watchUrl` and one sentence describing the video.
 
 ## The spec
+
 ```jsonc
 {
   "meta": {
     "title": "PR #482: idempotency keys",
-    "aspectRatios": ["16:9", "9:16"],   // desktop, mobile, or "1:1" (default: ["16:9"])
-    "tts": { "provider": "say" },         // local default; BYO-API later
-    "repo": { "path": ".", "baseRef": "main", "headRef": "HEAD" }
+    "aspectRatios": ["16:9", "9:16"], // desktop, mobile, or "1:1" (default: ["16:9"])
+    "tts": { "provider": "say" }, // local default; BYO-API later
+    "repo": { "path": ".", "baseRef": "main", "headRef": "HEAD" },
   },
-  "scenes": [ /* ... */ ]
+  "scenes": [
+    /* ... */
+  ],
 }
 ```
 
 ### Scene kinds (every scene also has `"narration"` and `"duration": "auto"`)
+
 - **title** — `content: { heading, subtitle? }`. Opener / section card.
 - **code** — `content: { file, lineStart?, lineEnd?, ref?, focus?: number[] }`.
   Syntax-highlighted excerpt read from the repo. `focus` emphasizes line numbers.
@@ -81,32 +89,56 @@ reads the file. Pasting code is wrong and will drift from the source.
   then set `sessionRef: "NAME"`.
 
 ## CLI (all commands emit JSON; errors carry a `hint`)
+
 - `agent-video schema` — print the full JSON Schema for `spec.json`.
 - `agent-video validate <spec.json>` — validate against the contract.
 - `agent-video render <spec.json> [--out DIR] [--aspect 16:9,9:16] [--frames-only]` — render MP4(s).
 - `agent-video preview <spec.json> [--port N]` — render + serve a local watch page; returns `watchUrl`.
 - `agent-video capture [--id NAME] [--seconds N]` — record the screen (macOS) for a `screencap` scene.
-Run `agent-video help` for the latest.
+  Run `agent-video help` for the latest.
 
 ## Output format
+
 Reply with the `watchUrl` and a one-sentence description. Example:
+
 > Here's a 40s walkthrough of the change: http://localhost:8787/v/<id> — it covers the new idempotency key, the store, and what reviewers should check.
 
 ## Example — PR walkthrough
+
 ```json
 {
   "meta": { "title": "PR: idempotency keys", "aspectRatios": ["16:9", "9:16"], "repo": { "path": "." } },
   "scenes": [
-    { "kind": "title", "content": { "heading": "Idempotency keys for the webhook", "subtitle": "PR #482 · 4 files · +127 / −34" },
-      "narration": "This PR makes our payments webhook safe to retry by adding idempotency keys.", "duration": "auto" },
-    { "kind": "diff", "content": { "file": "src/payments/webhook.ts", "ref": "main..HEAD" },
-      "narration": "Before processing an event we read the idempotency key and check the store; if we've seen it, we short-circuit.", "duration": "auto" },
-    { "kind": "code", "content": { "file": "src/payments/idempotencyStore.ts", "lineStart": 12, "lineEnd": 30, "focus": [18] },
-      "narration": "The store is a thin Redis wrapper with a 24-hour TTL. Line 18 is the atomic set-if-absent.", "duration": "auto" },
-    { "kind": "talking-points", "content": { "heading": "For reviewers", "points": [
-        "Confirm the 24h TTL matches the provider's retry window.",
-        "The cached response is returned verbatim — no per-request data leaks." ] },
-      "narration": "Two things to double-check before shipping.", "duration": "auto" }
+    {
+      "kind": "title",
+      "content": { "heading": "Idempotency keys for the webhook", "subtitle": "PR #482 · 4 files · +127 / −34" },
+      "narration": "This PR makes our payments webhook safe to retry by adding idempotency keys.",
+      "duration": "auto"
+    },
+    {
+      "kind": "diff",
+      "content": { "file": "src/payments/webhook.ts", "ref": "main..HEAD" },
+      "narration": "Before processing an event we read the idempotency key and check the store; if we've seen it, we short-circuit.",
+      "duration": "auto"
+    },
+    {
+      "kind": "code",
+      "content": { "file": "src/payments/idempotencyStore.ts", "lineStart": 12, "lineEnd": 30, "focus": [18] },
+      "narration": "The store is a thin Redis wrapper with a 24-hour TTL. Line 18 is the atomic set-if-absent.",
+      "duration": "auto"
+    },
+    {
+      "kind": "talking-points",
+      "content": {
+        "heading": "For reviewers",
+        "points": [
+          "Confirm the 24h TTL matches the provider's retry window.",
+          "The cached response is returned verbatim — no per-request data leaks."
+        ]
+      },
+      "narration": "Two things to double-check before shipping.",
+      "duration": "auto"
+    }
   ]
 }
 ```

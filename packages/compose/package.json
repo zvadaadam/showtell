@@ -10,9 +10,9 @@
   },
   "dependencies": {
     "@agent-video/core": "workspace:*",
-    "@fontsource/inter": "^5.1.0",
-    "@fontsource/jetbrains-mono": "^5.1.0",
-    "@napi-rs/canvas": "^0.1.97",
-    "shiki": "^1.24.0"
+    "@fontsource/inter": "5.2.8",
+    "@fontsource/jetbrains-mono": "5.2.8",
+    "@napi-rs/canvas": "0.1.100",
+    "shiki": "1.29.2"
   }
 }

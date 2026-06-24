@@ -9,13 +9,37 @@ import { join, isAbsolute, extname } from "node:path";
 import type { CodeScene, DiffScene } from "./spec.ts";
 
 const EXT_LANG: Record<string, string> = {
-  ".ts": "typescript", ".tsx": "tsx", ".js": "javascript", ".jsx": "jsx",
-  ".mjs": "javascript", ".cjs": "javascript", ".json": "json", ".py": "python",
-  ".go": "go", ".rs": "rust", ".rb": "ruby", ".java": "java", ".c": "c",
-  ".h": "c", ".cpp": "cpp", ".cc": "cpp", ".cs": "csharp", ".php": "php",
-  ".swift": "swift", ".kt": "kotlin", ".sh": "bash", ".bash": "bash",
-  ".zsh": "bash", ".yml": "yaml", ".yaml": "yaml", ".toml": "toml",
-  ".md": "markdown", ".css": "css", ".html": "html", ".sql": "sql", ".vue": "vue",
+  ".ts": "typescript",
+  ".tsx": "tsx",
+  ".js": "javascript",
+  ".jsx": "jsx",
+  ".mjs": "javascript",
+  ".cjs": "javascript",
+  ".json": "json",
+  ".py": "python",
+  ".go": "go",
+  ".rs": "rust",
+  ".rb": "ruby",
+  ".java": "java",
+  ".c": "c",
+  ".h": "c",
+  ".cpp": "cpp",
+  ".cc": "cpp",
+  ".cs": "csharp",
+  ".php": "php",
+  ".swift": "swift",
+  ".kt": "kotlin",
+  ".sh": "bash",
+  ".bash": "bash",
+  ".zsh": "bash",
+  ".yml": "yaml",
+  ".yaml": "yaml",
+  ".toml": "toml",
+  ".md": "markdown",
+  ".css": "css",
+  ".html": "html",
+  ".sql": "sql",
+  ".vue": "vue",
 };
 
 export function inferLanguage(file: string): string {
@@ -90,11 +114,10 @@ export interface ResolvedDiff {
 
 /** Resolve a diff scene to the live `git diff` for its file + ref range. */
 export function resolveDiff(repoPath: string, content: DiffScene["content"]): ResolvedDiff {
-  const rawText = execFileSync(
-    "git",
-    ["-C", repoPath, "diff", "--no-color", content.ref, "--", content.file],
-    { encoding: "utf-8", maxBuffer: 64 * 1024 * 1024 },
-  );
+  const rawText = execFileSync("git", ["-C", repoPath, "diff", "--no-color", content.ref, "--", content.file], {
+    encoding: "utf-8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
 
   const lines: DiffLine[] = [];
   let added = 0;

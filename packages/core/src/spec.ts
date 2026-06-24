@@ -22,15 +22,8 @@ export const Duration = z
   .describe('Seconds, or "auto" to derive from the narration audio length.');
 
 const SceneBase = {
-  id: z
-    .string()
-    .min(1)
-    .optional()
-    .describe("Stable scene id (defaults to the scene index if omitted)."),
-  narration: z
-    .string()
-    .min(1)
-    .describe("Spoken narration for this scene. Always required."),
+  id: z.string().min(1).optional().describe("Stable scene id (defaults to the scene index if omitted)."),
+  narration: z.string().min(1).describe("Spoken narration for this scene. Always required."),
   duration: Duration.default("auto"),
 };
 
@@ -61,10 +54,7 @@ export const CodeScene = z
         lineStart: z.number().int().positive().optional(),
         lineEnd: z.number().int().positive().optional(),
         ref: z.string().optional().describe("Optional git ref to read the file at (default: working tree)."),
-        focus: z
-          .array(z.number().int().positive())
-          .optional()
-          .describe("Line numbers to emphasize."),
+        focus: z.array(z.number().int().positive()).optional().describe("Line numbers to emphasize."),
         language: z.string().optional().describe("Override syntax language (else inferred from extension)."),
       })
       .strict(),
