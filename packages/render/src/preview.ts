@@ -1,14 +1,13 @@
 /**
- * Local preview server — a localhost watch page for rendered videos, mirroring
- * Mainframe's review-before-share ergonomics and {videoId,status,watchUrl}
- * shape. No external deps (Bun.serve). Sharing/upload is Phase-2.
+ * Local watch server — the "npx serve" of agent-video bundles. Serves the built
+ * web player (a static SPA) at `/`, plus the rendered bundle (manifest.json +
+ * mp4s + thumbnails) at `/bundle/*`. The agent hands back a live URL, not a file.
+ *
+ * Zero external deps (Bun.serve). Sharing/upload is the paid, hosted tier.
  */
-import { basename } from "node:path";
-
-export interface PreviewOutput {
-  aspectRatio: string;
-  path: string;
-}
+import { existsSync, statSync } from "node:fs";
+import { join, resolve, normalize, extname, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface PreviewHandle {
   videoId: string;
@@ -18,91 +17,99 @@ export interface PreviewHandle {
   stop(): void;
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Locate the built player (packages/player/dist/client). Tries cwd-relative
+ * first (running from the repo), then relative to this package. Throws with a
+ * build hint if it isn't built yet.
+ */
+export function resolvePlayerDist(): string {
+  const candidates = [
+    join(process.cwd(), "packages/player/dist/client"),
+    join(HERE, "..", "..", "player", "dist", "client"),
+  ];
+  for (const c of candidates) {
+    if (existsSync(join(c, "_shell.html"))) return resolve(c);
+  }
+  throw new Error(
+    "Player build not found (packages/player/dist/client/_shell.html). Build it first: `cd packages/player && bun --bun run build`.",
+  );
 }
 
-function renderHtml(opts: { title: string; videoId: string; outputs: PreviewOutput[] }): string {
-  const title = escapeHtml(opts.title);
-  const sources = opts.outputs.map((o) => ({ ar: o.aspectRatio, file: basename(o.path) }));
-  const first = sources[0]!;
-  const buttons = sources
-    .map(
-      (s, i) =>
-        `<button data-src="/video/${encodeURIComponent(s.file)}" class="${i === 0 ? "active" : ""}">${escapeHtml(s.ar)}</button>`,
-    )
-    .join("");
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title} · agent-video</title>
-<style>
-  :root { color-scheme: dark; }
-  body { margin:0; background:#0f0f17; color:#e8e8f2; font:16px/1.5 -apple-system,Inter,system-ui,sans-serif;
-         display:flex; flex-direction:column; align-items:center; min-height:100vh; }
-  header { width:100%; max-width:980px; padding:24px 20px 8px; box-sizing:border-box; display:flex; justify-content:space-between; align-items:baseline; }
-  h1 { font-size:20px; margin:0; font-weight:600; }
-  .brand { color:#9aa0b4; font-size:13px; text-decoration:none; }
-  main { width:100%; max-width:980px; padding:8px 20px 40px; box-sizing:border-box; }
-  video { width:100%; border-radius:12px; background:#000; box-shadow:0 8px 40px rgba(0,0,0,.5); }
-  .ratios { display:flex; gap:8px; margin:14px 0; }
-  button { background:#1a1a2e; color:#cfd2e0; border:1px solid rgba(255,255,255,.08); border-radius:8px;
-           padding:6px 14px; font-size:14px; cursor:pointer; }
-  button.active { background:#7c8cff; color:#0b0b14; border-color:#7c8cff; }
-  .meta { color:#9aa0b4; font-size:13px; margin-top:12px; }
-</style></head>
-<body>
-  <header><h1>${title}</h1><a class="brand" href="https://agent-video.dev">agent-video.dev</a></header>
-  <main>
-    <video id="player" controls playsinline preload="auto" src="/video/${encodeURIComponent(first.file)}"></video>
-    <div class="ratios" id="ratios">${buttons}</div>
-    <div class="meta">video id <code>${escapeHtml(opts.videoId)}</code> · status <span id="status">success</span></div>
-  </main>
-  <script>
-    const player = document.getElementById('player');
-    for (const b of document.querySelectorAll('#ratios button')) {
-      b.addEventListener('click', () => {
-        document.querySelectorAll('#ratios button').forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
-        const t = player.currentTime; player.src = b.dataset.src; player.currentTime = t; player.play();
-      });
-    }
-  </script>
-</body></html>`;
+const CTYPE: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".mp4": "video/mp4",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".txt": "text/plain; charset=utf-8",
+};
+
+function contentType(p: string): string {
+  return CTYPE[extname(p).toLowerCase()] ?? "application/octet-stream";
 }
 
-/** Start a localhost preview server. Returns immediately with a stable watchUrl. */
+/** Resolve `rel` under `root`, rejecting path traversal. null if unsafe/missing. */
+function safeFile(root: string, rel: string): string | null {
+  const full = normalize(join(root, rel));
+  if (full !== root && !full.startsWith(root + "/")) return null; // escaped root
+  if (!existsSync(full) || !statSync(full).isFile()) return null;
+  return full;
+}
+
+/**
+ * Start a localhost watch server for a rendered bundle + the built player.
+ * Returns immediately with a stable watchUrl; the server runs until stop().
+ */
 export function startPreviewServer(opts: {
-  outputs: PreviewOutput[];
+  bundleDir: string;
+  playerDir: string;
   title: string;
   videoId: string;
   port?: number;
 }): PreviewHandle {
-  const byFile = new Map(opts.outputs.map((o) => [basename(o.path), o.path]));
+  const bundleDir = resolve(opts.bundleDir);
+  const playerDir = resolve(opts.playerDir);
+  const shell = join(playerDir, "_shell.html");
+
   const server = Bun.serve({
     port: opts.port ?? 0,
     fetch(req) {
-      const u = new URL(req.url);
-      if (u.pathname === "/" || u.pathname === `/v/${opts.videoId}`) {
-        return new Response(renderHtml(opts), { headers: { "content-type": "text/html; charset=utf-8" } });
+      let path = decodeURIComponent(new URL(req.url).pathname);
+
+      if (path === "/status") {
+        return Response.json({ videoId: opts.videoId, status: "success", title: opts.title });
       }
-      if (u.pathname === "/status") {
-        return Response.json({ videoId: opts.videoId, status: "success" });
+
+      // the rendered bundle: manifest.json, mp4s, thumbnails
+      if (path.startsWith("/bundle/")) {
+        const f = safeFile(bundleDir, path.slice("/bundle/".length));
+        if (f) return new Response(Bun.file(f), { headers: { "content-type": contentType(f) } });
+        return new Response("not found", { status: 404 });
       }
-      const m = u.pathname.match(/^\/video\/(.+)$/);
-      if (m) {
-        const file = byFile.get(decodeURIComponent(m[1]!));
-        if (file) return new Response(Bun.file(file), { headers: { "content-type": "video/mp4" } });
-      }
-      return new Response("not found", { status: 404 });
+
+      // static player assets (hashed JS/CSS, favicon, …)
+      if (path === "/") path = "/_shell.html";
+      const asset = safeFile(playerDir, path);
+      if (asset) return new Response(Bun.file(asset), { headers: { "content-type": contentType(asset) } });
+
+      // SPA fallback → the prerendered shell
+      return new Response(Bun.file(shell), { headers: { "content-type": "text/html; charset=utf-8" } });
     },
   });
+
   const port = server.port;
   if (port == null) throw new Error("Preview server failed to bind to a port.");
-  return {
-    videoId: opts.videoId,
-    port,
-    url: `http://localhost:${port}/`,
-    watchUrl: `http://localhost:${port}/v/${opts.videoId}`,
-    stop: () => server.stop(true),
-  };
+  const url = `http://localhost:${port}/`;
+  return { videoId: opts.videoId, port, url, watchUrl: url, stop: () => server.stop(true) };
 }

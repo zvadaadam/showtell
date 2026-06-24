@@ -10,5 +10,7 @@ import tailwindcss from '@tailwindcss/vite'
 // as a transitive dep, so the server still builds.
 export default defineConfig({
   resolve: { tsconfigPaths: true },
-  plugins: [tailwindcss(), tanstackStart(), viteReact()],
+  // SPA mode: prerender a static index.html shell so the built player is a pure
+  // client app the agent's Bun serve command can host (no Node/nitro runtime).
+  plugins: [tailwindcss(), tanstackStart({ spa: { enabled: true } }), viteReact()],
 })

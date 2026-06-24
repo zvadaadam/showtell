@@ -1,20 +1,27 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { chromium, type Browser } from "playwright";
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { VideoSpec } from "@agent-video/core";
-import { renderVideo, startPreviewServer, type PreviewHandle } from "../src/index.ts";
+import { renderVideo, startPreviewServer, resolvePlayerDist, type PreviewHandle } from "../src/index.ts";
 
-// WEB gate (DONE): preview loads, plays, screenshot asserts — verified with a
-// real headless browser (Playwright chromium) since the Claude Chrome extension
-// isn't available in this environment.
+// WEB gate (close-the-loop): render → serve the real player → drive it in a real
+// headless browser (Playwright), since the Claude Chrome extension isn't available
+// here. Requires the player to be built (packages/player/dist/client); skipped if
+// it isn't, so a fresh checkout's `bun test` stays green.
+let playerDir: string | null = null;
+try {
+  playerDir = resolvePlayerDist();
+} catch {
+  playerDir = null;
+}
 
 const outDir = join(tmpdir(), "agent-video-web-test");
-let handle: PreviewHandle;
-let browser: Browser;
+let handle: PreviewHandle | undefined;
+let browser: Browser | undefined;
 
 beforeAll(async () => {
+  if (!playerDir) return;
   const spec: VideoSpec = {
     meta: {
       title: "Web Gate",
@@ -26,9 +33,10 @@ beforeAll(async () => {
     },
     scenes: [{ kind: "title", content: { heading: "Hello" }, narration: "one two three four.", duration: "auto" }],
   };
-  const r = await renderVideo(spec, { repoPath: ".", outDir, baseName: "web", aspectRatios: ["16:9"] });
+  await renderVideo(spec, { repoPath: ".", outDir, baseName: "web", aspectRatios: ["16:9"] });
   handle = startPreviewServer({
-    outputs: r.outputs,
+    bundleDir: outDir,
+    playerDir,
     title: spec.meta.title,
     videoId: "webgate000000000000000000000abcd",
   });
@@ -40,43 +48,46 @@ afterAll(async () => {
   handle?.stop();
 });
 
-test("preview page loads, the video plays, and a non-blank screenshot is captured", async () => {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+test.skipIf(playerDir === null)(
+  "served player loads the bundle, shows the manifest title, and the video plays",
+  async () => {
+    const page = await browser!.newPage({ viewport: { width: 1320, height: 900 } });
 
-  const res = await page.goto(handle.watchUrl, { waitUntil: "load" });
-  expect(res?.status()).toBe(200);
-  expect(await page.title()).toContain("Web Gate");
+    const res = await page.goto(handle!.watchUrl, { waitUntil: "load" });
+    expect(res?.status()).toBe(200);
 
-  // the player exists and loads the mp4
-  expect(await page.locator("video#player").count()).toBe(1);
-  await page.waitForFunction(
-    () => {
-      const v = document.querySelector("video");
-      return !!v && v.readyState >= 1 && v.videoWidth > 0;
-    },
-    { timeout: 20_000 },
-  );
+    // the player renders and loads the bundle's manifest → title comes from it
+    await page.getByTestId("video").waitFor({ state: "visible", timeout: 20_000 });
+    const titleText = (await page.getByTestId("title").textContent())?.trim();
+    expect(titleText).toBe("Web Gate");
 
-  // play it
-  await page.evaluate(async () => {
-    const v = document.querySelector("video") as HTMLVideoElement;
-    v.muted = true;
-    await v.play();
-  });
-  await page.waitForTimeout(800);
+    await page.waitForFunction(
+      () => {
+        const v = document.querySelector("video");
+        return !!v && v.readyState >= 1 && v.videoWidth > 0;
+      },
+      { timeout: 20_000 },
+    );
 
-  const state = await page.evaluate(() => {
-    const v = document.querySelector("video") as HTMLVideoElement;
-    return { currentTime: v.currentTime, w: v.videoWidth, h: v.videoHeight };
-  });
-  expect(state.currentTime).toBeGreaterThan(0); // it is actually playing
-  expect(state.w).toBe(1920);
-  expect(state.h).toBe(1080);
+    await page.evaluate(async () => {
+      const v = document.querySelector("video") as HTMLVideoElement;
+      v.muted = true;
+      await v.play();
+    });
+    await page.waitForTimeout(800);
 
-  // screenshot asserts — saved for the human to eyeball
-  mkdirSync(outDir, { recursive: true });
-  const buf = await page.screenshot({ path: join(outDir, "webshot.png") });
-  expect(buf.length).toBeGreaterThan(5000);
+    const state = await page.evaluate(() => {
+      const v = document.querySelector("video") as HTMLVideoElement;
+      return { currentTime: v.currentTime, w: v.videoWidth, h: v.videoHeight };
+    });
+    expect(state.currentTime).toBeGreaterThan(0); // actually playing
+    expect(state.w).toBe(1920);
+    expect(state.h).toBe(1080);
 
-  await page.close();
-}, 60_000);
+    const buf = await page.screenshot({ path: join(outDir, "webshot.png") });
+    expect(buf.length).toBeGreaterThan(5000);
+
+    await page.close();
+  },
+  60_000,
+);

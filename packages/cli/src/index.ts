@@ -18,7 +18,7 @@ import {
   type AspectRatio,
   type SpecError,
 } from "@agent-video/core";
-import { renderFrames, renderVideo, startPreviewServer } from "@agent-video/render";
+import { renderFrames, renderVideo, startPreviewServer, resolvePlayerDist } from "@agent-video/render";
 import { recordScreen, ensureCapturesDir, sessionPath, ensureSyntheticSession } from "@agent-video/capture";
 
 const VERSION = "0.0.0";
@@ -208,6 +208,13 @@ async function cmdPreview(args: Args): Promise<void> {
     aspectRatios = requested as AspectRatio[];
   }
 
+  let playerDir: string;
+  try {
+    playerDir = resolvePlayerDist();
+  } catch (e) {
+    fail((e as Error).message, "Build the player once, then re-run preview.");
+  }
+
   let result;
   try {
     result = await renderVideo(spec, { repoPath, outDir, baseName, aspectRatios });
@@ -217,7 +224,7 @@ async function cmdPreview(args: Args): Promise<void> {
 
   const videoId = specVideoId(spec);
   const port = typeof args.flags.port === "string" ? parseInt(args.flags.port, 10) : undefined;
-  const handle = startPreviewServer({ outputs: result.outputs, title: spec.meta.title, videoId, port });
+  const handle = startPreviewServer({ bundleDir: outDir, playerDir, title: spec.meta.title, videoId, port });
 
   // Agent-first: emit the result (stable watchUrl) immediately, then keep serving.
   process.stdout.write(
@@ -337,8 +344,9 @@ COMMANDS
   render <spec.json>     Render the spec to mp4 (both ratios). Flags: --out DIR,
                          --repo PATH, --aspect 16:9,9:16, --frames-only
                          (--frames-only = PNG per scene, skips TTS + mux).
-  preview <spec.json>    Render, then serve a localhost watch page. Returns a
-                         stable watchUrl. Flags: --port N, --serve-seconds N.
+  preview <spec.json>    Render, then serve the web player at a localhost watch
+                         URL (the bundle is served too). Flags: --port N,
+                         --serve-seconds N. (Build the player once first.)
   capture                Record the screen (macOS) into a capture session for a
                          screencap scene. Flags: --seconds N, --id NAME, --fps N.
   eval                   Self-test: render the golden example (or --spec PATH) in

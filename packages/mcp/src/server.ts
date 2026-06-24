@@ -9,7 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { validateSpec, videoSpecJsonSchema, type VideoSpec } from "@agent-video/core";
-import { renderVideo, startPreviewServer, type PreviewHandle } from "@agent-video/render";
+import { renderVideo, startPreviewServer, resolvePlayerDist, type PreviewHandle } from "@agent-video/render";
 
 const SPEC_EXAMPLE = `{
   "meta": { "title": "PR: idempotency keys", "aspectRatios": ["16:9","9:16"], "repo": { "path": "." } },
@@ -166,7 +166,7 @@ ${SPEC_EXAMPLE}`,
     "agent_video_preview",
     {
       title: "Render and serve a watch page",
-      description: `Render the spec, then serve a localhost watch page. Returns { videoId, status:"success", watchUrl } immediately (the server keeps running in the background). Use agent_video_get_video to re-check.
+      description: `Render the spec, then serve the web player at a localhost watch URL (the bundle is served alongside it). Returns { videoId, status:"success", watchUrl } immediately; the server keeps running. Use agent_video_get_video to re-check. The player must be built once (cd packages/player && bun --bun run build).
 
 Returns (JSON): { "ok": true, "videoId": string, "status": "success", "watchUrl": string, "outputs": [...] }
 
@@ -182,10 +182,12 @@ ${SPEC_EXAMPLE}`,
         videoId: z.string().optional(),
         status: z.string().optional(),
         watchUrl: z.string().optional(),
+        manifestPath: z.string().optional(),
         outputs: z.array(OUTPUT_Ref).optional(),
         warnings: z.array(z.object({ scene: z.number(), message: z.string() })).optional(),
         error: z.string().optional(),
         errors: z.array(ERROR_DETAIL).optional(),
+        hint: z.string().optional(),
       },
       // Starts a long-lived local server + writes files; local-only.
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
@@ -195,23 +197,33 @@ ${SPEC_EXAMPLE}`,
       if (!r.ok) return textResult({ ok: false, error: "Spec failed validation.", errors: r.errors }, true);
       try {
         const videoId = specId(spec);
+        const playerDir = resolvePlayerDist();
+        const outDir = ".agent-video/out";
         const result = await renderVideo(r.spec as VideoSpec, {
           repoPath: repoPath ?? r.spec.meta.repo.path,
-          outDir: ".agent-video/out",
+          outDir,
           baseName: "video",
         });
-        const handle = startPreviewServer({ outputs: result.outputs, title: r.spec.meta.title, videoId, port });
+        const handle = startPreviewServer({ bundleDir: outDir, playerDir, title: r.spec.meta.title, videoId, port });
         previews.set(videoId, handle);
         return textResult({
           ok: true,
           videoId,
           status: "success",
           watchUrl: handle.watchUrl,
+          manifestPath: result.manifestPath,
           outputs: result.outputs,
           warnings: result.warnings,
         });
       } catch (e) {
-        return textResult({ ok: false, error: `Preview failed: ${(e as Error).message}` }, true);
+        return textResult(
+          {
+            ok: false,
+            error: `Preview failed: ${(e as Error).message}`,
+            hint: "If the player isn't built: cd packages/player && bun --bun run build.",
+          },
+          true,
+        );
       }
     },
   );

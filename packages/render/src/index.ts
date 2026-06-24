@@ -14,7 +14,7 @@ import { resolveSession, compositeScreencap, loadSessionEvents, computeCameraTim
 import { imageAudioToClip, concatClips } from "./ffmpeg.ts";
 
 export { probeDurationMs } from "@agent-video/providers";
-export { startPreviewServer, type PreviewHandle, type PreviewOutput } from "./preview.ts";
+export { startPreviewServer, resolvePlayerDist, type PreviewHandle } from "./preview.ts";
 
 function isComposable(kind: string): boolean {
   return (COMPOSABLE_KINDS as readonly string[]).includes(kind);
