@@ -4,3 +4,6 @@ dist
 bun.lock
 packages/core/schema.json
 packages/core/manifest.schema.json
+
+# the player is a self-contained sub-app with its own toolchain (Vite/TanStack)
+packages/player

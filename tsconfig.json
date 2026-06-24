@@ -17,5 +17,6 @@
       "@agent-video/core": ["./packages/core/src/index.ts"]
     }
   },
-  "include": ["packages/*/src/**/*.ts"]
+  "include": ["packages/*/src/**/*.ts"],
+  "exclude": ["packages/player/**"]
 }
