@@ -32,7 +32,8 @@ function parse(data: Record<string, string | number>[]): Parsed {
   };
 }
 
-export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims): void {
+/** Returns true if the chart had data to plot; false if it drew a "no data" placeholder. */
+export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims): boolean {
   const base = Math.min(dims.width, dims.height);
   const pad = Math.round(base * 0.1);
   const p = parse(scene.content.data as Record<string, string | number>[]);
@@ -48,12 +49,25 @@ export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims): vo
     top += tSize * 1.8;
   }
 
+  // A datum can carry no numeric value (only a label) or be all zeros — draw a
+  // visible placeholder instead of a blank/broken card, and let the caller warn.
+  const hasData = p.series.length > 0 && p.series.some((s) => s.values.some((v) => v !== 0));
+  if (!hasData) {
+    ctx.font = `${Math.round(base * 0.03)}px '${THEME.sans}'`;
+    ctx.fillStyle = THEME.subtle;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("No numeric data to chart", dims.width / 2, top + (dims.height - top) / 2);
+    return false;
+  }
+
   const plot = { x: pad, y: top, w: dims.width - pad * 2, h: dims.height - top - pad };
 
   if (scene.content.chartType === "pie") drawPie(ctx, p, plot);
   else drawBarOrLine(ctx, p, plot, base, scene.content.chartType);
 
   drawLegend(ctx, p, dims, base, pad);
+  return true;
 }
 
 function drawBarOrLine(

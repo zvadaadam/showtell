@@ -66,7 +66,9 @@ export async function renderSceneToPng(scene: Scene, opts: RenderSceneOpts): Pro
       drawTalkingPoints(ctx, scene, dims);
       break;
     case "chart":
-      drawChart(ctx, scene, dims);
+      if (!drawChart(ctx, scene, dims)) {
+        warning = "chart scene has no numeric data to plot — give each datum at least one numeric value.";
+      }
       break;
     default:
       throw new Error(`Scene kind "${scene.kind}" is not composable yet. v1a renders: ${COMPOSABLE_KINDS.join(", ")}.`);

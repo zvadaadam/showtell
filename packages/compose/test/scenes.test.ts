@@ -43,3 +43,15 @@ test("chart renders for bar / line / pie, both orientations", async () => {
     }
   }
 });
+
+test("a chart with no numeric data renders a placeholder + a warning", async () => {
+  const scene = {
+    kind: "chart",
+    content: { chartType: "bar", data: [{ label: "only-a-label" }] },
+    narration: "x",
+    duration: "auto",
+  } as Scene;
+  const r = await renderSceneToPng(scene, opts);
+  expect(r.png.length).toBeGreaterThan(1000); // still draws a frame (the placeholder)
+  expect(r.warning).toContain("no numeric data");
+});

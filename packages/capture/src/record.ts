@@ -4,7 +4,7 @@
  * (System Settings → Privacy & Security → Screen Recording).
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, rmSync } from "node:fs";
 import { platform } from "node:os";
 
 /** Auto-detect the "Capture screen N" avfoundation device index. */
@@ -73,11 +73,13 @@ export function recordScreen(opts: RecordOpts): { outPath: string; bytes: number
       { stdio: ["ignore", "pipe", "pipe"], timeout: (opts.durationSec + 20) * 1000 },
     );
   } catch (e) {
+    rmSync(opts.outPath, { force: true }); // never leave a truncated mp4 a later render would pick up
     throw new Error(
       `Screen recording failed: ${(e as Error).message}. Hint: grant Screen Recording permission in System Settings → Privacy & Security.`,
     );
   }
   if (!existsSync(opts.outPath) || statSync(opts.outPath).size === 0) {
+    rmSync(opts.outPath, { force: true });
     throw new Error(
       `Screen recording produced no output (permission denied?). Grant Screen Recording permission and retry.`,
     );
