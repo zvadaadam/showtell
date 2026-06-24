@@ -59,12 +59,35 @@ export interface RenderFramesResult {
   /** For code scenes: the exact live bytes rendered (proves refs-not-pasted). */
   resolvedCode: ResolvedInfo[];
   skipped: { scene: number; kind: string; reason: string }[];
+  warnings: { scene: number; message: string }[];
 }
 
 function watermarkText(spec: VideoSpec): string | false {
   const w = spec.meta.watermark;
   if (w === false) return false;
   return typeof w === "string" ? w : "agent-video.dev";
+}
+
+/**
+ * Collect the per-scene metadata that's the same for every aspect ratio: the
+ * live-bytes proof (resolvedCode, sha256 of what was rendered) and any warning.
+ * Call once per scene (on the first ratio). Shared by renderFrames + renderVideo
+ * so the sha/warning logic lives in exactly one place.
+ */
+function recordSceneMeta(
+  rendered: { resolved?: { file: string; text: string }; warning?: string },
+  sceneIdx: number,
+  out: { resolvedCode: ResolvedInfo[]; warnings: { scene: number; message: string }[] },
+): void {
+  if (rendered.resolved) {
+    out.resolvedCode.push({
+      scene: sceneIdx,
+      file: rendered.resolved.file,
+      bytes: Buffer.byteLength(rendered.resolved.text),
+      sha256: sha256(rendered.resolved.text),
+    });
+  }
+  if (rendered.warning) out.warnings.push({ scene: sceneIdx, message: rendered.warning });
 }
 
 export async function renderFrames(
@@ -78,6 +101,7 @@ export async function renderFrames(
   const frames: FrameInfo[] = [];
   const resolvedCode: ResolvedInfo[] = [];
   const skipped: { scene: number; kind: string; reason: string }[] = [];
+  const warnings: { scene: number; message: string }[] = [];
 
   for (const ar of ratios) {
     for (let i = 0; i < spec.scenes.length; i++) {
@@ -91,18 +115,11 @@ export async function renderFrames(
       const path = join(opts.outDir, name);
       writeFileSync(path, r.png);
       frames.push({ scene: i, kind: scene.kind, aspectRatio: ar, path, width: r.width, height: r.height });
-      if (r.resolved && ar === ratios[0]) {
-        resolvedCode.push({
-          scene: i,
-          file: r.resolved.file,
-          bytes: Buffer.byteLength(r.resolved.text),
-          sha256: sha256(r.resolved.text),
-        });
-      }
+      if (ar === ratios[0]) recordSceneMeta(r, i, { resolvedCode, warnings });
     }
   }
 
-  return { outDir: opts.outDir, aspectRatios: ratios, frames, resolvedCode, skipped };
+  return { outDir: opts.outDir, aspectRatios: ratios, frames, resolvedCode, skipped, warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -212,15 +229,7 @@ export async function renderVideo(
       const rendered = await renderSceneToPng(scene, { repoPath: opts.repoPath, aspectRatio: ar, watermark: wm });
       const png = join(workDir, `${tag}.png`);
       writeFileSync(png, rendered.png);
-      if (rendered.warning && ar === ratios[0]) warnings.push({ scene: t.scene, message: rendered.warning });
-      if (rendered.resolved && ar === ratios[0]) {
-        resolvedCode.push({
-          scene: t.scene,
-          file: rendered.resolved.file,
-          bytes: Buffer.byteLength(rendered.resolved.text),
-          sha256: sha256(rendered.resolved.text),
-        });
-      }
+      if (ar === ratios[0]) recordSceneMeta(rendered, t.scene, { resolvedCode, warnings });
       imageAudioToClip({
         image: png,
         audio: audioByScene.get(t.scene)!,

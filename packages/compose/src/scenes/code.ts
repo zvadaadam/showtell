@@ -2,7 +2,7 @@ import type { SKRSContext2D } from "@napi-rs/canvas";
 import type { CodeScene, ResolvedCode } from "@agent-video/core";
 import { THEME } from "../theme.ts";
 import type { Dims } from "../dims.ts";
-import { roundRect, fitMonoFont } from "../draw.ts";
+import { roundRect, fitMonoFont, windowAround } from "../draw.ts";
 import type { Tok } from "../highlight.ts";
 
 /**
@@ -68,23 +68,11 @@ export function drawCode(
   const innerPad = Math.round(pad * 0.6);
   const base = Math.min(dims.width, dims.height);
 
-  // Window to a legible number of lines (a fixed card can't show 40 lines big).
-  // Center the window on the focus line; keep the full range for the sha.
-  const MAX_LINES = 22;
-  let view = tokens;
-  let startLineNo = resolved.startLine;
-  let hiddenNote = "";
-  if (tokens.length > MAX_LINES) {
-    let s = 0;
-    if (resolved.focus.length) {
-      const fi = resolved.focus[0]! - resolved.startLine;
-      s = Math.max(0, Math.min(tokens.length - MAX_LINES, fi - Math.floor(MAX_LINES / 2)));
-    }
-    view = tokens.slice(s, s + MAX_LINES);
-    startLineNo = resolved.startLine + s;
-    const hidden = tokens.length - view.length;
-    hiddenNote = `+${hidden} more line${hidden > 1 ? "s" : ""}`;
-  }
+  // Window to a legible number of lines (a fixed card can't show 40 lines big),
+  // anchored on the focus line. The full range is still read for the sha.
+  const anchor = resolved.focus.length ? resolved.focus[0]! - resolved.startLine : 0;
+  const { view, start, hiddenNote } = windowAround(tokens, anchor);
+  const startLineNo = resolved.startLine + start;
 
   const gutterChars = String(startLineNo + view.length - 1).length + 2;
   const maxContent = Math.max(1, ...view.map((line) => line.reduce((n, t) => n + t.content.length, 0)));

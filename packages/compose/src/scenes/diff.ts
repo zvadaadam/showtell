@@ -2,7 +2,7 @@ import type { SKRSContext2D } from "@napi-rs/canvas";
 import type { DiffScene, ResolvedDiff } from "@agent-video/core";
 import { THEME } from "../theme.ts";
 import type { Dims } from "../dims.ts";
-import { roundRect, fitMonoFont } from "../draw.ts";
+import { roundRect, fitMonoFont, windowAround } from "../draw.ts";
 
 const ADD_BG = "rgba(46,160,67,0.18)";
 const DEL_BG = "rgba(248,81,73,0.18)";
@@ -57,21 +57,11 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
   ctx.clip();
 
   const innerPad = Math.round(pad * 0.5);
-  // Window long diffs to a legible cap (font stays readable, never clips).
+  // Window long diffs to a legible cap, anchored on the first actual change —
+  // the +/- lines are the whole point of a diff scene, not the leading context.
   const base = Math.min(dims.width, dims.height);
-  const MAX_LINES = 22;
-  let view = diff.lines;
-  let hiddenNote = "";
-  if (diff.lines.length > MAX_LINES) {
-    // Center the window on the first actual change, not the leading context —
-    // the +/- lines are the whole point of a diff scene.
-    const firstChange = diff.lines.findIndex((l) => l.kind === "add" || l.kind === "del");
-    const anchor = firstChange < 0 ? 0 : firstChange;
-    const start = Math.max(0, Math.min(diff.lines.length - MAX_LINES, anchor - Math.floor(MAX_LINES / 3)));
-    view = diff.lines.slice(start, start + MAX_LINES);
-    const hidden = diff.lines.length - view.length;
-    hiddenNote = `+${hidden} more line${hidden > 1 ? "s" : ""}`;
-  }
+  const firstChange = diff.lines.findIndex((l) => l.kind === "add" || l.kind === "del");
+  const { view, hiddenNote } = windowAround(diff.lines, firstChange < 0 ? 0 : firstChange);
 
   const longestChars = 2 + Math.max(1, ...view.map((l) => l.content.length));
   const noteH = hiddenNote ? Math.round(base * 0.03) : 0;

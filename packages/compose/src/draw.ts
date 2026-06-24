@@ -39,6 +39,28 @@ export function wrapText(ctx: SKRSContext2D, text: string, maxWidth: number): st
   return lines;
 }
 
+/** A fixed card can't show many lines legibly, so code/diff window to this many. */
+export const MAX_WINDOW_LINES = 22;
+
+/**
+ * Window a long line array down to `max` lines around an anchor (the focus line
+ * for code, the first change for a diff), biased so the anchor sits in the top
+ * third (more context follows). Returns the slice, its start offset, and a
+ * "+N more lines" footer string (empty when nothing is hidden). Shared by the
+ * code and diff scenes so the windowing rule lives in one place.
+ */
+export function windowAround<T>(
+  items: T[],
+  anchor: number,
+  max: number = MAX_WINDOW_LINES,
+): { view: T[]; start: number; hiddenNote: string } {
+  if (items.length <= max) return { view: items, start: 0, hiddenNote: "" };
+  const start = Math.max(0, Math.min(items.length - max, anchor - Math.floor(max / 3)));
+  const view = items.slice(start, start + max);
+  const hidden = items.length - view.length;
+  return { view, start, hiddenNote: `+${hidden} more line${hidden > 1 ? "s" : ""}` };
+}
+
 /**
  * Pick a monospace font size so `lineCount` lines of up to `longestChars`
  * characters fit within areaW × areaH — prevents code/diff clipping (bottom and
