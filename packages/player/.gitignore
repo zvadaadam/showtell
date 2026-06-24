@@ -12,3 +12,6 @@ dist-ssr
 __unconfig*
 todos.json
 src/routeTree.gen.ts
+
+# local dev fixture bundle (a rendered bundle dropped in for the player to load)
+public/bundle
