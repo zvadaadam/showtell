@@ -1,0 +1,73 @@
+{
+  "$schema": "../packages/core/schema.json",
+  "meta": {
+    "title": "agent-video — how it works",
+    "fps": 30,
+    "aspectRatios": ["16:9", "9:16"],
+    "tts": { "provider": "say" },
+    "repo": { "path": "." }
+  },
+  "scenes": [
+    {
+      "kind": "title",
+      "content": { "heading": "agent-video", "subtitle": "Loom for agents — how it works" },
+      "narration": "agent-video is a local, repo-aware renderer. Instead of writing you an answer, a coding agent makes you a short narrated video.",
+      "duration": "auto"
+    },
+    {
+      "kind": "talking-points",
+      "content": {
+        "heading": "The idea",
+        "points": [
+          "The agent authors only a spec.json — never pixels or ffmpeg.",
+          "It renders locally, so it reads your real git diff and files.",
+          "One spec becomes an mp4 in both 16:9 and 9:16."
+        ]
+      },
+      "narration": "The whole contract is a single JSON file. The agent describes scenes and narration; the renderer owns every pixel. Because it runs locally, it can read your actual code.",
+      "duration": "auto"
+    },
+    {
+      "kind": "code",
+      "content": { "file": "packages/core/src/spec.ts", "lineStart": 55, "lineEnd": 74, "focus": [60] },
+      "narration": "Here's the load-bearing rule. A code scene carries a file and line range — a reference, never pasted source. The renderer reads the live bytes, so the code on screen is always ground truth.",
+      "duration": "auto"
+    },
+    {
+      "kind": "diff",
+      "content": { "file": "packages/capture/src/sessions.ts", "ref": "HEAD~1..HEAD" },
+      "narration": "And because it renders untrusted, agent-authored specs, we just hardened the capture boundary — this is the real diff that closed a path-traversal hole.",
+      "duration": "auto"
+    },
+    {
+      "kind": "chart",
+      "content": {
+        "chartType": "bar",
+        "title": "lines of code per package",
+        "data": [
+          { "pkg": "core", "loc": 441 },
+          { "pkg": "compose", "loc": 802 },
+          { "pkg": "render", "loc": 381 },
+          { "pkg": "cli", "loc": 362 },
+          { "pkg": "mcp", "loc": 202 },
+          { "pkg": "capture", "loc": 182 }
+        ]
+      },
+      "narration": "Under the hood it's seven small packages with a one-way dependency flow: core feeds compose and capture, which feed render, which the CLI and MCP server both drive.",
+      "duration": "auto"
+    },
+    {
+      "kind": "talking-points",
+      "content": {
+        "heading": "Use it",
+        "points": [
+          "agent-video validate spec.json",
+          "agent-video render spec.json   →   mp4",
+          "agent-video preview spec.json  →   watchUrl"
+        ]
+      },
+      "narration": "To use it: validate your spec, render it to an mp4, or preview it on a local watch page. That's it — this very video was made by the tool explaining itself.",
+      "duration": "auto"
+    }
+  ]
+}
