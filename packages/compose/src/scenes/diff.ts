@@ -2,7 +2,7 @@ import type { SKRSContext2D } from "@napi-rs/canvas";
 import type { DiffScene, ResolvedDiff } from "@agent-video/core";
 import { THEME } from "../theme.ts";
 import type { Dims } from "../dims.ts";
-import { roundRect, fitMonoFont, windowAround } from "../draw.ts";
+import { fitMonoFont, windowAround, drawCard } from "../draw.ts";
 
 const ADD_BG = "rgba(46,160,67,0.18)";
 const DEL_BG = "rgba(248,81,73,0.18)";
@@ -14,47 +14,13 @@ const HUNK_FG = "#7c8cff";
 /** Draw a unified-diff card (read from real `git diff`). Static (v1a); animated
  *  Shiki Magic Move is the HTML-engine upgrade. */
 export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDiff, dims: Dims): void {
-  const pad = Math.round(Math.min(dims.width, dims.height) * 0.05);
-  const cardX = pad;
-  const cardY = pad;
-  const cardW = dims.width - pad * 2;
-  const cardH = dims.height - pad * 2;
-  const radius = Math.round(pad * 0.5);
-
-  ctx.save();
-  roundRect(ctx, cardX, cardY, cardW, cardH, radius);
-  ctx.fillStyle = THEME.codeBg;
-  ctx.fill();
-  ctx.strokeStyle = THEME.cardBorder;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Title bar: file path + "+N -M"
-  const barH = Math.round(Math.min(dims.width, dims.height) * 0.055);
-  roundRect(ctx, cardX, cardY, cardW, barH, radius);
-  ctx.fillStyle = THEME.codeBar;
-  ctx.fill();
-  ctx.textBaseline = "middle";
-  ctx.font = `${Math.round(barH * 0.34)}px '${THEME.mono}'`;
-  ctx.textAlign = "left";
-  ctx.fillStyle = THEME.subtle;
-  ctx.fillText(scene.content.file, cardX + pad * 0.6, cardY + barH / 2);
-  ctx.textAlign = "right";
-  ctx.fillStyle = ADD_FG;
-  const summary = `+${diff.added}`;
-  const delSummary = ` −${diff.removed}`;
-  const delW = ctx.measureText(delSummary).width;
-  ctx.fillStyle = DEL_FG;
-  ctx.fillText(delSummary, cardX + cardW - pad * 0.6, cardY + barH / 2);
-  ctx.fillStyle = ADD_FG;
-  ctx.fillText(summary, cardX + cardW - pad * 0.6 - delW, cardY + barH / 2);
-
-  // Code area
-  const codeY = cardY + barH;
-  const codeH = cardH - barH;
-  ctx.beginPath();
-  ctx.rect(cardX, codeY, cardW, codeH);
-  ctx.clip();
+  const { codeX, codeY, codeW, codeH, pad } = drawCard(ctx, dims, {
+    file: scene.content.file,
+    badge: [
+      { text: `+${diff.added}`, color: ADD_FG },
+      { text: ` −${diff.removed}`, color: DEL_FG },
+    ],
+  });
 
   const innerPad = Math.round(pad * 0.5);
   // Window long diffs to a legible cap, anchored on the first actual change —
@@ -69,7 +35,7 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
   const { fontSize, lineH } = fitMonoFont(ctx, {
     longestChars,
     lineCount: view.length,
-    areaW: cardW - innerPad * 2,
+    areaW: codeW - innerPad * 2,
     areaH,
     maxFont: Math.round(base * 0.028),
     minFont: Math.round(base * 0.02),
@@ -79,7 +45,7 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
   ctx.font = `${fontSize}px '${THEME.mono}'`;
   ctx.textAlign = "left";
 
-  const markerX = cardX + innerPad;
+  const markerX = codeX + innerPad;
   const textX = markerX + ctx.measureText("M").width * 2;
   const topOffset = Math.max(0, (areaH - view.length * lineH) / 2);
   let y = codeY + innerPad + topOffset + lineH / 2;
@@ -87,7 +53,7 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
   for (const line of view) {
     if (line.kind === "add" || line.kind === "del") {
       ctx.fillStyle = line.kind === "add" ? ADD_BG : DEL_BG;
-      ctx.fillRect(cardX, y - lineH / 2, cardW, lineH);
+      ctx.fillRect(codeX, y - lineH / 2, codeW, lineH);
     }
     let marker = " ";
     let fg = CONTEXT_FG;
@@ -115,7 +81,7 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
     ctx.fillStyle = THEME.subtle;
     ctx.textAlign = "right";
     ctx.textBaseline = "bottom";
-    ctx.fillText(hiddenNote, cardX + cardW - innerPad, codeY + codeH - innerPad * 0.4);
+    ctx.fillText(hiddenNote, codeX + codeW - innerPad, codeY + codeH - innerPad * 0.4);
   }
 
   ctx.restore();

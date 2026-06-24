@@ -104,3 +104,82 @@ export function roundRect(ctx: SKRSContext2D, x: number, y: number, w: number, h
   ctx.arcTo(x, y, x + w, y, radius);
   ctx.closePath();
 }
+
+/** A right-aligned, colored title-bar badge segment (e.g. diff "+N" / "−M"). */
+export interface CardBadge {
+  text: string;
+  color: string;
+}
+
+/** The inner geometry a card returns for the caller to draw content into. */
+export interface CardChrome {
+  codeX: number;
+  codeY: number;
+  codeW: number;
+  codeH: number;
+  pad: number;
+  barH: number;
+}
+
+/**
+ * Draw the shared code/diff card: a rounded panel, a window-chrome title bar
+ * (traffic dots + centered file path + optional right-aligned badge), and clip
+ * to the code area. Calls `ctx.save()`; the caller draws content and `ctx.restore()`s.
+ * One chrome for code and diff so they read as the same component.
+ */
+export function drawCard(ctx: SKRSContext2D, dims: Dims, opts: { file: string; badge?: CardBadge[] }): CardChrome {
+  const base = Math.min(dims.width, dims.height);
+  const pad = Math.round(base * 0.05);
+  const cardX = pad;
+  const cardY = pad;
+  const cardW = dims.width - pad * 2;
+  const cardH = dims.height - pad * 2;
+  const radius = Math.round(pad * 0.5);
+
+  ctx.save();
+  roundRect(ctx, cardX, cardY, cardW, cardH, radius);
+  ctx.fillStyle = THEME.codeBg;
+  ctx.fill();
+  ctx.strokeStyle = THEME.cardBorder;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  const barH = Math.round(base * 0.055);
+  roundRect(ctx, cardX, cardY, cardW, barH, radius);
+  ctx.fillStyle = THEME.codeBar;
+  ctx.fill();
+
+  const dotR = barH * 0.12;
+  const dotY = cardY + barH / 2;
+  ["#ff5f57", "#febc2e", "#28c840"].forEach((c, i) => {
+    ctx.beginPath();
+    ctx.arc(cardX + pad * 0.5 + i * dotR * 3, dotY, dotR, 0, Math.PI * 2);
+    ctx.fillStyle = c;
+    ctx.fill();
+  });
+
+  ctx.font = `${Math.round(barH * 0.34)}px '${THEME.mono}'`;
+  ctx.textBaseline = "middle";
+  if (opts.badge) {
+    // right-aligned, drawn right→left so segments read left→right
+    ctx.textAlign = "right";
+    let rightX = cardX + cardW - pad * 0.6;
+    for (let i = opts.badge.length - 1; i >= 0; i--) {
+      const seg = opts.badge[i]!;
+      ctx.fillStyle = seg.color;
+      ctx.fillText(seg.text, rightX, dotY);
+      rightX -= ctx.measureText(seg.text).width;
+    }
+  }
+  ctx.textAlign = "center";
+  ctx.fillStyle = THEME.subtle;
+  ctx.fillText(opts.file, cardX + cardW / 2, dotY);
+
+  const codeY = cardY + barH;
+  const codeH = cardH - barH;
+  ctx.beginPath();
+  ctx.rect(cardX, codeY, cardW, codeH);
+  ctx.clip();
+
+  return { codeX: cardX, codeY, codeW: cardW, codeH, pad, barH };
+}

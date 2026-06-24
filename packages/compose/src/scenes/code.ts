@@ -2,7 +2,7 @@ import type { SKRSContext2D } from "@napi-rs/canvas";
 import type { CodeScene, ResolvedCode } from "@agent-video/core";
 import { THEME } from "../theme.ts";
 import type { Dims } from "../dims.ts";
-import { roundRect, fitMonoFont, windowAround } from "../draw.ts";
+import { fitMonoFont, windowAround, drawCard } from "../draw.ts";
 import type { Tok } from "../highlight.ts";
 
 /**
@@ -19,51 +19,7 @@ export function drawCode(
   tokens: Tok[][],
   dims: Dims,
 ): void {
-  const pad = Math.round(Math.min(dims.width, dims.height) * 0.05);
-  const cardX = pad;
-  const cardY = pad;
-  const cardW = dims.width - pad * 2;
-  const cardH = dims.height - pad * 2;
-  const radius = Math.round(pad * 0.5);
-
-  // Card + chrome
-  ctx.save();
-  roundRect(ctx, cardX, cardY, cardW, cardH, radius);
-  ctx.fillStyle = THEME.codeBg;
-  ctx.fill();
-  ctx.strokeStyle = THEME.cardBorder;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  const barH = Math.round(Math.min(dims.width, dims.height) * 0.055);
-  roundRect(ctx, cardX, cardY, cardW, barH, radius);
-  ctx.fillStyle = THEME.codeBar;
-  ctx.fill();
-  // traffic dots
-  const dotR = barH * 0.12;
-  const dotY = cardY + barH / 2;
-  const dots = ["#ff5f57", "#febc2e", "#28c840"];
-  dots.forEach((c, i) => {
-    ctx.beginPath();
-    ctx.arc(cardX + pad * 0.5 + i * dotR * 3, dotY, dotR, 0, Math.PI * 2);
-    ctx.fillStyle = c;
-    ctx.fill();
-  });
-  // file path label
-  ctx.font = `${Math.round(barH * 0.34)}px '${THEME.mono}'`;
-  ctx.fillStyle = THEME.subtle;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(scene.content.file, cardX + cardW / 2, dotY);
-
-  // Code area clip
-  const codeX = cardX;
-  const codeY = cardY + barH;
-  const codeW = cardW;
-  const codeH = cardH - barH;
-  ctx.beginPath();
-  ctx.rect(codeX, codeY, codeW, codeH);
-  ctx.clip();
+  const { codeX, codeY, codeW, codeH, pad } = drawCard(ctx, dims, { file: scene.content.file });
 
   const innerPad = Math.round(pad * 0.6);
   const base = Math.min(dims.width, dims.height);
