@@ -1,7 +1,19 @@
 /** Capture session store: recordings live at <root>/.agent-video/captures/<id>.mp4. */
 import { existsSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { join, isAbsolute } from "node:path";
+import { join, resolve } from "node:path";
+
+/** Session ids are sandbox-safe by construction — no path separators, no traversal. */
+const VALID_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+export function assertValidSessionId(id: string): void {
+  if (!VALID_ID.test(id)) {
+    throw new Error(
+      `Invalid capture session id "${id}". Allowed: letters, digits, "_" and "-" (max 64 chars). ` +
+        `Session ids are filenames under .agent-video/captures — paths are not permitted.`,
+    );
+  }
+}
 
 export function capturesDir(root = "."): string {
   return join(root, ".agent-video", "captures");
@@ -14,6 +26,7 @@ export function ensureCapturesDir(root = "."): string {
 }
 
 export function sessionPath(id: string, root = "."): string {
+  assertValidSessionId(id);
   return join(capturesDir(root), `${id}.mp4`);
 }
 
@@ -32,15 +45,23 @@ export function ensureSyntheticSession(id: string, root = ".", seconds = 4): str
   return p;
 }
 
-/** Resolve a screencap scene's sessionRef to a real recording path. */
+/**
+ * Resolve a screencap scene's sessionRef (from an untrusted, agent-authored spec)
+ * to a real recording path. Resolution is confined to the captures sandbox by
+ * construction: the ref must be a valid session id, and the resolved file must
+ * live inside <root>/.agent-video/captures. No absolute paths, no traversal,
+ * no "any .mp4 on disk" — those would be arbitrary-file-read primitives.
+ */
 export function resolveSession(sessionRef: string, root = "."): string {
-  // Allow a direct path (absolute or .mp4) or a session id.
-  if ((isAbsolute(sessionRef) || sessionRef.endsWith(".mp4")) && existsSync(sessionRef)) {
-    return sessionRef;
-  }
+  assertValidSessionId(sessionRef);
   const p = sessionPath(sessionRef, root);
+  const dir = resolve(capturesDir(root));
+  // Defense in depth: the regex already forbids separators, but assert containment.
+  if (!resolve(p).startsWith(dir + "/") && resolve(p) !== dir) {
+    throw new Error(`Refusing to resolve session outside the captures sandbox: ${sessionRef}`);
+  }
   if (existsSync(p)) return p;
   throw new Error(
-    `Capture session "${sessionRef}" not found (looked at ${p}). Record one with \`agent-video capture\` first.`,
+    `Capture session "${sessionRef}" not found (looked at ${p}). Record one with \`agent-video capture --id ${sessionRef}\` first.`,
   );
 }

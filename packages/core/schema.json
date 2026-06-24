@@ -257,13 +257,6 @@
                           "fade"
                         ],
                         "default": "magic-move"
-                      },
-                      "highlight": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        },
-                        "description": "Tokens/identifiers to emphasize."
                       }
                     },
                     "required": [
@@ -460,7 +453,8 @@
                       },
                       "sessionRef": {
                         "type": "string",
-                        "description": "Reference to a recorded capture session."
+                        "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                        "description": "Recorded capture session id (a filename under .agent-video/captures, not a path)."
                       },
                       "clip": {
                         "type": "object",

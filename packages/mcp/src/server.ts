@@ -108,6 +108,7 @@ ${SPEC_EXAMPLE}`,
         outputs: z.array(OUTPUT_Ref).optional(),
         scenes: z.array(z.record(z.unknown())).optional(),
         skipped: z.array(z.record(z.unknown())).optional(),
+        warnings: z.array(z.object({ scene: z.number(), message: z.string() })).optional(),
         error: z.string().optional(),
         errors: z.array(ERROR_DETAIL).optional(),
         hint: z.string().optional(),
@@ -125,7 +126,7 @@ ${SPEC_EXAMPLE}`,
           baseName: "video",
           aspectRatios,
         });
-        return textResult({ ok: true, videoId: specId(spec), outputs: result.outputs, scenes: result.scenes, skipped: result.skipped });
+        return textResult({ ok: true, videoId: specId(spec), outputs: result.outputs, scenes: result.scenes, skipped: result.skipped, warnings: result.warnings });
       } catch (e) {
         return textResult({ ok: false, error: `Render failed: ${(e as Error).message}`, hint: "Check file/line refs, repo path, and that ffmpeg is installed." }, true);
       }
@@ -153,6 +154,7 @@ ${SPEC_EXAMPLE}`,
         status: z.string().optional(),
         watchUrl: z.string().optional(),
         outputs: z.array(OUTPUT_Ref).optional(),
+        warnings: z.array(z.object({ scene: z.number(), message: z.string() })).optional(),
         error: z.string().optional(),
         errors: z.array(ERROR_DETAIL).optional(),
       },
@@ -167,7 +169,7 @@ ${SPEC_EXAMPLE}`,
         const result = await renderVideo(r.spec as VideoSpec, { repoPath: repoPath ?? r.spec.meta.repo.path, outDir: ".agent-video/out", baseName: "video" });
         const handle = startPreviewServer({ outputs: result.outputs, title: r.spec.meta.title, videoId, port });
         previews.set(videoId, handle);
-        return textResult({ ok: true, videoId, status: "success", watchUrl: handle.watchUrl, outputs: result.outputs });
+        return textResult({ ok: true, videoId, status: "success", watchUrl: handle.watchUrl, outputs: result.outputs, warnings: result.warnings });
       } catch (e) {
         return textResult({ ok: false, error: `Preview failed: ${(e as Error).message}` }, true);
       }

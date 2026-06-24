@@ -10,7 +10,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { basename } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
-import { validateSpec, videoSpecJsonSchema, IMPLEMENTED_SCENE_KINDS, type VideoSpec, type AspectRatio } from "@agent-video/core";
+import { validateSpec, videoSpecJsonSchema, IMPLEMENTED_SCENE_KINDS, type VideoSpec, type AspectRatio, type SpecError } from "@agent-video/core";
 import { renderFrames, renderVideo, startPreviewServer } from "@agent-video/render";
 import { recordScreen, ensureCapturesDir, sessionPath, ensureSyntheticSession } from "@agent-video/capture";
 
@@ -76,7 +76,7 @@ function parseArgs(argv: string[]): Args {
 // ---------------------------------------------------------------------------
 
 /** Read + parse + validate a spec file, or fail() with structured output. */
-function loadSpecOrFail(file: string | undefined, usage: string): VideoSpec {
+function loadSpecOrFail(file: string | undefined, usage: string): { spec: VideoSpec; warnings: SpecError[] } {
   if (!file) fail("Missing spec file.", usage);
   if (!existsSync(file)) {
     fail(`Spec file not found: ${file}`, "Pass a path to a JSON spec. See `agent-video schema` for the contract.");
@@ -100,23 +100,20 @@ function loadSpecOrFail(file: string | undefined, usage: string): VideoSpec {
       warnings: result.warnings,
     });
   }
-  return result.spec;
+  return { spec: result.spec, warnings: result.warnings };
 }
 
 function cmdValidate(args: Args): never {
   const file = args.positional[0];
-  const spec = loadSpecOrFail(file, "Usage: agent-video validate <spec.json>");
-  const result = validateSpec(spec); // re-run to surface warnings
-  if (!result.ok) fail("Spec failed validation.", undefined, { errors: result.errors });
-
+  const { spec, warnings } = loadSpecOrFail(file, "Usage: agent-video validate <spec.json>");
   ok({
     ok: true,
     file,
-    sceneCount: result.spec.scenes.length,
-    kinds: result.spec.scenes.map((s) => s.kind),
-    aspectRatios: result.spec.meta.aspectRatios,
+    sceneCount: spec.scenes.length,
+    kinds: spec.scenes.map((s) => s.kind),
+    aspectRatios: spec.meta.aspectRatios,
     renderableNow: IMPLEMENTED_SCENE_KINDS,
-    warnings: result.warnings,
+    warnings,
   });
 }
 
@@ -125,7 +122,7 @@ const VALID_ASPECTS: AspectRatio[] = ["16:9", "9:16", "1:1"];
 async function cmdRender(args: Args): Promise<never> {
   const usage = "Usage: agent-video render <spec.json> [--out DIR] [--repo PATH] [--aspect 16:9,9:16] [--frames-only]";
   const file = args.positional[0]!;
-  const spec = loadSpecOrFail(file, usage);
+  const { spec } = loadSpecOrFail(file, usage);
 
   const repoPath = (typeof args.flags.repo === "string" ? args.flags.repo : undefined) ?? spec.meta.repo.path;
   const framesOnly = args.flags["frames-only"] === true;
@@ -170,7 +167,7 @@ function specVideoId(spec: VideoSpec): string {
 async function cmdPreview(args: Args): Promise<void> {
   const usage = "Usage: agent-video preview <spec.json> [--port N] [--repo PATH] [--aspect 16:9,9:16] [--serve-seconds N]";
   const file = args.positional[0]!;
-  const spec = loadSpecOrFail(file, usage);
+  const { spec } = loadSpecOrFail(file, usage);
   const repoPath = (typeof args.flags.repo === "string" ? args.flags.repo : undefined) ?? spec.meta.repo.path;
   const outDir = ".agent-video/out";
   const baseName = basename(file).replace(/\.json$/, "").replace(/\.spec$/, "");
@@ -229,7 +226,7 @@ function cmdCapture(args: Args): never {
 
 async function cmdEval(args: Args): Promise<never> {
   const file = (typeof args.flags.spec === "string" ? args.flags.spec : undefined) ?? "examples/golden.spec.json";
-  const spec = loadSpecOrFail(file, "Usage: agent-video eval [--spec PATH]");
+  const { spec } = loadSpecOrFail(file, "Usage: agent-video eval [--spec PATH]");
   const repoPath = spec.meta.repo.path;
 
   // Provision synthetic capture sessions so screencap scenes render without

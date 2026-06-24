@@ -63,7 +63,12 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
   let view = diff.lines;
   let hiddenNote = "";
   if (diff.lines.length > MAX_LINES) {
-    view = diff.lines.slice(0, MAX_LINES);
+    // Center the window on the first actual change, not the leading context —
+    // the +/- lines are the whole point of a diff scene.
+    const firstChange = diff.lines.findIndex((l) => l.kind === "add" || l.kind === "del");
+    const anchor = firstChange < 0 ? 0 : firstChange;
+    const start = Math.max(0, Math.min(diff.lines.length - MAX_LINES, anchor - Math.floor(MAX_LINES / 3)));
+    view = diff.lines.slice(start, start + MAX_LINES);
     const hidden = diff.lines.length - view.length;
     hiddenNote = `+${hidden} more line${hidden > 1 ? "s" : ""}`;
   }

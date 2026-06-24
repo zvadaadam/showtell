@@ -42,7 +42,7 @@ export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims): vo
 
   const plot = { x: pad, y: top, w: dims.width - pad * 2, h: dims.height - top - pad };
 
-  if (scene.content.chartType === "pie") drawPie(ctx, p, plot, base);
+  if (scene.content.chartType === "pie") drawPie(ctx, p, plot);
   else drawBarOrLine(ctx, p, plot, base, scene.content.chartType);
 
   drawLegend(ctx, p, dims, base, pad);
@@ -116,7 +116,7 @@ function drawBarOrLine(ctx: SKRSContext2D, p: Parsed, plot: { x: number; y: numb
   }
 }
 
-function drawPie(ctx: SKRSContext2D, p: Parsed, plot: { x: number; y: number; w: number; h: number }, base: number): void {
+function drawPie(ctx: SKRSContext2D, p: Parsed, plot: { x: number; y: number; w: number; h: number }): void {
   // Use the first series; slices per label.
   const values = p.series[0]?.values ?? [];
   const total = values.reduce((a, b) => a + b, 0) || 1;

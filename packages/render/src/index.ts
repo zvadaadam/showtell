@@ -24,6 +24,14 @@ function isRenderable(kind: string): boolean {
   return isComposable(kind) || kind === "screencap";
 }
 
+/** Honest reason a scene has no still frame in `--frames-only` mode. */
+function framesOnlySkipReason(kind: string): string {
+  const composable = (COMPOSABLE_KINDS as readonly string[]).join(", ");
+  return kind === "screencap"
+    ? "screencap is video-only (no still frame); it renders in full `render`, not `--frames-only`."
+    : `"${kind}" is not a still-composable kind (composable: ${composable}).`;
+}
+
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
@@ -74,8 +82,8 @@ export async function renderFrames(
   for (const ar of ratios) {
     for (let i = 0; i < spec.scenes.length; i++) {
       const scene = spec.scenes[i]!;
-      if (!(COMPOSABLE_KINDS as readonly string[]).includes(scene.kind)) {
-        if (ar === ratios[0]) skipped.push({ scene: i, kind: scene.kind, reason: "kind not composable yet (v1a: title, code)" });
+      if (!isComposable(scene.kind)) {
+        if (ar === ratios[0]) skipped.push({ scene: i, kind: scene.kind, reason: framesOnlySkipReason(scene.kind) });
         continue;
       }
       const r = await renderSceneToPng(scene, { repoPath: opts.repoPath, aspectRatio: ar, watermark: wm });
@@ -84,12 +92,7 @@ export async function renderFrames(
       writeFileSync(path, r.png);
       frames.push({ scene: i, kind: scene.kind, aspectRatio: ar, path, width: r.width, height: r.height });
       if (r.resolved && ar === ratios[0]) {
-        resolvedCode.push({
-          scene: i,
-          file: r.resolved.file,
-          bytes: Buffer.byteLength(r.resolved.text),
-          sha256: createHash("sha256").update(r.resolved.text).digest("hex"),
-        });
+        resolvedCode.push({ scene: i, file: r.resolved.file, bytes: Buffer.byteLength(r.resolved.text), sha256: sha256(r.resolved.text) });
       }
     }
   }

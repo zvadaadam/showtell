@@ -20,7 +20,7 @@ Every CLI command and MCP tool must be: non-interactive, all-flags, **structured
 - `packages/providers` — BYO-API model gateway (TTS: Replicate/OpenAI/ElevenLabs + local `say`)
 - `packages/render` — orchestrator: validate → resolve refs → TTS → measure → compose+capture → ffmpeg mux + watermark → mp4
 - `packages/cli` — `agent-video` binary
-- `packages/mcp` — thin wrapper over the CLI
+- `packages/mcp` — MCP server over the same render library as the CLI (shares `renderVideo`, not a CLI shell-out)
 - `skills/agent-video`, `skills/agent-video-eval`
 
 ## Conventions

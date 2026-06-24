@@ -12,7 +12,7 @@
   "scripts": {
     "validate": "bun packages/cli/src/index.ts validate",
     "agent-video": "bun packages/cli/src/index.ts",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test",
     "lint": "oxlint",
     "gen:schema": "bun scripts/gen-schema.ts"

@@ -81,7 +81,6 @@ export const DiffScene = z
         file: z.string().min(1),
         ref: z.string().min(1).describe('Git range, e.g. "main..HEAD".'),
         animation: z.enum(["magic-move", "fade"]).default("magic-move"),
-        highlight: z.array(z.string()).optional().describe("Tokens/identifiers to emphasize."),
       })
       .strict(),
     ...SceneBase,
@@ -124,7 +123,11 @@ export const ScreencapScene = z
     content: z
       .object({
         source: z.enum(["app", "browser", "desktop"]).describe("What to capture (macOS/avfoundation)."),
-        sessionRef: z.string().optional().describe("Reference to a recorded capture session."),
+        sessionRef: z
+          .string()
+          .regex(/^[A-Za-z0-9_-]{1,64}$/, "A capture session id (letters/digits/_/-, max 64); not a path.")
+          .optional()
+          .describe("Recorded capture session id (a filename under .agent-video/captures, not a path)."),
         clip: z
           .object({ start: z.number().min(0), end: z.number().positive() })
           .strict()

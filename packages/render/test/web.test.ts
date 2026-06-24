@@ -1,6 +1,6 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { chromium, type Browser } from "playwright";
-import { rmSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { VideoSpec } from "@agent-video/core";
