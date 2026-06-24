@@ -30,7 +30,7 @@ export type {
   RawAudio,
   TtsAdapter,
 } from "./types.ts";
-export { probeDurationMs } from "./ffprobe.ts";
+export { probeDurationMs, probeVideoSize } from "./ffprobe.ts";
 
 const ADAPTERS: Partial<Record<TtsProvider, TtsAdapter>> = {
   say: sayTts,

@@ -8,8 +8,8 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import type { VideoSpec, AspectRatio } from "@agent-video/core";
 import { renderSceneToPng, renderWatermarkPng, dimsFor, COMPOSABLE_KINDS } from "@agent-video/compose";
-import { synthesize, probeDurationMs } from "@agent-video/providers";
-import { resolveSession, compositeScreencap } from "@agent-video/capture";
+import { synthesize, probeDurationMs, probeVideoSize } from "@agent-video/providers";
+import { resolveSession, compositeScreencap, loadSessionEvents, computeCameraTimeline } from "@agent-video/capture";
 import { imageAudioToClip, concatClips } from "./ffmpeg.ts";
 
 export { probeDurationMs } from "@agent-video/providers";
@@ -211,7 +211,16 @@ export async function renderVideo(
       const clip = join(workDir, `${tag}.mp4`);
 
       if (scene.kind === "screencap") {
-        const source = resolveSession(scene.content.sessionRef ?? "", opts.repoPath);
+        const ref = scene.content.sessionRef ?? "";
+        const source = resolveSession(ref, opts.repoPath);
+        // Auto-direct: if the session recorded the agent's actions, compute the
+        // spring camera; otherwise it's a flat fit-to-frame.
+        const events = loadSessionEvents(ref, opts.repoPath);
+        let camera, sourceSize;
+        if (events && events.length > 0) {
+          sourceSize = probeVideoSize(source);
+          camera = computeCameraTimeline(events, { durationSec: t.durationSec, fps, source: sourceSize });
+        }
         compositeScreencap({
           source,
           outPath: clip,
@@ -221,6 +230,8 @@ export async function renderVideo(
           fps,
           audio: audioByScene.get(t.scene),
           watermarkPng: wmPng,
+          camera,
+          sourceSize,
         });
         clips.push(clip);
         continue;
