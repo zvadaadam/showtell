@@ -35,6 +35,15 @@ interface RailProps {
   onSeek: (scene: ManifestScene) => void
 }
 
+// Mono machine-chrome label (timestamps, tags, eyebrows speak the "code" voice).
+function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <span className={cn('font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--av-mute)]', className)}>
+      {children}
+    </span>
+  )
+}
+
 export function Player() {
   const [manifest, setManifest] = useState<VideoManifest | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -60,16 +69,16 @@ export function Player() {
   if (error)
     return (
       <Centered>
-        <span className="text-red-400" data-testid="player-error">
-          Failed to load bundle: {error}
+        <span className="font-mono text-sm text-red-400" data-testid="player-error">
+          couldn’t load bundle — {error}
         </span>
       </Centered>
     )
   if (!manifest)
     return (
       <Centered>
-        <span className="text-neutral-500" data-testid="player-loading">
-          Loading bundle…
+        <span className="font-mono text-xs uppercase tracking-[0.2em] text-[var(--av-mute)]" data-testid="player-loading">
+          loading bundle…
         </span>
       </Centered>
     )
@@ -78,7 +87,7 @@ export function Player() {
 
 function Centered({ children }: { children: ReactNode }) {
   return (
-    <div className="grid min-h-screen place-items-center bg-neutral-950 text-sm text-neutral-200" data-testid="player">
+    <div className="grid min-h-screen place-items-center bg-[var(--av-ink)]" data-testid="player">
       {children}
     </div>
   )
@@ -109,12 +118,10 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
     return idx
   }, [currentTime, scenes])
 
-  // keep playbackRate applied across speed changes and source swaps
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = speed
   }, [speed, src])
 
-  // active transcript line tracks playback
   useEffect(() => {
     transcriptRef.current
       ?.querySelector(`[data-scene="${activeIndex}"]`)
@@ -128,7 +135,6 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
     void v.play().catch(() => {})
   }
 
-  // swap aspect ratio without losing playback position
   function changeAspect(next: string) {
     if (next === aspect) return
     const v = videoRef.current
@@ -150,17 +156,21 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
 
   return (
     <div
-      className="min-h-screen bg-neutral-950 text-neutral-200"
+      className="min-h-screen bg-[var(--av-ink)] text-[var(--av-paper)]"
       style={theme.vars as CSSProperties}
       data-testid="player"
     >
-      <header className="flex items-center gap-4 border-b border-neutral-800/80 px-6 py-3">
+      <header className="av-rise flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-[var(--av-line)] px-6 py-4">
         <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold text-neutral-100" data-testid="title">
+          <Eyebrow className="flex items-center gap-2">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--av-accent)]" />
+            watch · agent-video
+          </Eyebrow>
+          <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-[var(--av-paper)]" data-testid="title">
             {manifest.meta.title}
           </h1>
-          <RepoChip manifest={manifest} />
         </div>
+        <RepoChip manifest={manifest} />
         <div className="ml-auto flex items-center gap-2">
           <AspectToggle ratios={ratios} aspect={aspect} onChange={changeAspect} />
           <SpeedControl speed={speed} onChange={setSpeed} />
@@ -169,11 +179,11 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-[1400px] gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <section className="min-w-0">
+      <main className="mx-auto grid max-w-[1440px] gap-7 p-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <section className="av-rise min-w-0" style={{ animationDelay: '60ms' }}>
           <div
             className={cn(
-              'mx-auto overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-neutral-800',
+              'mx-auto overflow-hidden rounded-2xl bg-black ring-1 ring-[var(--av-line)] shadow-[0_36px_90px_-32px_rgba(0,0,0,0.85)]',
               aspect === '9:16' ? 'max-w-[min(420px,100%)]' : 'w-full',
             )}
           >
@@ -191,7 +201,7 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
           <ChapterStrip scenes={scenes} activeIndex={activeIndex} onSeek={seekToScene} />
         </section>
 
-        <aside className="min-w-0">
+        <aside className="av-rise min-w-0" style={{ animationDelay: '120ms' }}>
           <Transcript ref={transcriptRef} scenes={scenes} activeIndex={activeIndex} onSeek={seekToScene} />
           <MetadataPanel manifest={manifest} />
         </aside>
@@ -203,28 +213,43 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
 function RepoChip({ manifest }: { manifest: VideoManifest }) {
   const { repo } = manifest.meta
   return (
-    <div className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-500" data-testid="meta-repo">
-      <span className="font-mono">{repo.path}</span>
-      {repo.commit && <span className="font-mono text-neutral-600">@ {repo.commit.slice(0, 7)}</span>}
+    <div
+      className="flex items-center gap-2 rounded-md border border-[var(--av-line)] bg-[var(--av-raised)] px-2.5 py-1 font-mono text-[11px] text-[var(--av-mute)]"
+      data-testid="meta-repo"
+    >
+      <span className="text-[var(--av-paper)]">{repo.path}</span>
+      {repo.commit && <span>@ {repo.commit.slice(0, 7)}</span>}
       {repo.branch && (
-        <span className="rounded bg-neutral-800/70 px-1.5 py-0.5 text-[11px] text-neutral-400">{repo.branch}</span>
+        <span className="border-l border-[var(--av-line)] pl-2 text-[var(--av-accent)]">{repo.branch}</span>
       )}
     </div>
   )
 }
 
 function Segmented({ children }: { children: ReactNode }) {
-  return <div className="flex rounded-lg border border-neutral-800 p-0.5">{children}</div>
+  return (
+    <div className="flex rounded-lg border border-[var(--av-line)] bg-[var(--av-raised)] p-0.5">{children}</div>
+  )
 }
 
-function SegButton({ active, onClick, testid, children }: { active: boolean; onClick: () => void; testid: string; children: ReactNode }) {
+function SegButton({
+  active,
+  onClick,
+  testid,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  testid: string
+  children: ReactNode
+}) {
   return (
     <button
       data-testid={testid}
       onClick={onClick}
       className={cn(
-        'rounded-md px-2.5 py-1 text-xs font-medium transition',
-        active ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-400 hover:text-neutral-200',
+        'rounded-md px-2.5 py-1 font-mono text-xs transition-colors',
+        active ? 'bg-[var(--av-paper)] text-[var(--av-ink)]' : 'text-[var(--av-mute)] hover:text-[var(--av-paper)]',
       )}
     >
       {children}
@@ -290,7 +315,7 @@ function ShareButton() {
     <button
       data-testid="share"
       onClick={onShare}
-      className="rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 transition hover:bg-white"
+      className="rounded-lg bg-[var(--av-paper)] px-3.5 py-1.5 text-xs font-semibold text-[var(--av-ink)] transition hover:brightness-95"
     >
       {state === 'done' ? 'Link ready (stub)' : state === 'sharing' ? 'Sharing…' : 'Share'}
     </button>
@@ -299,35 +324,41 @@ function ShareButton() {
 
 function ChapterStrip({ scenes, activeIndex, onSeek }: RailProps) {
   return (
-    <div className="mt-4">
-      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">Chapters</div>
-      <div className="flex gap-3 overflow-x-auto pb-2" data-testid="chapters">
-        {scenes.map((scene, i) => (
-          <button key={i} data-testid={`chapter-${i}`} onClick={() => onSeek(scene)} className="group shrink-0 text-left">
-            <div
-              className={cn(
-                'relative h-[72px] w-[128px] overflow-hidden rounded-lg ring-1 transition',
-                i === activeIndex
-                  ? 'ring-2 ring-[color:var(--av-accent)]'
-                  : 'ring-neutral-800 group-hover:ring-neutral-600',
-              )}
-            >
-              {scene.thumbnail ? (
-                <img src={`${BUNDLE}${scene.thumbnail}`} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="grid h-full w-full place-items-center bg-neutral-900 text-[11px] text-neutral-500">
-                  {KIND_LABEL[scene.kind] ?? scene.kind}
-                </div>
-              )}
-              <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] tabular-nums text-neutral-200">
-                {fmtTime(scene.startSec)}
-              </span>
-            </div>
-            <div className={cn('mt-1.5 w-[128px] truncate text-xs', i === activeIndex ? 'text-neutral-100' : 'text-neutral-400')}>
-              {KIND_LABEL[scene.kind] ?? scene.kind}
-            </div>
-          </button>
-        ))}
+    <div className="mt-5">
+      <Eyebrow className="mb-2.5 block">Chapters</Eyebrow>
+      <div className="flex gap-3 overflow-x-auto pb-1" data-testid="chapters">
+        {scenes.map((scene, i) => {
+          const active = i === activeIndex
+          return (
+            <button key={i} data-testid={`chapter-${i}`} onClick={() => onSeek(scene)} className="group shrink-0 text-left">
+              <div
+                className={cn(
+                  'relative h-[74px] w-[132px] overflow-hidden rounded-lg ring-1 transition',
+                  active ? 'ring-2 ring-[var(--av-accent)]' : 'ring-[var(--av-line)] group-hover:ring-[var(--av-mute)]',
+                )}
+              >
+                {scene.thumbnail ? (
+                  <img src={`${BUNDLE}${scene.thumbnail}`} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-full w-full place-items-center bg-[var(--av-raised)]">
+                    <Eyebrow>{KIND_LABEL[scene.kind] ?? scene.kind}</Eyebrow>
+                  </div>
+                )}
+                <span className="absolute bottom-1 right-1 rounded bg-black/75 px-1 font-mono text-[10px] tabular-nums text-[var(--av-paper)]">
+                  {fmtTime(scene.startSec)}
+                </span>
+              </div>
+              <div
+                className={cn(
+                  'mt-1.5 w-[132px] truncate font-mono text-[11px]',
+                  active ? 'text-[var(--av-accent)]' : 'text-[var(--av-mute)]',
+                )}
+              >
+                {KIND_LABEL[scene.kind] ?? scene.kind}
+              </div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -335,13 +366,17 @@ function ChapterStrip({ scenes, activeIndex, onSeek }: RailProps) {
 
 const Transcript = forwardRef<HTMLDivElement, RailProps>(function Transcript({ scenes, activeIndex, onSeek }, ref) {
   return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-900/40">
-      <div className="border-b border-neutral-800 px-4 py-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
-        Transcript
+    <div className="overflow-hidden rounded-2xl border border-[var(--av-line)] bg-[var(--av-raised)]">
+      <div className="flex items-center justify-between border-b border-[var(--av-line)] px-4 py-3">
+        <Eyebrow>Transcript</Eyebrow>
+        <Eyebrow>
+          {String(Math.min(activeIndex + 1, scenes.length)).padStart(2, '0')} / {String(scenes.length).padStart(2, '0')}
+        </Eyebrow>
       </div>
-      <div ref={ref} className="max-h-[58vh] overflow-y-auto p-2" data-testid="transcript">
+      <div ref={ref} className="max-h-[56vh] overflow-y-auto py-1">
         {scenes.map((scene, i) => {
           const active = i === activeIndex
+          const seen = i <= activeIndex
           return (
             <button
               key={i}
@@ -350,30 +385,47 @@ const Transcript = forwardRef<HTMLDivElement, RailProps>(function Transcript({ s
               data-active={active}
               onClick={() => onSeek(scene)}
               className={cn(
-                'block w-full rounded-lg px-3 py-2.5 text-left transition',
-                active ? 'bg-neutral-800/80' : 'hover:bg-neutral-800/40',
+                'relative block w-full py-3 pl-9 pr-4 text-left transition-colors',
+                active ? 'bg-[var(--av-accent-soft)]' : 'hover:bg-white/[0.025]',
               )}
             >
+              {/* timeline spine + playhead node — the signature */}
+              <span className="pointer-events-none absolute bottom-0 left-[15px] top-0 w-px bg-[var(--av-line)]" />
+              <span
+                className={cn(
+                  'pointer-events-none absolute left-[11px] top-[15px] h-2.5 w-2.5 rounded-full transition',
+                  active
+                    ? 'bg-[var(--av-accent)] shadow-[0_0_0_4px_var(--av-accent-soft)]'
+                    : seen
+                      ? 'bg-[var(--av-accent)]/55'
+                      : 'border border-[var(--av-line)] bg-[var(--av-raised)]',
+                )}
+              />
               <div className="flex items-center gap-2">
-                <span className="font-mono text-[11px] tabular-nums text-neutral-500">{fmtTime(scene.startSec)}</span>
                 <span
                   className={cn(
-                    'rounded px-1.5 py-0.5 text-[10px] font-medium',
-                    active
-                      ? 'bg-[var(--av-accent-soft)] text-[color:var(--av-accent)]'
-                      : 'bg-neutral-800 text-neutral-400',
+                    'font-mono text-[11px] tabular-nums',
+                    active ? 'text-[var(--av-accent)]' : 'text-[var(--av-mute)]',
+                  )}
+                >
+                  {fmtTime(scene.startSec)}
+                </span>
+                <span
+                  className={cn(
+                    'rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider',
+                    active ? 'bg-[var(--av-accent)] text-[var(--av-ink)]' : 'bg-black/25 text-[var(--av-mute)]',
                   )}
                 >
                   {KIND_LABEL[scene.kind] ?? scene.kind}
                 </span>
               </div>
-              <p className={cn('mt-1.5 text-sm leading-relaxed', active ? 'text-neutral-100' : 'text-neutral-400')}>
+              <p className={cn('mt-1.5 text-[15px] leading-relaxed', active ? 'text-[var(--av-paper)]' : 'text-[var(--av-mute)]')}>
                 {scene.narration}
               </p>
               {scene.refs && (
                 <span
                   data-testid={`ref-${i}`}
-                  className="mt-1.5 inline-block rounded bg-neutral-800/80 px-2 py-0.5 font-mono text-[11px] text-[color:var(--av-accent)]"
+                  className="mt-2 inline-flex items-center rounded border border-[var(--av-line)] bg-black/25 px-2 py-0.5 font-mono text-[11px] text-[var(--av-accent)]"
                 >
                   {refLabel(scene.refs)}
                 </span>
@@ -388,28 +440,24 @@ const Transcript = forwardRef<HTMLDivElement, RailProps>(function Transcript({ s
 
 function MetadataPanel({ manifest }: { manifest: VideoManifest }) {
   const { repo } = manifest.meta
+  const rows: [string, string][] = [['repo', repo.path]]
+  if (repo.commit) rows.push(['commit', repo.commit.slice(0, 12)])
+  if (repo.branch) rows.push(['branch', repo.branch])
+  rows.push(['length', fmtTime(manifest.durationSec)], ['scenes', String(manifest.scenes.length)])
+
   return (
-    <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 text-xs" data-testid="metadata">
-      <div className="mb-2.5 font-medium uppercase tracking-wide text-neutral-500">Details</div>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
-        <dt className="text-neutral-500">Repo</dt>
-        <dd className="truncate font-mono text-neutral-300">{repo.path}</dd>
-        {repo.commit && (
-          <>
-            <dt className="text-neutral-500">Commit</dt>
-            <dd className="font-mono text-neutral-300">{repo.commit.slice(0, 12)}</dd>
-          </>
-        )}
-        {repo.branch && (
-          <>
-            <dt className="text-neutral-500">Branch</dt>
-            <dd className="truncate font-mono text-neutral-300">{repo.branch}</dd>
-          </>
-        )}
-        <dt className="text-neutral-500">Length</dt>
-        <dd className="tabular-nums text-neutral-300">{fmtTime(manifest.durationSec)}</dd>
-        <dt className="text-neutral-500">Scenes</dt>
-        <dd className="text-neutral-300">{manifest.scenes.length}</dd>
+    <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--av-line)] bg-[var(--av-raised)]" data-testid="metadata">
+      <div className="flex items-center justify-between border-b border-[var(--av-line)] px-4 py-3">
+        <Eyebrow>Receipts</Eyebrow>
+        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--av-accent)]">live bytes</span>
+      </div>
+      <dl className="px-4 py-3 font-mono text-xs">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex items-baseline gap-3 py-1">
+            <dt className="w-16 shrink-0 uppercase tracking-wider text-[var(--av-mute)]">{k}</dt>
+            <dd className="truncate text-[var(--av-paper)]">{v}</dd>
+          </div>
+        ))}
       </dl>
     </div>
   )
