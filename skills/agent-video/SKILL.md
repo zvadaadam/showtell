@@ -76,8 +76,9 @@ reads the file. Pasting code is wrong and will drift from the source.
 - **title** — `content: { heading, subtitle? }`. Opener / section card.
 - **code** — `content: { file, lineStart?, lineEnd?, ref?, focus?: number[] }`.
   Syntax-highlighted excerpt read from the repo. `focus` emphasizes line numbers.
-- **diff** — `content: { file, ref, animation?: "magic-move"|"fade", highlight?: string[] }`.
-  `ref` is a git range like `"main..HEAD"`. Renders the real `git diff`.
+- **diff** — `content: { file, ref, animation?: "magic-move"|"fade" }`.
+  `ref` is a git range like `"main..HEAD"`. Renders the real `git diff`. The named
+  `file` must actually change in `ref`, or the scene renders empty (render warns).
 - **talking-points** — `content: { heading?, points: string[] }`. Bulleted list
   (e.g. what reviewers should check).
 - **chart** — `content: { chartType: "bar"|"line"|"pie", title?, data: object[] }`.

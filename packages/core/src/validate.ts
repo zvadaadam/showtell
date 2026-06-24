@@ -56,6 +56,7 @@ export function validateSpec(data: unknown): ValidationResult {
   }
 
   // Valid against the contract — surface forward-looking warnings (non-fatal).
+  const MAX_LEGIBLE_LINES = 25;
   parsed.data.scenes.forEach((scene, i) => {
     if (!IMPLEMENTED_SCENE_KINDS.includes(scene.kind as SceneKind)) {
       warnings.push({
@@ -63,6 +64,18 @@ export function validateSpec(data: unknown): ValidationResult {
         message: `Scene kind "${scene.kind}" is valid but not yet renderable.`,
         hint: `Currently renderable: ${IMPLEMENTED_SCENE_KINDS.join(", ")}. It validates now and will render once that kind ships.`,
       });
+    }
+    // Code excerpts that are too tall get a tiny font + "+N more lines" truncation
+    // that hides the point. Nudge the author toward a focused window.
+    if (scene.kind === "code" && scene.content.lineStart && scene.content.lineEnd) {
+      const span = scene.content.lineEnd - scene.content.lineStart + 1;
+      if (span > MAX_LEGIBLE_LINES) {
+        warnings.push({
+          path: `scenes.${i}.content`,
+          message: `Code excerpt spans ${span} lines — only ~${MAX_LEGIBLE_LINES} render legibly; the rest is windowed away.`,
+          hint: `Tighten the range to ~6–25 lines around what the narration discusses, and set "focus" on the key line(s).`,
+        });
+      }
     }
   });
 

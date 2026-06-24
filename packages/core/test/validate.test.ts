@@ -48,6 +48,18 @@ test("all six scene kinds are implemented (no not-yet-renderable warnings)", () 
   if (r.ok) expect(r.warnings).toHaveLength(0);
 });
 
+test("an over-long code excerpt warns (legibility nudge)", () => {
+  const r = validateSpec({
+    ...good,
+    scenes: [
+      { kind: "code", content: { file: "packages/core/src/spec.ts", lineStart: 1, lineEnd: 60 }, narration: "x" },
+    ],
+  });
+  expect(r.ok).toBe(true);
+  if (r.ok)
+    expect(r.warnings.some((w) => w.message.includes("render legibly") || w.message.includes("windowed"))).toBe(true);
+});
+
 test("json schema generates", () => {
   expect(videoSpecJsonSchema()).toHaveProperty("definitions");
 });
