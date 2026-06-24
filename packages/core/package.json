@@ -6,7 +6,8 @@
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
-    "./schema.json": "./schema.json"
+    "./schema.json": "./schema.json",
+    "./manifest.schema.json": "./manifest.schema.json"
   },
   "dependencies": {
     "zod": "3.25.76",

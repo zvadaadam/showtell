@@ -158,3 +158,29 @@ export function resolveDiff(repoPath: string, content: DiffScene["content"]): Re
 
   return { file: content.file, language: inferLanguage(content.file), lines, added, removed, rawText };
 }
+
+// ---------------------------------------------------------------------------
+// Repo metadata — commit/branch for the manifest. Best-effort: a non-git path
+// (or any git failure) yields an empty object rather than throwing.
+// ---------------------------------------------------------------------------
+
+export interface RepoMeta {
+  commit?: string;
+  branch?: string;
+}
+
+/** Read best-effort git identity for a repo path. Never throws. */
+export function readRepoMeta(repoPath: string): RepoMeta {
+  const git = (args: string[]): string | undefined => {
+    try {
+      const out = execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf-8" }).trim();
+      return out || undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  return {
+    commit: git(["rev-parse", "HEAD"]),
+    branch: git(["rev-parse", "--abbrev-ref", "HEAD"]),
+  };
+}

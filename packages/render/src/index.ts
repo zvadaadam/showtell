@@ -6,7 +6,8 @@
 import { mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import type { VideoSpec, AspectRatio } from "@agent-video/core";
+import type { VideoSpec, AspectRatio, VideoManifest } from "@agent-video/core";
+import { buildManifest, readRepoMeta } from "@agent-video/core";
 import { renderSceneToPng, renderWatermarkPng, dimsFor, COMPOSABLE_KINDS } from "@agent-video/compose";
 import { synthesize, probeDurationMs, probeVideoSize } from "@agent-video/providers";
 import { resolveSession, compositeScreencap, loadSessionEvents, computeCameraTimeline } from "@agent-video/capture";
@@ -150,6 +151,9 @@ export interface RenderVideoResult {
   resolvedCode: ResolvedInfo[];
   skipped: { scene: number; kind: string; reason: string }[];
   warnings: { scene: number; message: string }[];
+  /** The bundle's manifest.json (videos + this = a portable, player-ready bundle). */
+  manifest: VideoManifest;
+  manifestPath: string;
 }
 
 export async function renderVideo(
@@ -196,6 +200,8 @@ export async function renderVideo(
   const outputs: VideoOutput[] = [];
   const resolvedCode: ResolvedInfo[] = [];
   const warnings: { scene: number; message: string }[] = [];
+  // Persist one still per scene (from the first ratio) as a bundle thumbnail.
+  const thumbnails: Record<number, string> = {};
   for (const ar of ratios) {
     const clips: string[] = [];
     const dims = dimsFor(ar);
@@ -240,7 +246,12 @@ export async function renderVideo(
       const rendered = await renderSceneToPng(scene, { repoPath: opts.repoPath, aspectRatio: ar, watermark: wm });
       const png = join(workDir, `${tag}.png`);
       writeFileSync(png, rendered.png);
-      if (ar === ratios[0]) recordSceneMeta(rendered, t.scene, { resolvedCode, warnings });
+      if (ar === ratios[0]) {
+        recordSceneMeta(rendered, t.scene, { resolvedCode, warnings });
+        const thumbName = `thumb-${String(t.scene).padStart(3, "0")}.png`;
+        writeFileSync(join(opts.outDir, thumbName), rendered.png);
+        thumbnails[t.scene] = thumbName;
+      }
       imageAudioToClip({
         image: png,
         audio: audioByScene.get(t.scene)!,
@@ -256,5 +267,16 @@ export async function renderVideo(
     outputs.push({ aspectRatio: ar, path: out, durationMs: probeDurationMs(out) });
   }
 
-  return { outputs, scenes: timings, resolvedCode, skipped, warnings };
+  const manifest = buildManifest({
+    spec,
+    outputs,
+    scenes: timings,
+    thumbnails,
+    repo: { path: opts.repoPath, ...readRepoMeta(opts.repoPath) },
+    generatedAt: new Date().toISOString(),
+  });
+  const manifestPath = join(opts.outDir, "manifest.json");
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+
+  return { outputs, scenes: timings, resolvedCode, skipped, warnings, manifest, manifestPath };
 }

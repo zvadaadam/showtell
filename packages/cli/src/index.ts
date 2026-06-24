@@ -169,6 +169,8 @@ async function cmdRender(args: Args): Promise<never> {
       ok: true,
       stage: "video",
       outDir,
+      manifestPath: result.manifestPath,
+      durationSec: result.manifest.durationSec,
       outputs: result.outputs,
       scenes: result.scenes,
       resolvedCode: result.resolvedCode,
@@ -227,6 +229,7 @@ async function cmdPreview(args: Args): Promise<void> {
         watchUrl: handle.watchUrl,
         url: handle.url,
         port: handle.port,
+        manifestPath: result.manifestPath,
         outputs: result.outputs,
       },
       null,
@@ -301,6 +304,7 @@ async function cmdEval(args: Args): Promise<never> {
     durationsSynced: result.scenes
       .filter((s) => s.auto)
       .every((s) => Math.abs(s.durationSec - (s.narrationMs / 1000 + 0.6)) < 0.05),
+    manifestEmitted: result.manifest.version === 1 && result.manifest.scenes.length === result.scenes.length,
   };
   const allPass = Object.values(gates).every(Boolean);
   const payload = {

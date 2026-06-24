@@ -201,6 +201,24 @@ export type AspectRatio = z.infer<typeof AspectRatio>;
 export type TtsConfig = z.infer<typeof TtsConfig>;
 export type VideoSpec = z.infer<typeof VideoSpec>;
 
+/**
+ * The ground-truth repo reference a scene points at, if any. Only code/diff
+ * scenes carry one; everything else returns undefined. Lives here (next to the
+ * scene union) so consumers like the manifest don't cast into `content`.
+ */
+export function sceneRefs(
+  scene: Scene,
+): { file: string; lineStart?: number; lineEnd?: number; ref?: string } | undefined {
+  if (scene.kind === "code") {
+    const c = scene.content;
+    return { file: c.file, lineStart: c.lineStart, lineEnd: c.lineEnd, ref: c.ref };
+  }
+  if (scene.kind === "diff") {
+    return { file: scene.content.file, ref: scene.content.ref };
+  }
+  return undefined;
+}
+
 /** The set of scene kinds the renderer can currently produce. All six ship in v1
  *  (screencap needs a recorded capture session — see `agent-video capture`). */
 export const IMPLEMENTED_SCENE_KINDS: readonly SceneKind[] = [
