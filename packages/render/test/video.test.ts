@@ -73,3 +73,23 @@ test("render cleans intermediates and emits deterministic manifest metadata", as
   expect(secondManifest.generatedAt).toBe(firstManifest.generatedAt);
   expect(secondManifest.generatedAt).toBe("1970-01-01T00:00:00.000Z");
 }, 30_000);
+
+test("render cleans intermediates after a failed render", async () => {
+  rmSync(outDir, { recursive: true, force: true });
+  const bad: VideoSpec = {
+    ...spec,
+    scenes: [
+      {
+        kind: "code",
+        content: { file: "packages/core/src/spec.ts", lineStart: 999_999, lineEnd: 1_000_000 },
+        narration: "bad.",
+        duration: "auto",
+      },
+    ],
+  };
+
+  await expect(renderVideo(bad, { repoPath: ".", outDir, baseName: "bad", aspectRatios: ["16:9"] })).rejects.toThrow(
+    /past end/,
+  );
+  expect(existsSync(join(outDir, ".work"))).toBe(false);
+}, 30_000);

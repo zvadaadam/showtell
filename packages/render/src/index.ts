@@ -173,124 +173,126 @@ export async function renderVideo(
   const workDir = join(opts.outDir, ".work");
   rmSync(workDir, { recursive: true, force: true });
   mkdirSync(workDir, { recursive: true });
+  try {
+    // Pass 1 — TTS per renderable scene (audio is aspect-ratio independent).
+    const renderable = spec.scenes.map((s, i) => ({ s, i })).filter(({ s }) => isRenderable(s.kind));
+    const skipped = spec.scenes
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => !isRenderable(s.kind))
+      .map(({ s, i }) => ({ scene: i, kind: s.kind, reason: "scene kind not renderable yet" }));
 
-  // Pass 1 — TTS per renderable scene (audio is aspect-ratio independent).
-  const renderable = spec.scenes.map((s, i) => ({ s, i })).filter(({ s }) => isRenderable(s.kind));
-  const skipped = spec.scenes
-    .map((s, i) => ({ s, i }))
-    .filter(({ s }) => !isRenderable(s.kind))
-    .map(({ s, i }) => ({ scene: i, kind: s.kind, reason: "scene kind not renderable yet" }));
-
-  const timings: SceneTiming[] = [];
-  const audioByScene = new Map<number, string>();
-  for (const { s, i } of renderable) {
-    const syn = await synthesize({ text: s.narration, voice, model }, { provider, cacheDir: join(cacheDir, "tts") });
-    const auto = s.duration === "auto";
-    const durationSec = auto ? syn.durationMs / 1000 + TAIL_SEC : (s.duration as number);
-    timings.push({
-      scene: i,
-      kind: s.kind,
-      narrationMs: syn.durationMs,
-      durationSec: Math.round(durationSec * 1000) / 1000,
-      auto,
-      ttsCached: syn.cached,
-    });
-    audioByScene.set(i, syn.wavPath);
-  }
-
-  // Pass 2 — per aspect ratio: render frames → per-scene clips → concat.
-  const outputs: VideoOutput[] = [];
-  const resolvedCode: ResolvedInfo[] = [];
-  const warnings: { scene: number; message: string }[] = [];
-  // Persist one still per scene (from the first ratio) as a bundle thumbnail.
-  const thumbnails: Record<number, string> = {};
-  for (const ar of ratios) {
-    const clips: string[] = [];
-    const dims = dimsFor(ar);
-    // One watermark overlay PNG per ratio (for screencap video clips).
-    let wmPng: string | undefined;
-    if (wm !== false) {
-      wmPng = join(workDir, `wm-${ar.replace(":", "x")}.png`);
-      writeFileSync(wmPng, renderWatermarkPng(ar, wm)); // wm is a string here (watermarkText returns string | false)
+    const timings: SceneTiming[] = [];
+    const audioByScene = new Map<number, string>();
+    for (const { s, i } of renderable) {
+      const syn = await synthesize({ text: s.narration, voice, model }, { provider, cacheDir: join(cacheDir, "tts") });
+      const auto = s.duration === "auto";
+      const durationSec = auto ? syn.durationMs / 1000 + TAIL_SEC : (s.duration as number);
+      timings.push({
+        scene: i,
+        kind: s.kind,
+        narrationMs: syn.durationMs,
+        durationSec: Math.round(durationSec * 1000) / 1000,
+        auto,
+        ttsCached: syn.cached,
+      });
+      audioByScene.set(i, syn.wavPath);
     }
-    for (const t of timings) {
-      const scene = spec.scenes[t.scene]!;
-      const tag = `s${String(t.scene).padStart(3, "0")}-${ar.replace(":", "x")}`;
-      const clip = join(workDir, `${tag}.mp4`);
 
-      if (scene.kind === "screencap") {
-        const ref = scene.content.sessionRef ?? "";
-        const source = resolveSession(ref, opts.repoPath);
-        const clipRange = scene.content.clip;
-        const clipStartSec = clipRange?.start ?? 0;
-        const clipDurationSec = clipRange ? clipRange.end - clipRange.start : undefined;
-        // Auto-direct: if the session recorded the agent's actions, compute the
-        // spring camera; otherwise it's a flat fit-to-frame.
-        const rawEvents = loadSessionEvents(ref, opts.repoPath);
-        const events =
-          rawEvents && clipRange
-            ? rawEvents
-                .filter((e) => e.t >= clipRange.start * 1000 && e.t <= clipRange.end * 1000)
-                .map((e) => ({ ...e, t: e.t - clipRange.start * 1000 }))
-            : rawEvents;
-        let camera, sourceSize;
-        if (events && events.length > 0) {
-          sourceSize = probeVideoSize(source);
-          camera = computeCameraTimeline(events, { durationSec: t.durationSec, fps, source: sourceSize });
+    // Pass 2 — per aspect ratio: render frames → per-scene clips → concat.
+    const outputs: VideoOutput[] = [];
+    const resolvedCode: ResolvedInfo[] = [];
+    const warnings: { scene: number; message: string }[] = [];
+    // Persist one still per scene (from the first ratio) as a bundle thumbnail.
+    const thumbnails: Record<number, string> = {};
+    for (const ar of ratios) {
+      const clips: string[] = [];
+      const dims = dimsFor(ar);
+      // One watermark overlay PNG per ratio (for screencap video clips).
+      let wmPng: string | undefined;
+      if (wm !== false) {
+        wmPng = join(workDir, `wm-${ar.replace(":", "x")}.png`);
+        writeFileSync(wmPng, renderWatermarkPng(ar, wm)); // wm is a string here (watermarkText returns string | false)
+      }
+      for (const t of timings) {
+        const scene = spec.scenes[t.scene]!;
+        const tag = `s${String(t.scene).padStart(3, "0")}-${ar.replace(":", "x")}`;
+        const clip = join(workDir, `${tag}.mp4`);
+
+        if (scene.kind === "screencap") {
+          const ref = scene.content.sessionRef ?? "";
+          const source = resolveSession(ref, opts.repoPath);
+          const clipRange = scene.content.clip;
+          const clipStartSec = clipRange?.start ?? 0;
+          const clipDurationSec = clipRange ? clipRange.end - clipRange.start : undefined;
+          // Auto-direct: if the session recorded the agent's actions, compute the
+          // spring camera; otherwise it's a flat fit-to-frame.
+          const rawEvents = loadSessionEvents(ref, opts.repoPath);
+          const events =
+            rawEvents && clipRange
+              ? rawEvents
+                  .filter((e) => e.t >= clipRange.start * 1000 && e.t <= clipRange.end * 1000)
+                  .map((e) => ({ ...e, t: e.t - clipRange.start * 1000 }))
+              : rawEvents;
+          let camera, sourceSize;
+          if (events && events.length > 0) {
+            sourceSize = probeVideoSize(source);
+            camera = computeCameraTimeline(events, { durationSec: t.durationSec, fps, source: sourceSize });
+          }
+          compositeScreencap({
+            source,
+            sourceStartSec: clipStartSec,
+            sourceDurationSec: clipDurationSec,
+            outPath: clip,
+            width: dims.width,
+            height: dims.height,
+            durationSec: t.durationSec,
+            fps,
+            audio: audioByScene.get(t.scene),
+            watermarkPng: wmPng,
+            camera,
+            sourceSize,
+          });
+          clips.push(clip);
+          continue;
         }
-        compositeScreencap({
-          source,
-          sourceStartSec: clipStartSec,
-          sourceDurationSec: clipDurationSec,
-          outPath: clip,
-          width: dims.width,
-          height: dims.height,
+
+        const rendered = await renderSceneToPng(scene, { repoPath: opts.repoPath, aspectRatio: ar, watermark: wm });
+        const png = join(workDir, `${tag}.png`);
+        writeFileSync(png, rendered.png);
+        if (ar === ratios[0]) {
+          recordSceneMeta(rendered, t.scene, { resolvedCode, warnings });
+          const thumbName = `thumb-${String(t.scene).padStart(3, "0")}.png`;
+          writeFileSync(join(opts.outDir, thumbName), rendered.png);
+          thumbnails[t.scene] = thumbName;
+        }
+        imageAudioToClip({
+          image: png,
+          audio: audioByScene.get(t.scene)!,
           durationSec: t.durationSec,
           fps,
-          audio: audioByScene.get(t.scene),
-          watermarkPng: wmPng,
-          camera,
-          sourceSize,
+          outPath: clip,
         });
         clips.push(clip);
-        continue;
       }
-
-      const rendered = await renderSceneToPng(scene, { repoPath: opts.repoPath, aspectRatio: ar, watermark: wm });
-      const png = join(workDir, `${tag}.png`);
-      writeFileSync(png, rendered.png);
-      if (ar === ratios[0]) {
-        recordSceneMeta(rendered, t.scene, { resolvedCode, warnings });
-        const thumbName = `thumb-${String(t.scene).padStart(3, "0")}.png`;
-        writeFileSync(join(opts.outDir, thumbName), rendered.png);
-        thumbnails[t.scene] = thumbName;
-      }
-      imageAudioToClip({
-        image: png,
-        audio: audioByScene.get(t.scene)!,
-        durationSec: t.durationSec,
-        fps,
-        outPath: clip,
-      });
-      clips.push(clip);
+      const out = join(opts.outDir, `${opts.baseName}-${ar.replace(":", "x")}.mp4`);
+      if (clips.length === 1) copyFileSync(clips[0]!, out);
+      else concatClips(clips, out, workDir);
+      outputs.push({ aspectRatio: ar, path: out, durationMs: probeDurationMs(out) });
     }
-    const out = join(opts.outDir, `${opts.baseName}-${ar.replace(":", "x")}.mp4`);
-    if (clips.length === 1) copyFileSync(clips[0]!, out);
-    else concatClips(clips, out, workDir);
-    outputs.push({ aspectRatio: ar, path: out, durationMs: probeDurationMs(out) });
+
+    const manifest = buildManifest({
+      spec,
+      outputs,
+      scenes: timings,
+      thumbnails,
+      repo: { path: opts.repoPath, ...readRepoMeta(opts.repoPath) },
+      generatedAt: DETERMINISTIC_GENERATED_AT,
+    });
+    const manifestPath = join(opts.outDir, "manifest.json");
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+
+    return { outputs, scenes: timings, resolvedCode, skipped, warnings, manifest, manifestPath };
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
   }
-
-  const manifest = buildManifest({
-    spec,
-    outputs,
-    scenes: timings,
-    thumbnails,
-    repo: { path: opts.repoPath, ...readRepoMeta(opts.repoPath) },
-    generatedAt: DETERMINISTIC_GENERATED_AT,
-  });
-  const manifestPath = join(opts.outDir, "manifest.json");
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-  rmSync(workDir, { recursive: true, force: true });
-
-  return { outputs, scenes: timings, resolvedCode, skipped, warnings, manifest, manifestPath };
 }
