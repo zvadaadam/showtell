@@ -121,6 +121,9 @@ export const ScreencapScene = z
         clip: z
           .object({ start: z.number().min(0), end: z.number().positive() })
           .strict()
+          .refine((clip) => clip.end > clip.start, {
+            message: "clip.end must be greater than clip.start.",
+          })
           .optional(),
       })
       .strict(),

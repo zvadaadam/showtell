@@ -5,7 +5,7 @@
  */
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { join, isAbsolute, extname } from "node:path";
+import { isAbsolute, extname, normalize, resolve } from "node:path";
 import type { CodeScene, DiffScene } from "./spec.ts";
 
 const EXT_LANG: Record<string, string> = {
@@ -46,17 +46,40 @@ export function inferLanguage(file: string): string {
   return EXT_LANG[extname(file).toLowerCase()] ?? "text";
 }
 
+/** Normalize and validate an agent-authored file ref as repo-relative. */
+export function repoRelativeFile(file: string): string {
+  if (isAbsolute(file)) {
+    throw new Error(`Repo file must be relative, got absolute path: ${file}`);
+  }
+  const normalized = normalize(file).replaceAll("\\", "/");
+  const parts = normalized.split("/");
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || parts.includes("..")) {
+    throw new Error(`Repo file must stay inside the repo, got: ${file}`);
+  }
+  return normalized;
+}
+
+function workingTreePath(repoPath: string, file: string): string {
+  const rel = repoRelativeFile(file);
+  const root = resolve(repoPath);
+  const abs = resolve(root, rel);
+  if (abs !== root && !abs.startsWith(root + "/")) {
+    throw new Error(`Repo file must stay inside the repo, got: ${file}`);
+  }
+  return abs;
+}
+
 /** Read a file's full text, either from a git ref or the working tree. */
 export function readFileAtRef(repoPath: string, file: string, ref?: string): string {
+  const rel = repoRelativeFile(file);
   if (ref) {
     // `git show <ref>:<path>` — path must be repo-relative and posix-style.
-    return execFileSync("git", ["-C", repoPath, "show", `${ref}:${file}`], {
+    return execFileSync("git", ["-C", repoPath, "show", `${ref}:${rel}`], {
       encoding: "utf-8",
       maxBuffer: 64 * 1024 * 1024,
     });
   }
-  const abs = isAbsolute(file) ? file : join(repoPath, file);
-  return readFileSync(abs, "utf-8");
+  return readFileSync(workingTreePath(repoPath, rel), "utf-8");
 }
 
 export interface ResolvedCode {
@@ -73,11 +96,14 @@ export interface ResolvedCode {
 /** Resolve a code scene's reference to its exact live source slice. */
 export function resolveCodeRef(repoPath: string, content: CodeScene["content"]): ResolvedCode {
   const full = readFileAtRef(repoPath, content.file, content.ref);
-  const lines = full.split("\n");
+  const lines = full.endsWith("\n") ? full.slice(0, -1).split("\n") : full.split("\n");
   const start = content.lineStart ?? 1;
   const end = content.lineEnd ?? lines.length;
   if (start < 1 || end < start) {
     throw new Error(`Invalid line range ${start}-${end} for ${content.file}`);
+  }
+  if (start > lines.length) {
+    throw new Error(`Line range ${start}-${end} starts past end of ${content.file} (${lines.length} line(s)).`);
   }
   const slice = lines.slice(start - 1, end).join("\n");
   return {
@@ -114,7 +140,8 @@ export interface ResolvedDiff {
 
 /** Resolve a diff scene to the live `git diff` for its file + ref range. */
 export function resolveDiff(repoPath: string, content: DiffScene["content"]): ResolvedDiff {
-  const rawText = execFileSync("git", ["-C", repoPath, "diff", "--no-color", content.ref, "--", content.file], {
+  const file = repoRelativeFile(content.file);
+  const rawText = execFileSync("git", ["-C", repoPath, "diff", "--no-color", content.ref, "--", file], {
     encoding: "utf-8",
     maxBuffer: 64 * 1024 * 1024,
   });
@@ -156,7 +183,7 @@ export function resolveDiff(repoPath: string, content: DiffScene["content"]): Re
     }
   }
 
-  return { file: content.file, language: inferLanguage(content.file), lines, added, removed, rawText };
+  return { file, language: inferLanguage(file), lines, added, removed, rawText };
 }
 
 // ---------------------------------------------------------------------------

@@ -5,13 +5,15 @@
  * deterministic mono 44.1k wav, and the cache — so every adapter benefits and a
  * remote provider returning mp3 can't poison the cache.
  */
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, renameSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sayTts } from "./say.ts";
 import { openaiTts } from "./openai.ts";
+import { replicateTts } from "./replicate.ts";
+import { elevenLabsTts } from "./elevenlabs.ts";
 import { probeDurationMs } from "./ffprobe.ts";
 import type {
   SynthesizeRequest,
@@ -35,7 +37,8 @@ export { probeDurationMs, probeVideoSize } from "./ffprobe.ts";
 const ADAPTERS: Partial<Record<TtsProvider, TtsAdapter>> = {
   say: sayTts,
   openai: openaiTts,
-  // replicate / elevenlabs: same TtsAdapter signature, added later.
+  replicate: replicateTts,
+  elevenlabs: elevenLabsTts,
 };
 
 export interface SynthesizeOpts {
@@ -48,16 +51,36 @@ function configFromEnv(provider: TtsProvider): TtsProviderConfig {
   if (provider === "openai") {
     return { apiKey: process.env.OPENAI_API_KEY, baseUrl: process.env.OPENAI_BASE_URL, timeoutMs: 30_000 };
   }
+  if (provider === "replicate") {
+    return {
+      apiKey: process.env.REPLICATE_API_TOKEN,
+      baseUrl: process.env.REPLICATE_API_BASE_URL,
+      timeoutMs: 60_000,
+    };
+  }
+  if (provider === "elevenlabs") {
+    return {
+      apiKey: process.env.ELEVENLABS_API_KEY ?? process.env.ELEVEN_LABS_API_KEY,
+      baseUrl: process.env.ELEVENLABS_BASE_URL,
+      timeoutMs: 30_000,
+    };
+  }
   return {};
 }
 
 /** Normalize any provider audio to a deterministic mono 44.1k PCM wav. */
 function normalizeToWav(raw: RawAudio, wavPath: string): void {
   const tmp = mkdtempSync(join(tmpdir(), "av-tts-norm-"));
+  const tmpWavPath = `${wavPath}.tmp.wav`;
   try {
+    rmSync(tmpWavPath, { force: true });
     const inPath = join(tmp, `in.${raw.format}`);
     writeFileSync(inPath, raw.data);
-    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", inPath, "-ar", "44100", "-ac", "1", wavPath]);
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", inPath, "-ar", "44100", "-ac", "1", tmpWavPath]);
+    renameSync(tmpWavPath, wavPath);
+  } catch (e) {
+    rmSync(tmpWavPath, { force: true });
+    throw e;
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -84,7 +107,11 @@ export async function synthesize(req: SynthesizeRequest, opts: SynthesizeOpts = 
   const wavPath = join(cacheDir, `${provider}-${cacheKey(provider, req)}.wav`);
 
   if (existsSync(wavPath)) {
-    return { wavPath, durationMs: probeDurationMs(wavPath), cached: true };
+    try {
+      return { wavPath, durationMs: probeDurationMs(wavPath), cached: true };
+    } catch {
+      rmSync(wavPath, { force: true });
+    }
   }
   const raw = await adapter(req, configFromEnv(provider));
   normalizeToWav(raw, wavPath);

@@ -12,6 +12,8 @@ mkdirSync(join(playerDir, "assets"), { recursive: true });
 writeFileSync(join(playerDir, "assets", "app.js"), "console.log('player')");
 writeFileSync(join(bundleDir, "manifest.json"), JSON.stringify({ version: 1 }));
 writeFileSync(join(bundleDir, "video-16x9.mp4"), Buffer.from("not-a-real-mp4-but-bytes"));
+mkdirSync(join(bundleDir, ".work"), { recursive: true });
+writeFileSync(join(bundleDir, ".work", "scene-000.mp4"), Buffer.from("intermediate"));
 
 const handle = startPreviewServer({ bundleDir, playerDir, title: "Preview Test", videoId: "abc123def456" });
 const at = (p: string) => `http://localhost:${handle.port}${p}`;
@@ -54,6 +56,10 @@ test("status endpoint returns success", async () => {
 
 test("a missing bundle file 404s", async () => {
   expect((await fetch(at("/bundle/nope.mp4"))).status).toBe(404);
+});
+
+test("bundle dotfiles and render intermediates are not served", async () => {
+  expect((await fetch(at("/bundle/.work/scene-000.mp4"))).status).toBe(404);
 });
 
 test("unknown routes fall back to the SPA shell", async () => {

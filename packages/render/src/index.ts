@@ -3,7 +3,7 @@
  * ratio (silent). Next stages add TTS, two-pass `auto` durations, and the
  * ffmpeg mux to mp4.
  */
-import { mkdirSync, writeFileSync, copyFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, copyFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import type { VideoSpec, AspectRatio, VideoManifest } from "@agent-video/core";
@@ -129,6 +129,7 @@ export async function renderFrames(
 
 /** Tail of silence after narration so the last word isn't clipped. */
 const TAIL_SEC = 0.6;
+const DETERMINISTIC_GENERATED_AT = "1970-01-01T00:00:00.000Z";
 
 export interface SceneTiming {
   scene: number;
@@ -170,6 +171,7 @@ export async function renderVideo(
 
   mkdirSync(opts.outDir, { recursive: true });
   const workDir = join(opts.outDir, ".work");
+  rmSync(workDir, { recursive: true, force: true });
   mkdirSync(workDir, { recursive: true });
 
   // Pass 1 — TTS per renderable scene (audio is aspect-ratio independent).
@@ -219,9 +221,18 @@ export async function renderVideo(
       if (scene.kind === "screencap") {
         const ref = scene.content.sessionRef ?? "";
         const source = resolveSession(ref, opts.repoPath);
+        const clipRange = scene.content.clip;
+        const clipStartSec = clipRange?.start ?? 0;
+        const clipDurationSec = clipRange ? clipRange.end - clipRange.start : undefined;
         // Auto-direct: if the session recorded the agent's actions, compute the
         // spring camera; otherwise it's a flat fit-to-frame.
-        const events = loadSessionEvents(ref, opts.repoPath);
+        const rawEvents = loadSessionEvents(ref, opts.repoPath);
+        const events =
+          rawEvents && clipRange
+            ? rawEvents
+                .filter((e) => e.t >= clipRange.start * 1000 && e.t <= clipRange.end * 1000)
+                .map((e) => ({ ...e, t: e.t - clipRange.start * 1000 }))
+            : rawEvents;
         let camera, sourceSize;
         if (events && events.length > 0) {
           sourceSize = probeVideoSize(source);
@@ -229,6 +240,8 @@ export async function renderVideo(
         }
         compositeScreencap({
           source,
+          sourceStartSec: clipStartSec,
+          sourceDurationSec: clipDurationSec,
           outPath: clip,
           width: dims.width,
           height: dims.height,
@@ -273,10 +286,11 @@ export async function renderVideo(
     scenes: timings,
     thumbnails,
     repo: { path: opts.repoPath, ...readRepoMeta(opts.repoPath) },
-    generatedAt: new Date().toISOString(),
+    generatedAt: DETERMINISTIC_GENERATED_AT,
   });
   const manifestPath = join(opts.outDir, "manifest.json");
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  rmSync(workDir, { recursive: true, force: true });
 
   return { outputs, scenes: timings, resolvedCode, skipped, warnings, manifest, manifestPath };
 }

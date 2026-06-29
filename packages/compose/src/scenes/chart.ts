@@ -21,7 +21,18 @@ interface Parsed {
   series: { name: string; values: number[] }[];
 }
 
-function parse(data: Record<string, string | number>[]): Parsed {
+interface LegendItem {
+  label: string;
+  colorIndex: number;
+}
+
+interface ValueScale {
+  min: number;
+  max: number;
+  yFor(value: number): number;
+}
+
+export function parseChartData(data: Record<string, string | number>[]): Parsed {
   const keys = Object.keys(data[0] ?? {});
   const labelKey = keys.find((k) => typeof data[0]![k] === "string") ?? keys[0]!;
   const numKeys = keys.filter((k) => k !== labelKey && typeof data[0]![k] === "number");
@@ -32,11 +43,34 @@ function parse(data: Record<string, string | number>[]): Parsed {
   };
 }
 
+export function legendItems(chartType: ChartScene["content"]["chartType"], p: Parsed): LegendItem[] {
+  if (chartType === "pie") return p.labels.map((label, i) => ({ label, colorIndex: i }));
+  if (chartType === "bar" && p.series.length === 1) return p.labels.map((label, i) => ({ label, colorIndex: i }));
+  if (p.series.length > 1) return p.series.map((s, i) => ({ label: s.name, colorIndex: i }));
+  return [];
+}
+
+export function valueScale(values: number[], plotY: number, chartH: number): ValueScale {
+  const minRaw = Math.min(0, ...values);
+  const maxRaw = Math.max(0, ...values);
+  const span = Math.max(1, maxRaw - minRaw);
+  const min = minRaw < 0 ? minRaw - span * 0.12 : 0;
+  const max = maxRaw > 0 ? maxRaw + span * 0.12 : 0;
+  const domain = Math.max(1, max - min);
+  return {
+    min,
+    max,
+    yFor(value: number) {
+      return plotY + ((max - value) / domain) * chartH;
+    },
+  };
+}
+
 /** Returns true if the chart had data to plot; false if it drew a "no data" placeholder. */
 export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims): boolean {
   const base = Math.min(dims.width, dims.height);
   const pad = Math.round(base * 0.1);
-  const p = parse(scene.content.data as Record<string, string | number>[]);
+  const p = parseChartData(scene.content.data as Record<string, string | number>[]);
 
   let top = pad;
   if (scene.content.title) {
@@ -66,7 +100,7 @@ export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims): bo
   if (scene.content.chartType === "pie") drawPie(ctx, p, plot);
   else drawBarOrLine(ctx, p, plot, base, scene.content.chartType);
 
-  drawLegend(ctx, p, dims, base, pad);
+  drawLegend(ctx, legendItems(scene.content.chartType, p), dims, base, pad);
   return true;
 }
 
@@ -78,11 +112,10 @@ function drawBarOrLine(
   kind: "bar" | "line",
 ): void {
   const allVals = p.series.flatMap((s) => s.values);
-  // Headroom so the tallest bar fills ~85% and value labels have room above.
-  const max = Math.max(1, ...allVals) * 1.18;
   const axisFont = Math.round(base * 0.022);
   const chartH = plot.h - axisFont * 2.5;
-  const baseY = plot.y + chartH;
+  const scale = valueScale(allVals, plot.y, chartH);
+  const baseY = scale.yFor(0);
 
   // axis line
   ctx.strokeStyle = THEME.cardBorder;
@@ -110,17 +143,18 @@ function drawBarOrLine(
       const single = p.series.length === 1;
       p.series.forEach((s, si) => {
         const v = s.values[g]!;
-        const h = (v / max) * chartH;
+        const y = scale.yFor(v);
+        const h = Math.abs(baseY - y);
         const x = gx + barGap + barW * si;
         // Single series → color per label (matches the label legend); multi → per series.
         ctx.fillStyle = SERIES_COLORS[(single ? g : si) % SERIES_COLORS.length]!;
-        ctx.fillRect(x, baseY - h, barW * 0.86, h);
-        // value label above the bar (skip zeros — they'd float with no bar)
-        if (v > 0) {
+        ctx.fillRect(x, v >= 0 ? y : baseY, barW * 0.86, h);
+        // value label outside the bar (skip zeros — they'd float with no bar)
+        if (v !== 0) {
           ctx.fillStyle = THEME.fg;
           ctx.textAlign = "center";
-          ctx.textBaseline = "bottom";
-          ctx.fillText(String(v), x + barW * 0.43, baseY - h - axisFont * 0.3);
+          ctx.textBaseline = v > 0 ? "bottom" : "top";
+          ctx.fillText(String(v), x + barW * 0.43, y + (v > 0 ? -axisFont * 0.3 : axisFont * 0.3));
         }
       });
       ctx.textAlign = "center";
@@ -135,7 +169,7 @@ function drawBarOrLine(
       ctx.beginPath();
       s.values.forEach((v, g) => {
         const x = plot.x + groupW * (g + 0.5);
-        const y = baseY - (v / max) * chartH;
+        const y = scale.yFor(v);
         if (g === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       });
@@ -164,20 +198,19 @@ function drawPie(ctx: SKRSContext2D, p: Parsed, plot: { x: number; y: number; w:
   });
 }
 
-function drawLegend(ctx: SKRSContext2D, p: Parsed, dims: Dims, base: number, pad: number): void {
-  const items = p.series.length > 1 ? p.series.map((s) => s.name) : p.labels;
-  if (items.length <= 1 && p.series.length <= 1) return;
+function drawLegend(ctx: SKRSContext2D, items: LegendItem[], dims: Dims, base: number, pad: number): void {
+  if (items.length <= 1) return;
   const fs = Math.round(base * 0.022);
   ctx.font = `${fs}px '${THEME.sans}'`;
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   const y = dims.height - pad * 0.45;
   let x = pad;
-  items.forEach((label, i) => {
-    ctx.fillStyle = SERIES_COLORS[i % SERIES_COLORS.length]!;
+  items.forEach((item) => {
+    ctx.fillStyle = SERIES_COLORS[item.colorIndex % SERIES_COLORS.length]!;
     ctx.fillRect(x, y - fs * 0.4, fs * 0.8, fs * 0.8);
     ctx.fillStyle = THEME.subtle;
-    ctx.fillText(label, x + fs * 1.1, y);
-    x += fs * 1.1 + ctx.measureText(label).width + fs * 1.2;
+    ctx.fillText(item.label, x + fs * 1.1, y);
+    x += fs * 1.1 + ctx.measureText(item.label).width + fs * 1.2;
   });
 }

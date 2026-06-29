@@ -2,6 +2,7 @@ import { type CSSProperties, type ReactNode, forwardRef, useEffect, useMemo, use
 import type { VideoManifest, ManifestScene } from '@agent-video/core'
 import { cn } from '#/lib/utils'
 import { DEFAULT_THEME_ID, getTheme, listThemes } from '#/lib/themes'
+import { playerAspectClasses } from './aspect'
 
 // The bundle (manifest.json + mp4s + thumbnails) is served at this path — by Vite
 // from public/ in dev, and by the agent's render-and-serve command in production.
@@ -108,6 +109,7 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
   const output = manifest.outputs.find((o) => o.aspectRatio === aspect) ?? manifest.outputs[0]!
   const src = `${BUNDLE}${output.file}`
   const scenes = manifest.scenes
+  const aspectClasses = playerAspectClasses(aspect)
 
   const activeIndex = useMemo(() => {
     let idx = 0
@@ -184,13 +186,13 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
           <div
             className={cn(
               'mx-auto overflow-hidden rounded-2xl bg-black ring-1 ring-[var(--av-line)] shadow-[0_36px_90px_-32px_rgba(0,0,0,0.85)]',
-              aspect === '9:16' ? 'max-w-[min(420px,100%)]' : 'w-full',
+              aspectClasses.frame,
             )}
           >
             <video
               ref={videoRef}
               data-testid="video"
-              className={cn('block w-full', aspect === '9:16' ? 'aspect-[9/16]' : 'aspect-video')}
+              className={cn('block w-full', aspectClasses.video)}
               src={src}
               controls
               playsInline

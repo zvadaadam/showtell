@@ -63,3 +63,17 @@ test("an over-long code excerpt warns (legibility nudge)", () => {
 test("json schema generates", () => {
   expect(videoSpecJsonSchema()).toHaveProperty("definitions");
 });
+
+test("screencap clip ranges must move forward", () => {
+  const r = validateSpec({
+    ...good,
+    scenes: [
+      {
+        kind: "screencap",
+        content: { source: "desktop", sessionRef: "demo", clip: { start: 3, end: 2 } },
+        narration: "x",
+      },
+    ],
+  });
+  expect(r.ok).toBe(false);
+});

@@ -93,3 +93,18 @@ test("render --frames-only → ok, frames, and live-byte proof for a code scene"
   expect(o.frames.length).toBeGreaterThan(0);
   expect(o.resolvedCode.some((r) => r.file === "package.json" && /^[0-9a-f]{64}$/.test(r.sha256))).toBe(true);
 }, 30_000);
+
+test("render --frames-only=true → frames-only mode", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-cli-render-bool-"));
+  const spec = join(dir, "s.spec.json");
+  writeFileSync(
+    spec,
+    JSON.stringify({
+      meta: { title: "t", aspectRatios: ["16:9"], repo: { path: "." } },
+      scenes: [{ kind: "title", content: { heading: "Hi" }, narration: "hi.", duration: "auto" }],
+    }),
+  );
+  const { code, out } = run(["render", spec, "--frames-only=true", "--out", join(dir, "out"), "--aspect", "16:9"]);
+  expect(code).toBe(0);
+  expect(out).toMatchObject({ ok: true, stage: "frames", frameCount: 1 });
+}, 30_000);

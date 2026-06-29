@@ -1,5 +1,6 @@
 import { test, expect, afterAll } from "bun:test";
-import { existsSync, rmSync, mkdtempSync } from "node:fs";
+import { existsSync, rmSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { synthesize, availableTtsProviders, probeDurationMs } from "../src/index.ts";
@@ -33,8 +34,53 @@ test("changing the text busts the cache key", async () => {
   expect(b.wavPath).not.toBe(a.wavPath);
 }, 30_000);
 
-test("an unknown provider throws an actionable error", async () => {
-  await expect(synthesize({ text: "x" }, { provider: "replicate", cacheDir })).rejects.toThrow(/not available/);
+test("a corrupt final cache file is regenerated", async () => {
+  const text = "regenerate corrupt cache.";
+  const key = createHash("sha256")
+    .update(JSON.stringify({ provider: "say", voice: "", model: "", text }))
+    .digest("hex")
+    .slice(0, 32);
+  const wav = join(cacheDir, `say-${key}.wav`);
+  writeFileSync(wav, "not a wav");
+  const r = await synthesize({ text }, { cacheDir });
+  expect(r.cached).toBe(false);
+  expect(probeDurationMs(r.wavPath)).toBeGreaterThan(0);
+}, 30_000);
+
+test("stale temp cache files are ignored", async () => {
+  const text = "ignore temp cache.";
+  const key = createHash("sha256")
+    .update(JSON.stringify({ provider: "say", voice: "", model: "", text }))
+    .digest("hex")
+    .slice(0, 32);
+  writeFileSync(join(cacheDir, `say-${key}.wav.tmp.wav`), "partial");
+  const r = await synthesize({ text }, { cacheDir });
+  expect(r.cached).toBe(false);
+  expect(existsSync(r.wavPath)).toBe(true);
+}, 30_000);
+
+test("replicate and elevenlabs adapters are wired but require environment credentials", async () => {
+  expect(availableTtsProviders()).toContain("replicate");
+  expect(availableTtsProviders()).toContain("elevenlabs");
+
+  const savedReplicate = process.env.REPLICATE_API_TOKEN;
+  const savedEleven = process.env.ELEVENLABS_API_KEY;
+  const savedElevenAlt = process.env.ELEVEN_LABS_API_KEY;
+  delete process.env.REPLICATE_API_TOKEN;
+  delete process.env.ELEVENLABS_API_KEY;
+  delete process.env.ELEVEN_LABS_API_KEY;
+  try {
+    await expect(
+      synthesize({ text: "x", model: "owner/model:version" }, { provider: "replicate", cacheDir }),
+    ).rejects.toThrow(/REPLICATE_API_TOKEN/);
+    await expect(synthesize({ text: "x", voice: "voice-id" }, { provider: "elevenlabs", cacheDir })).rejects.toThrow(
+      /ELEVENLABS_API_KEY/,
+    );
+  } finally {
+    if (savedReplicate !== undefined) process.env.REPLICATE_API_TOKEN = savedReplicate;
+    if (savedEleven !== undefined) process.env.ELEVENLABS_API_KEY = savedEleven;
+    if (savedElevenAlt !== undefined) process.env.ELEVEN_LABS_API_KEY = savedElevenAlt;
+  }
 });
 
 test('"openai" has an adapter but errors without an env key (key never from the spec)', async () => {

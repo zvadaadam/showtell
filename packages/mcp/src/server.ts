@@ -6,9 +6,8 @@
  * (rendering logic is never forked).
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createHash } from "node:crypto";
 import { z } from "zod";
-import { validateSpec, videoSpecJsonSchema, type VideoSpec } from "@agent-video/core";
+import { validateSpec, videoSpecJsonSchema, specContentId, type VideoSpec } from "@agent-video/core";
 import { renderVideo, startPreviewServer, resolvePlayerDist, type PreviewHandle } from "@agent-video/render";
 
 const SPEC_EXAMPLE = `{
@@ -24,10 +23,6 @@ const ASPECT = z.enum(["16:9", "9:16", "1:1"]);
 /** Shared error-detail shape for output schemas (mirrors validateSpec's errors). */
 const ERROR_DETAIL = z.object({ path: z.string(), message: z.string(), hint: z.string().optional() });
 const OUTPUT_Ref = z.object({ aspectRatio: z.string(), path: z.string(), durationMs: z.number().optional() });
-
-function specId(spec: unknown): string {
-  return createHash("sha256").update(JSON.stringify(spec)).digest("hex").slice(0, 32);
-}
 
 function textResult(
   data: unknown,
@@ -143,7 +138,7 @@ ${SPEC_EXAMPLE}`,
         });
         return textResult({
           ok: true,
-          videoId: specId(spec),
+          videoId: specContentId(r.spec),
           outputs: result.outputs,
           scenes: result.scenes,
           skipped: result.skipped,
@@ -196,7 +191,7 @@ ${SPEC_EXAMPLE}`,
       const r = validateSpec(spec);
       if (!r.ok) return textResult({ ok: false, error: "Spec failed validation.", errors: r.errors }, true);
       try {
-        const videoId = specId(spec);
+        const videoId = specContentId(r.spec);
         const playerDir = resolvePlayerDist();
         const outDir = ".agent-video/out";
         const result = await renderVideo(r.spec as VideoSpec, {

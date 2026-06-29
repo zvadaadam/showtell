@@ -9,11 +9,12 @@
  */
 import { readFileSync, existsSync } from "node:fs";
 import { basename } from "node:path";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import {
   validateSpec,
   videoSpecJsonSchema,
   IMPLEMENTED_SCENE_KINDS,
+  specContentId,
   type VideoSpec,
   type AspectRatio,
   type SpecError,
@@ -135,7 +136,7 @@ async function cmdRender(args: Args): Promise<never> {
   const { spec } = loadSpecOrFail(file, usage);
 
   const repoPath = (typeof args.flags.repo === "string" ? args.flags.repo : undefined) ?? spec.meta.repo.path;
-  const framesOnly = args.flags["frames-only"] === true;
+  const framesOnly = flagEnabled(args.flags["frames-only"]);
   const outDir =
     (typeof args.flags.out === "string" ? args.flags.out : undefined) ??
     (framesOnly ? ".agent-video/frames" : ".agent-video/out");
@@ -185,8 +186,8 @@ async function cmdRender(args: Args): Promise<never> {
   }
 }
 
-function specVideoId(spec: VideoSpec): string {
-  return createHash("sha256").update(JSON.stringify(spec)).digest("hex").slice(0, 32);
+function flagEnabled(value: string | boolean | undefined): boolean {
+  return value === true || value === "true" || value === "1" || value === "yes";
 }
 
 async function cmdPreview(args: Args): Promise<void> {
@@ -222,7 +223,7 @@ async function cmdPreview(args: Args): Promise<void> {
     fail(`Render failed: ${(e as Error).message}`, "Fix the spec/repo, then re-run preview.");
   }
 
-  const videoId = specVideoId(spec);
+  const videoId = specContentId(spec);
   const port = typeof args.flags.port === "string" ? parseInt(args.flags.port, 10) : undefined;
   const handle = startPreviewServer({ bundleDir: outDir, playerDir, title: spec.meta.title, videoId, port });
 

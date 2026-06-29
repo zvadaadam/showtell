@@ -67,7 +67,7 @@ reads the file. Pasting code is wrong and will drift from the source.
   "meta": {
     "title": "PR #482: idempotency keys",
     "aspectRatios": ["16:9", "9:16"], // desktop, mobile, or "1:1" (default: ["16:9"])
-    "tts": { "provider": "say" }, // "say" (macOS, local default) or "openai" (needs OPENAI_API_KEY in the env)
+    "tts": { "provider": "say" }, // "say" (macOS), "openai", "replicate", or "elevenlabs" (API keys from env)
     "repo": { "path": ".", "baseRef": "main", "headRef": "HEAD" },
   },
   "scenes": [

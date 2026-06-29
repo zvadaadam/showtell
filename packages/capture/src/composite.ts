@@ -10,6 +10,10 @@ import type { CameraKeyframe } from "./camera.ts";
 
 export interface CompositeOpts {
   source: string;
+  /** Start reading the source recording at this offset. */
+  sourceStartSec?: number;
+  /** Stop reading the source recording after this many seconds, then hold last frame if needed. */
+  sourceDurationSec?: number;
   outPath: string;
   width: number;
   height: number;
@@ -31,11 +35,18 @@ function cropRect(
   k: CameraKeyframe,
   s: { width: number; height: number },
 ): { w: number; h: number; x: number; y: number } {
-  const w = Math.max(2, Math.round(s.width / k.zoom / 2) * 2);
-  const h = Math.max(2, Math.round(s.height / k.zoom / 2) * 2);
+  const w = evenFloorAtMost(s.width / k.zoom, s.width);
+  const h = evenFloorAtMost(s.height / k.zoom, s.height);
   const x = Math.min(s.width - w, Math.max(0, Math.round(k.x - w / 2)));
   const y = Math.min(s.height - h, Math.max(0, Math.round(k.y - h / 2)));
   return { w, h, x, y };
+}
+
+function evenFloorAtMost(value: number, max: number): number {
+  const capped = Math.min(value, max);
+  const floored = Math.floor(capped);
+  const even = floored % 2 === 0 ? floored : floored - 1;
+  return Math.max(2, even);
 }
 
 export function compositeScreencap(o: CompositeOpts): void {
@@ -44,7 +55,10 @@ export function compositeScreencap(o: CompositeOpts): void {
   const bg = o.bg ?? "0x0f0f23";
   const work = mkdtempSync(join(tmpdir(), "av-cam-"));
   try {
-    const inputs: string[] = ["-i", o.source];
+    const inputs: string[] = [];
+    if (o.sourceStartSec && o.sourceStartSec > 0) inputs.push("-ss", o.sourceStartSec.toFixed(3));
+    if (o.sourceDurationSec && o.sourceDurationSec > 0) inputs.push("-t", o.sourceDurationSec.toFixed(3));
+    inputs.push("-i", o.source);
     let nextIdx = 1;
     let audioIdx = -1;
     let wmIdx = -1;

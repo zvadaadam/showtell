@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { existsSync, rmSync, statSync } from "node:fs";
+import { existsSync, rmSync, statSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -60,4 +60,16 @@ test("TTS is cached per line on re-render", async () => {
   const r = await renderVideo(spec, { repoPath: ".", outDir, baseName: "t", aspectRatios: ["16:9"] });
   // second render of identical narration → cache hits
   expect(r.scenes.every((s) => s.ttsCached)).toBe(true);
+}, 30_000);
+
+test("render cleans intermediates and emits deterministic manifest metadata", async () => {
+  rmSync(outDir, { recursive: true, force: true });
+  const a = await renderVideo(spec, { repoPath: ".", outDir, baseName: "t", aspectRatios: ["16:9"] });
+  const firstManifest = JSON.parse(readFileSync(a.manifestPath, "utf-8")) as { generatedAt: string };
+  expect(existsSync(join(outDir, ".work"))).toBe(false);
+
+  const b = await renderVideo(spec, { repoPath: ".", outDir, baseName: "t", aspectRatios: ["16:9"] });
+  const secondManifest = JSON.parse(readFileSync(b.manifestPath, "utf-8")) as { generatedAt: string };
+  expect(secondManifest.generatedAt).toBe(firstManifest.generatedAt);
+  expect(secondManifest.generatedAt).toBe("1970-01-01T00:00:00.000Z");
 }, 30_000);

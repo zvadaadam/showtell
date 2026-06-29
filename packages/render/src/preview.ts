@@ -61,6 +61,7 @@ function contentType(p: string): string {
 
 /** Resolve `rel` under `root`, rejecting path traversal. null if unsafe/missing. */
 function safeFile(root: string, rel: string): string | null {
+  if (rel.split(/[\\/]/).some((part) => part.startsWith("."))) return null;
   const full = normalize(join(root, rel));
   if (full !== root && !full.startsWith(root + "/")) return null; // escaped root
   if (!existsSync(full) || !statSync(full).isFile()) return null;

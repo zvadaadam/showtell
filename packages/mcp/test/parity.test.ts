@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../src/server.ts";
+import { specContentId, validateSpec } from "@agent-video/core";
 
 // The CLI and the MCP server are two surfaces over the SAME library. This locks
 // the contract that they agree on the core output shape (no surface drift).
@@ -42,3 +43,22 @@ test("validate agrees across the CLI and the MCP server", async () => {
   expect(mcp.sceneCount).toBe(cli.sceneCount);
   expect(mcp.kinds).toEqual(cli.kinds);
 }, 20_000);
+
+test("render videoId is based on the validated spec, not raw input shape", async () => {
+  const raw = {
+    meta: { title: "id", aspectRatios: ["16:9"], tts: { provider: "say" }, repo: { path: "." } },
+    scenes: [{ kind: "title", content: { heading: "Hi" }, narration: "hi." }],
+  };
+  const parsed = validateSpec(raw);
+  if (!parsed.ok) throw new Error("test spec should validate");
+
+  const client = await mcpClient();
+  const res = (await client.callTool({
+    name: "agent_video_render",
+    arguments: { spec: raw, aspectRatios: ["16:9"] },
+  })) as { structuredContent: { videoId: string } };
+  await client.close();
+
+  expect(res.structuredContent.videoId).toBe(specContentId(parsed.spec));
+  expect(res.structuredContent.videoId).not.toBe(specContentId(raw));
+}, 30_000);
