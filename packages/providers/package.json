@@ -1,0 +1,11 @@
+{
+  "name": "@agent-video/providers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "BYO-API model gateway. TTS behind one interface (text+voice→wav); adapters: local `say` (now), Replicate/OpenAI/ElevenLabs (later). Cached per line.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

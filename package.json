@@ -1,0 +1,33 @@
+{
+  "name": "agent-video",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Loom for agents — a local, repo-aware video renderer. An agent produces a short narrated video instead of a text answer.",
+  "homepage": "https://agent-video.dev",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "validate": "bun packages/cli/src/index.ts validate",
+    "agent-video": "bun packages/cli/src/index.ts",
+    "build:cli": "bun build packages/cli/src/index.ts --compile --outfile dist/agent-video",
+    "build:player": "cd packages/player && bun --bun run build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test",
+    "lint": "oxlint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "gen:schema": "bun scripts/gen-schema.ts",
+    "prepare": "lefthook install"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "lefthook": "2.1.9",
+    "oxlint": "0.15.15",
+    "playwright": "1.61.1",
+    "prettier": "3.8.4",
+    "typescript": "5.9.3"
+  }
+}

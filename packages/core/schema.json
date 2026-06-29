@@ -1,0 +1,530 @@
+{
+  "$ref": "#/definitions/VideoSpec",
+  "definitions": {
+    "VideoSpec": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "meta": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 120,
+              "default": 30
+            },
+            "aspectRatios": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "16:9",
+                  "9:16",
+                  "1:1"
+                ]
+              },
+              "minItems": 1,
+              "default": [
+                "16:9"
+              ]
+            },
+            "tts": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "say",
+                    "replicate",
+                    "openai",
+                    "elevenlabs"
+                  ],
+                  "description": "TTS provider. Local 'say' needs no key; others are BYO-API."
+                },
+                "model": {
+                  "type": "string"
+                },
+                "voice": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider"
+              ],
+              "additionalProperties": false
+            },
+            "watermark": {
+              "type": [
+                "boolean",
+                "string"
+              ],
+              "default": true,
+              "description": "Watermark text; true = \"agent-video.dev\". Free tier shows it."
+            },
+            "repo": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "default": "."
+                },
+                "baseRef": {
+                  "type": "string"
+                },
+                "headRef": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "default": {
+                "path": "."
+              }
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false
+        },
+        "scenes": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "title"
+                  },
+                  "content": {
+                    "type": "object",
+                    "properties": {
+                      "heading": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "subtitle": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "heading"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Stable scene id (defaults to the scene index if omitted)."
+                  },
+                  "narration": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Spoken narration for this scene. Always required."
+                  },
+                  "duration": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "auto"
+                      },
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    ],
+                    "description": "Seconds, or \"auto\" to derive from the narration audio length.",
+                    "default": "auto"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "content",
+                  "narration"
+                ],
+                "additionalProperties": false,
+                "description": "A title / section card."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "code"
+                  },
+                  "content": {
+                    "type": "object",
+                    "properties": {
+                      "file": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Repo-relative path. Read live; never paste source."
+                      },
+                      "lineStart": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "lineEnd": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "ref": {
+                        "type": "string",
+                        "description": "Optional git ref to read the file at (default: working tree)."
+                      },
+                      "focus": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "description": "Line numbers to emphasize."
+                      },
+                      "language": {
+                        "type": "string",
+                        "description": "Override syntax language (else inferred from extension)."
+                      }
+                    },
+                    "required": [
+                      "file"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Stable scene id (defaults to the scene index if omitted)."
+                  },
+                  "narration": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Spoken narration for this scene. Always required."
+                  },
+                  "duration": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "auto"
+                      },
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    ],
+                    "description": "Seconds, or \"auto\" to derive from the narration audio length.",
+                    "default": "auto"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "content",
+                  "narration"
+                ],
+                "additionalProperties": false,
+                "description": "A syntax-highlighted code excerpt read from the repo at file:line."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "diff"
+                  },
+                  "content": {
+                    "type": "object",
+                    "properties": {
+                      "file": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "ref": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Git range, e.g. \"main..HEAD\"."
+                      },
+                      "animation": {
+                        "type": "string",
+                        "enum": [
+                          "magic-move",
+                          "fade"
+                        ],
+                        "default": "magic-move"
+                      }
+                    },
+                    "required": [
+                      "file",
+                      "ref"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Stable scene id (defaults to the scene index if omitted)."
+                  },
+                  "narration": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Spoken narration for this scene. Always required."
+                  },
+                  "duration": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "auto"
+                      },
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    ],
+                    "description": "Seconds, or \"auto\" to derive from the narration audio length.",
+                    "default": "auto"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "content",
+                  "narration"
+                ],
+                "additionalProperties": false,
+                "description": "Animated before/after diff of a file, read from git."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "talking-points"
+                  },
+                  "content": {
+                    "type": "object",
+                    "properties": {
+                      "heading": {
+                        "type": "string"
+                      },
+                      "points": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "points"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Stable scene id (defaults to the scene index if omitted)."
+                  },
+                  "narration": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Spoken narration for this scene. Always required."
+                  },
+                  "duration": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "auto"
+                      },
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    ],
+                    "description": "Seconds, or \"auto\" to derive from the narration audio length.",
+                    "default": "auto"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "content",
+                  "narration"
+                ],
+                "additionalProperties": false,
+                "description": "A bulleted list of points (e.g. what reviewers should check)."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "chart"
+                  },
+                  "content": {
+                    "type": "object",
+                    "properties": {
+                      "chartType": {
+                        "type": "string",
+                        "enum": [
+                          "bar",
+                          "line",
+                          "pie"
+                        ]
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "data": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": [
+                              "string",
+                              "number"
+                            ]
+                          }
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "chartType",
+                      "data"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Stable scene id (defaults to the scene index if omitted)."
+                  },
+                  "narration": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Spoken narration for this scene. Always required."
+                  },
+                  "duration": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "auto"
+                      },
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    ],
+                    "description": "Seconds, or \"auto\" to derive from the narration audio length.",
+                    "default": "auto"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "content",
+                  "narration"
+                ],
+                "additionalProperties": false,
+                "description": "A data-driven chart."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "screencap"
+                  },
+                  "content": {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "app",
+                          "browser",
+                          "desktop"
+                        ],
+                        "description": "What to capture (macOS/avfoundation)."
+                      },
+                      "sessionRef": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                        "description": "Recorded capture session id (a filename under .agent-video/captures, not a path)."
+                      },
+                      "clip": {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "end": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "source"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Stable scene id (defaults to the scene index if omitted)."
+                  },
+                  "narration": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Spoken narration for this scene. Always required."
+                  },
+                  "duration": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "auto"
+                      },
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    ],
+                    "description": "Seconds, or \"auto\" to derive from the narration audio length.",
+                    "default": "auto"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "content",
+                  "narration"
+                ],
+                "additionalProperties": false,
+                "description": "A screen-capture segment (Mode A) composited into the timeline."
+              }
+            ]
+          },
+          "minItems": 1,
+          "description": "Ordered scenes; the video plays them in sequence."
+        }
+      },
+      "required": [
+        "meta",
+        "scenes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

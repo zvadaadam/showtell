@@ -1,0 +1,11 @@
+{
+  "name": "@agent-video/capture",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mode A capture (macOS/avfoundation): record a screen session and composite it into a clip. Adapted from @deus/screen-studio (MIT).",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

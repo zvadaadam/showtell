@@ -1,0 +1,13 @@
+# Git hooks (lefthook) — keep the tree green before commit. Install: `bun run prepare`.
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      glob: "*.{ts,tsx,js,mjs,json}"
+      run: bunx oxlint {staged_files}
+    format:
+      glob: "*.{ts,tsx,js,mjs,json,md,yml,yaml}"
+      run: bunx prettier --check {staged_files}
+    typecheck:
+      glob: "*.ts"
+      run: bun run typecheck

@@ -1,0 +1,15 @@
+{
+  "name": "@agent-video/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The agent-video CLI — author, validate, and render agent videos.",
+  "license": "MIT",
+  "bin": {
+    "agent-video": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agent-video/capture": "workspace:*",
+    "@agent-video/core": "workspace:*",
+    "@agent-video/render": "workspace:*"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@agent-video/mcp",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "MCP server for agent-video — exposes validate/render/preview/get_video as agent-first tools over the same render packages.",
+  "license": "MIT",
+  "bin": {
+    "agent-video-mcp": "./src/index.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts"
+  },
+  "dependencies": {
+    "@agent-video/core": "workspace:*",
+    "@agent-video/render": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "3.25.76"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@agent-video/core",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "agent-video spec types, JSON Schema, git/diff parsing, and timeline assembler.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema.json": "./schema.json",
+    "./manifest.schema.json": "./manifest.schema.json"
+  },
+  "dependencies": {
+    "zod": "3.25.76",
+    "zod-to-json-schema": "3.25.2"
+  }
+}

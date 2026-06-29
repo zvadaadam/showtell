@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.log
+*.tsbuildinfo
+
+# render artifacts
+.video/
+.agent-video/
+*.mp4
+*.wav
+!examples/**/*.mp4
+
+# os
+.DS_Store

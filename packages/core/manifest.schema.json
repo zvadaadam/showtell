@@ -1,0 +1,163 @@
+{
+  "$ref": "#/definitions/VideoManifest",
+  "definitions": {
+    "VideoManifest": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "generatedAt": {
+          "type": "string",
+          "description": "ISO timestamp the bundle was rendered."
+        },
+        "meta": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "repo": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "commit": {
+                  "type": "string"
+                },
+                "branch": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "title",
+            "repo"
+          ],
+          "additionalProperties": false
+        },
+        "durationSec": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total video length."
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "16:9",
+                  "9:16",
+                  "1:1"
+                ]
+              },
+              "file": {
+                "type": "string",
+                "description": "Bundle-relative mp4 filename."
+              },
+              "durationMs": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "aspectRatio",
+              "file",
+              "durationMs"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        },
+        "scenes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Index into the spec's scenes array."
+              },
+              "kind": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "narration": {
+                "type": "string"
+              },
+              "startSec": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Start offset within the video (cumulative)."
+              },
+              "durationSec": {
+                "type": "number",
+                "minimum": 0
+              },
+              "refs": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string"
+                  },
+                  "lineStart": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "lineEnd": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "ref": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "additionalProperties": false,
+                "description": "The ground-truth repo reference a code/diff scene points at."
+              },
+              "thumbnail": {
+                "type": "string",
+                "description": "Bundle-relative still frame for this scene."
+              }
+            },
+            "required": [
+              "index",
+              "kind",
+              "narration",
+              "startSec",
+              "durationSec"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "version",
+        "generatedAt",
+        "meta",
+        "durationSec",
+        "outputs",
+        "scenes"
+      ],
+      "additionalProperties": false,
+      "description": "Portable description of a rendered agent-video bundle."
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
