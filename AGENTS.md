@@ -13,7 +13,7 @@
 
 ## Agent-first (primary success metric)
 
-Every CLI command and MCP tool must be: non-interactive, all-flags, **structured JSON output**, actionable errors with a `hint` field, idempotent, and self-describing via `--help` + rich tool descriptions with examples. A fresh agent given only the SKILL + `--help` must drive the whole pipeline unaided.
+Every CLI command must be: non-interactive, all-flags, **structured JSON output**, actionable errors with a `hint` field, idempotent, and self-describing via `--help` with examples. A fresh agent given only the SKILL + `--help` must drive the whole pipeline unaided.
 
 ## Layout (bun workspaces)
 
@@ -23,7 +23,6 @@ Every CLI command and MCP tool must be: non-interactive, all-flags, **structured
 - `packages/providers` — BYO-API model gateway (TTS: Replicate/OpenAI/ElevenLabs + local `say`)
 - `packages/render` — orchestrator: validate → resolve refs → TTS → measure → compose+capture → ffmpeg mux + watermark → mp4
 - `packages/cli` — `agent-video` binary
-- `packages/mcp` — MCP server over the same render library as the CLI (shares `renderVideo`, not a CLI shell-out)
 - `skills/agent-video`, `skills/agent-video-eval`
 
 ## Conventions

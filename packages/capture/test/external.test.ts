@@ -1,8 +1,14 @@
 import { test, expect } from "bun:test";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadSessionEvents, runCapturedCommand, runCommand, startExternalCaptureSession } from "../src/index.ts";
+import {
+  loadSessionEvents,
+  runCapturedCommand,
+  runCommand,
+  startExternalCaptureSession,
+  startExternalCaptureWorkflow,
+} from "../src/index.ts";
 
 test("captured command infers agent-browser element boxes without reimplementing the CLI", () => {
   const dir = mkdtempSync(join(tmpdir(), "av-external-"));
@@ -43,4 +49,23 @@ test("external commands time out with a structured exit code", () => {
   const result = runCommand(["bun", "-e", "setTimeout(() => {}, 1000)"], { timeoutMs: 20 });
   expect(result.exitCode).toBe(124);
   expect(result.timedOut).toBe(true);
+});
+
+test("external capture start time is recorded after the start command exits", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-start-time-"));
+  try {
+    const stamp = join(dir, "started.txt");
+    const result = startExternalCaptureWorkflow({
+      id: "starttime",
+      root: dir,
+      sourcePath: "raw.mp4",
+      command: ["bun", "-e", "require('fs').writeFileSync(process.argv[1], String(Date.now()))", stamp],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state.startedAtEpochMs).toBeGreaterThanOrEqual(Number(readFileSync(stamp, "utf-8")));
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

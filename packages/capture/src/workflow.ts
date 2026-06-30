@@ -149,7 +149,6 @@ export function startExternalCaptureWorkflow(opts: {
 }): CaptureStartExternalWorkflowResult | CaptureWorkflowError {
   const root = opts.root ?? ".";
   const command = opts.command ?? [];
-  const startedAtEpochMs = Date.now();
   let commandResult: CommandResult | undefined;
   if (command.length > 0) {
     commandResult = runCommand(command, { cwd: resolve(root), timeoutMs: opts.timeoutMs });
@@ -162,6 +161,7 @@ export function startExternalCaptureWorkflow(opts: {
       };
     }
   }
+  const startedAtEpochMs = Date.now();
   const state = startExternalCaptureSession({
     id: opts.id,
     sourcePath: opts.sourcePath,

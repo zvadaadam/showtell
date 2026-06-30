@@ -192,7 +192,6 @@ export const ScreencapScene = z
         sessionRef: z
           .string()
           .regex(/^[A-Za-z0-9_-]{1,64}$/, "A capture session id (letters/digits/_/-, max 64); not a path.")
-          .optional()
           .describe("Recorded capture session id (a filename under .agent-video/captures, not a path)."),
         clip: z
           .object({ start: z.number().min(0), end: z.number().positive() })

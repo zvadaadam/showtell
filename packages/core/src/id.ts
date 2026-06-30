@@ -9,7 +9,7 @@ function stableJson(value: unknown): string {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`).join(",")}}`;
 }
 
-/** Stable content id for a parsed spec. Shared by CLI and MCP. */
+/** Stable content id for a parsed spec. */
 export function specContentId(spec: unknown): string {
   return createHash("sha256").update(stableJson(spec)).digest("hex").slice(0, 32);
 }

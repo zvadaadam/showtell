@@ -85,7 +85,7 @@ export function runCommand(command: string[], opts: { cwd?: string; timeoutMs?: 
     maxBuffer: 16 * 1024 * 1024,
     timeout: opts.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
   });
-  const timedOut = Boolean(result.error && result.error.message.includes("ETIMEDOUT"));
+  const timedOut = (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
   return {
     command,
     exitCode: result.status ?? (timedOut ? 124 : 1),

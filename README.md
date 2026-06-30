@@ -94,10 +94,11 @@ agent-video capture analyze --id demo
 
 ## For agents
 
-agent-video is built to be driven by a coding agent: the `agent-video` CLI and the MCP server
-(`packages/mcp`) are agent-first — structured JSON output, actionable errors with a `hint`,
-self-describing `--help`. The [`skills/agent-video`](skills/agent-video/SKILL.md) skill teaches
-an agent the workflow (gather `git diff` → author `spec.json` → validate → render → report).
+agent-video is built to be driven by a coding agent: the `agent-video` CLI is
+agent-first — structured JSON output, actionable errors with a `hint`, and
+self-describing `--help`. The [`skills/agent-video`](skills/agent-video/SKILL.md)
+skill teaches an agent the workflow (gather `git diff` → author `spec.json` →
+validate → render → report).
 
 ## Packages
 
@@ -109,7 +110,6 @@ an agent the workflow (gather `git diff` → author `spec.json` → validate →
 | [`providers`](packages/providers) | TTS gateway (narration audio)                        |
 | [`render`](packages/render)       | orchestrator: spec → mp4 (two-pass) + local preview  |
 | [`cli`](packages/cli)             | the `agent-video` binary                             |
-| [`mcp`](packages/mcp)             | MCP server over the same render library              |
 
 ## Development
 

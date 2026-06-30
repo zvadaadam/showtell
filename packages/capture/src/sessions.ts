@@ -1,5 +1,5 @@
 /** Capture session store: recordings live at <root>/.agent-video/captures/<id>.mp4. */
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
 
@@ -67,33 +67,40 @@ export function importCaptureSession(opts: { id: string; sourcePath: string; roo
   }
   ensureCapturesDir(opts.root);
   const out = sessionPath(opts.id, opts.root);
-  execFileSync(
-    "ffmpeg",
-    [
-      "-y",
-      "-loglevel",
-      "error",
-      "-i",
-      opts.sourcePath,
-      "-map",
-      "0:v:0",
-      "-an",
-      "-c:v",
-      "libx264",
-      "-pix_fmt",
-      "yuv420p",
-      "-preset",
-      "medium",
-      "-threads",
-      "1",
-      "-flags:v",
-      "+bitexact",
-      "-map_metadata",
-      "-1",
-      out,
-    ],
-    { stdio: ["ignore", "pipe", "pipe"] },
-  );
+  const tmp = `${out}.tmp-${process.pid}.mp4`;
+  try {
+    execFileSync(
+      "ffmpeg",
+      [
+        "-y",
+        "-loglevel",
+        "error",
+        "-i",
+        opts.sourcePath,
+        "-map",
+        "0:v:0",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-preset",
+        "medium",
+        "-threads",
+        "1",
+        "-flags:v",
+        "+bitexact",
+        "-map_metadata",
+        "-1",
+        tmp,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    renameSync(tmp, out);
+  } catch (e) {
+    rmSync(tmp, { force: true });
+    throw e;
+  }
   return { sessionId: opts.id, path: out, bytes: statSync(out).size };
 }
 

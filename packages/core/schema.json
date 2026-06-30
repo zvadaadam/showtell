@@ -561,7 +561,8 @@
                       }
                     },
                     "required": [
-                      "source"
+                      "source",
+                      "sessionRef"
                     ],
                     "additionalProperties": false
                   },

@@ -308,8 +308,8 @@ function cmdCapture(args: Args): never {
     );
   }
 
-  const seconds = typeof args.flags.seconds === "string" ? parseInt(args.flags.seconds, 10) : 5;
-  const fps = typeof args.flags.fps === "string" ? parseInt(args.flags.fps, 10) : 30;
+  const seconds = numberFlag(args.flags, "seconds") ?? 5;
+  const fps = numberFlag(args.flags, "fps") ?? 30;
   const repoRoot = stringFlag(args.flags, "repo") ?? ".";
   const id = stringFlag(args.flags, "id") ?? `cap-${randomBytes(4).toString("hex")}`;
   ensureCapturesDir(repoRoot);

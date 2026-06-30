@@ -38,7 +38,7 @@ export function prepareScreencapPresentation(
   scene: ScreencapScene,
   opts: { repoPath: string; durationSec: number; fps: number },
 ): ScreencapPresentation {
-  const ref = scene.content.sessionRef ?? "";
+  const ref = scene.content.sessionRef;
   const source = resolveSession(ref, opts.repoPath);
   const clipRange = scene.content.clip;
   const sourceStartSec = clipRange?.start ?? 0;
@@ -125,14 +125,25 @@ function eventsForClip(
   if (!events || !clipRange) return events;
   const startMs = clipRange.start * 1000;
   const endMs = clipRange.end * 1000;
+  const durationMs = endMs - startMs;
   return events
-    .filter((event) => event.t >= startMs && event.t <= endMs)
+    .filter((event) => eventOverlapsRange(event, startMs, endMs))
     .map((event) => ({
       ...event,
-      t: event.t - startMs,
-      ...(event.startT === undefined ? {} : { startT: Math.max(0, event.startT - startMs) }),
-      ...(event.endT === undefined ? {} : { endT: Math.max(0, event.endT - startMs) }),
+      t: clamp(event.t - startMs, 0, durationMs),
+      ...(event.startT === undefined ? {} : { startT: clamp(event.startT - startMs, 0, durationMs) }),
+      ...(event.endT === undefined ? {} : { endT: clamp(event.endT - startMs, 0, durationMs) }),
     }));
+}
+
+function eventOverlapsRange(event: CaptureEvent, startMs: number, endMs: number): boolean {
+  const eventStart = Math.min(event.startT ?? event.t, event.endT ?? event.t);
+  const eventEnd = Math.max(event.startT ?? event.t, event.endT ?? event.t);
+  return eventEnd >= startMs && eventStart <= endMs;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function actionOnlyWarning(events: CaptureEvent[] | null): string {

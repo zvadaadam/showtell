@@ -1,5 +1,8 @@
 import { test, expect } from "bun:test";
-import { assertValidSessionId, sessionPath, resolveSession } from "../src/sessions.ts";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { assertValidSessionId, importCaptureSession, sessionPath, resolveSession } from "../src/sessions.ts";
 
 test("valid session ids are accepted", () => {
   for (const id of ["demo", "Demo_1", "a-b-c", "x".repeat(64)]) {
@@ -25,4 +28,20 @@ test("sessionPath confines to the captures dir", () => {
   const p = sessionPath("clip", "/tmp/proj");
   expect(p).toBe("/tmp/proj/.agent-video/captures/clip.mp4");
   expect(() => sessionPath("../clip")).toThrow();
+});
+
+test("importCaptureSession preserves an existing session when transcode fails", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-import-atomic-"));
+  try {
+    const out = sessionPath("demo", dir);
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, "existing-good-session");
+    const badSource = join(dir, "not-video.txt");
+    writeFileSync(badSource, "not a video");
+
+    expect(() => importCaptureSession({ id: "demo", root: dir, sourcePath: badSource })).toThrow();
+    expect(readFileSync(out, "utf-8")).toBe("existing-good-session");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

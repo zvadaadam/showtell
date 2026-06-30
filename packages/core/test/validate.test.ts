@@ -110,3 +110,29 @@ test("screencap playback modes validate", () => {
   });
   expect(r.ok).toBe(true);
 });
+
+test("screencap scenes require a sessionRef", () => {
+  const r = validateSpec({
+    ...good,
+    scenes: [{ kind: "screencap", content: { source: "browser" }, narration: "x" }],
+  });
+  expect(r.ok).toBe(false);
+});
+
+test("invalid screencap playback is rejected", () => {
+  const r = validateSpec({
+    ...good,
+    scenes: [
+      {
+        kind: "screencap",
+        content: {
+          source: "browser",
+          sessionRef: "demo",
+          playback: { mode: "smart", visualMinScore: 100 },
+        },
+        narration: "x",
+      },
+    ],
+  });
+  expect(r.ok).toBe(false);
+});

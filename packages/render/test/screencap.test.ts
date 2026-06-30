@@ -204,7 +204,7 @@ test("screencap action-only playback drops dead lead-in around events", async ()
   expect(avg.b).toBeGreaterThan(avg.r);
 }, 40_000);
 
-test("portrait screencaps default to full-frame action effects instead of zoom camera", async () => {
+test("portrait screencaps default to full-frame instead of zoom camera", async () => {
   const caps = join(repo, ".agent-video", "captures");
   execFileSync("ffmpeg", [
     "-y",
@@ -283,6 +283,58 @@ test("portrait screencaps default to full-frame action effects instead of zoom c
   expect(zoomed.b).toBeGreaterThan(zoomed.r + 35);
 }, 40_000);
 
+test("screencap clip ranges keep event windows that overlap the clip", async () => {
+  const caps = join(repo, ".agent-video", "captures");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc=size=160x90:rate=30:duration=2",
+    "-pix_fmt",
+    "yuv420p",
+    join(caps, "windowclip.mp4"),
+  ]);
+  writeFileSync(
+    join(caps, "windowclip.events.json"),
+    JSON.stringify([{ t: 900, startT: 900, endT: 1100, type: "click", x: 80, y: 45 }]),
+  );
+
+  const clipSpec: VideoSpec = {
+    meta: {
+      title: "windowclip",
+      fps: 30,
+      aspectRatios: ["16:9"],
+      watermark: false,
+      tts: { provider: "say" },
+      repo: { path: "." },
+    },
+    scenes: [
+      {
+        kind: "screencap",
+        content: {
+          source: "browser",
+          sessionRef: "windowclip",
+          clip: { start: 1, end: 1.2 },
+          playback: { mode: "action-only", preActionPaddingMs: 0, postActionPaddingMs: 100 },
+        },
+        narration: "clip.",
+        duration: 0.2,
+      },
+    ],
+  };
+
+  const r = await renderVideo(clipSpec, {
+    repoPath: repo,
+    outDir: join(outDir, "windowclip"),
+    baseName: "windowclip",
+    aspectRatios: ["16:9"],
+  });
+  expect(r.warnings).toHaveLength(0);
+}, 40_000);
+
 test("screencap smart playback drops visually idle time without event metadata", async () => {
   const caps = join(repo, ".agent-video", "captures");
   execFileSync("ffmpeg", [
@@ -347,7 +399,9 @@ test("screencap smart playback drops visually idle time without event metadata",
 
   const r = await renderVideo(smartSpec, { repoPath: repo, outDir, baseName: "smart", aspectRatios: ["16:9"] });
   const first = firstFrameAverageRgb(r.outputs[0]!.path);
+  const late = frameAverageRgb(r.outputs[0]!.path, 2.0);
   expect(first.r + first.g + first.b).toBeGreaterThan(30);
+  expect(late.r + late.g + late.b).toBeGreaterThan(30);
   expect(r.warnings).toHaveLength(0);
   expect(probeDurationMs(r.outputs[0]!.path) / 1000).toBeLessThan(2.5);
 }, 40_000);

@@ -152,6 +152,12 @@ test("capture import and capture event are structured and session-scoped", () =>
   expect(event.out).toMatchObject({ ok: true, eventCount: 1 });
 }, 30_000);
 
+test("capture rejects invalid numeric recording flags before invoking the recorder", () => {
+  const { code, err } = run(["capture", "--seconds", "abc"]);
+  expect(code).toBe(1);
+  expect(err).toMatchObject({ ok: false, hint: "Pass --seconds as a number." });
+});
+
 test("capture exec wraps a real CLI command and records an explicit event", () => {
   const dir = mkdtempSync(join(tmpdir(), "av-cli-exec-"));
   const source = join(dir, "raw.mp4");

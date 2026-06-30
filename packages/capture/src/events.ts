@@ -95,7 +95,8 @@ function optionalNumberField(
 /** Append one event to a session's sidecar (creates it if needed). */
 export function recordCaptureEvent(id: string, root: string, event: CaptureEvent): void {
   ensureCapturesDir(root);
-  const events = loadSessionEvents(id, root) ?? [];
+  const p = eventsPath(id, root);
+  const events = existsSync(p) ? readSessionEvents(p) : [];
   events.push(event);
   writeSessionEvents(id, root, events);
 }
@@ -110,10 +111,9 @@ export function writeSessionEvents(id: string, root: string, events: CaptureEven
 export function loadSessionEvents(id: string, root: string): CaptureEvent[] | null {
   const p = eventsPath(id, root);
   if (!existsSync(p)) return null;
-  try {
-    const data = JSON.parse(readFileSync(p, "utf-8"));
-    return normalizeCaptureEvents(data);
-  } catch {
-    return null;
-  }
+  return readSessionEvents(p);
+}
+
+function readSessionEvents(path: string): CaptureEvent[] {
+  return normalizeCaptureEvents(JSON.parse(readFileSync(path, "utf-8")));
 }
