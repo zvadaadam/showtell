@@ -1,4 +1,5 @@
 import { test, expect } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -41,6 +42,30 @@ test("importCaptureSession preserves an existing session when transcode fails", 
 
     expect(() => importCaptureSession({ id: "demo", root: dir, sourcePath: badSource })).toThrow();
     expect(readFileSync(out, "utf-8")).toBe("existing-good-session");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("importCaptureSession resolves relative source paths against the capture root", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-import-relative-"));
+  try {
+    execFileSync("ffmpeg", [
+      "-y",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc=size=64x64:rate=10:duration=0.2",
+      "-pix_fmt",
+      "yuv420p",
+      join(dir, "raw.mp4"),
+    ]);
+
+    const imported = importCaptureSession({ id: "relative", root: dir, sourcePath: "raw.mp4" });
+    expect(imported.path).toBe(sessionPath("relative", dir));
+    expect(imported.bytes).toBeGreaterThan(0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

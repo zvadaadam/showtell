@@ -62,8 +62,9 @@ export function importCaptureSession(opts: { id: string; sourcePath: string; roo
   bytes: number;
 } {
   assertValidSessionId(opts.id);
-  if (!existsSync(opts.sourcePath)) {
-    throw new Error(`Capture source not found: ${opts.sourcePath}`);
+  const sourcePath = resolve(opts.root ?? ".", opts.sourcePath);
+  if (!existsSync(sourcePath)) {
+    throw new Error(`Capture source not found: ${sourcePath}`);
   }
   ensureCapturesDir(opts.root);
   const out = sessionPath(opts.id, opts.root);
@@ -76,7 +77,7 @@ export function importCaptureSession(opts: { id: string; sourcePath: string; roo
         "-loglevel",
         "error",
         "-i",
-        opts.sourcePath,
+        sourcePath,
         "-map",
         "0:v:0",
         "-an",

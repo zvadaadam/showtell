@@ -56,6 +56,21 @@ test("events are remapped onto the action-only output timeline", () => {
   expect(remapped[0]!.t).toBeLessThan(remapped[1]!.t);
 });
 
+test("action playback preserves command event windows", () => {
+  const plan = createActionPlaybackPlan([{ t: 1100, startT: 900, endT: 1100, type: "click", x: 80, y: 45 }], 2000, {
+    preActionPaddingMs: 0,
+    postActionPaddingMs: 0,
+  });
+  expect(plan).not.toBeNull();
+  expect(plan!.segments).toHaveLength(1);
+  expect(plan!.segments[0]).toMatchObject({
+    type: "action",
+    sourceStartMs: 900,
+    sourceEndMs: 1100,
+    sourceDurationMs: 200,
+  });
+});
+
 test("smart playback merges event hints with delayed visual activity", () => {
   const plan = createSmartPlaybackPlan({
     events: [{ t: 1000, type: "click", x: 100, y: 100 }],
@@ -66,4 +81,20 @@ test("smart playback merges event hints with delayed visual activity", () => {
   expect(plan).not.toBeNull();
   expect(plan!.segments[0]!.sourceStartMs).toBe(900);
   expect(plan!.segments.at(-1)!.sourceEndMs).toBe(2700);
+});
+
+test("smart playback preserves command event windows", () => {
+  const plan = createSmartPlaybackPlan({
+    events: [{ t: 3000, startT: 1000, endT: 3000, type: "click", x: 80, y: 45 }],
+    visualWindows: [],
+    sourceDurationMs: 5000,
+    config: { preActionPaddingMs: 0, postActionPaddingMs: 0 },
+  });
+  expect(plan).not.toBeNull();
+  expect(plan!.segments[0]).toMatchObject({
+    type: "action",
+    sourceStartMs: 1000,
+    sourceEndMs: 3000,
+    sourceDurationMs: 2000,
+  });
 });

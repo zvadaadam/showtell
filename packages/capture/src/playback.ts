@@ -64,16 +64,12 @@ export function createActionPlaybackPlan(
 ): PlaybackPlan | null {
   const sourceMs = Math.max(0, sourceDurationMs);
   const cfg = { ...DEFAULT_ACTION_PLAYBACK_CONFIG, ...dropUndefined(config) };
-  const actionTimes = events
-    .filter(isMeaningfulCaptureEvent)
-    .map((e) => clamp(e.t, 0, sourceMs))
-    .filter((t) => t < sourceMs)
-    .sort((a, b) => a - b);
+  const actionEvents = events.filter(isMeaningfulCaptureEvent);
 
-  if (sourceMs <= 0 || actionTimes.length === 0) return null;
+  if (sourceMs <= 0 || actionEvents.length === 0) return null;
 
-  const windows = mergeActionWindows(actionTimes, sourceMs, cfg);
-  return createWindowPlaybackPlan(windows, sourceMs, cfg, fitToDurationMs, actionTimes.length);
+  const windows = eventActionWindows(actionEvents, sourceMs, cfg);
+  return createWindowPlaybackPlan(windows, sourceMs, cfg, fitToDurationMs, actionEvents.length);
 }
 
 export function createVisualPlaybackPlan(
@@ -100,12 +96,8 @@ export function createSmartPlaybackPlan(opts: {
 }): PlaybackPlan | null {
   const sourceMs = Math.max(0, opts.sourceDurationMs);
   const cfg = { ...DEFAULT_ACTION_PLAYBACK_CONFIG, ...dropUndefined(opts.config) };
-  const eventTimes = (opts.events ?? [])
-    .filter(isMeaningfulCaptureEvent)
-    .map((e) => clamp(e.t, 0, sourceMs))
-    .filter((t) => t < sourceMs)
-    .sort((a, b) => a - b);
-  const eventWindows = mergeActionWindows(eventTimes, sourceMs, cfg);
+  const actionEvents = (opts.events ?? []).filter(isMeaningfulCaptureEvent);
+  const eventWindows = eventActionWindows(actionEvents, sourceMs, cfg);
   const visualWindows = (opts.visualWindows ?? []).map((window) => ({
     start: Math.max(0, window.startMs - cfg.preActionPaddingMs),
     end: Math.min(sourceMs, window.endMs + cfg.postActionPaddingMs),
@@ -116,7 +108,7 @@ export function createSmartPlaybackPlan(opts: {
     sourceMs,
     cfg,
     opts.fitToDurationMs,
-    eventTimes.length + visualWindows.length,
+    actionEvents.length + visualWindows.length,
   );
 }
 
@@ -179,19 +171,30 @@ export function sourceToOutputTime(sourceTimeMs: number, segments: PlaybackSegme
   return null;
 }
 
-function mergeActionWindows(times: number[], sourceDurationMs: number, cfg: ActionPlaybackConfig): ActionWindow[] {
-  const windows: ActionWindow[] = [];
-  for (const t of times) {
-    const start = Math.max(0, t - cfg.preActionPaddingMs);
-    const end = Math.min(sourceDurationMs, Math.max(start + 1, t + cfg.postActionPaddingMs));
-    const last = windows[windows.length - 1];
-    if (last && start <= last.end) {
-      last.end = Math.max(last.end, end);
-    } else {
-      windows.push({ start, end });
-    }
-  }
-  return windows;
+function eventActionWindows(
+  events: CaptureEvent[],
+  sourceDurationMs: number,
+  cfg: ActionPlaybackConfig,
+): ActionWindow[] {
+  return events
+    .map((event) => eventActionWindow(event, sourceDurationMs, cfg))
+    .filter((window): window is ActionWindow => window !== null)
+    .sort((a, b) => a.start - b.start);
+}
+
+function eventActionWindow(
+  event: CaptureEvent,
+  sourceDurationMs: number,
+  cfg: ActionPlaybackConfig,
+): ActionWindow | null {
+  const cue = clamp(event.t, 0, sourceDurationMs);
+  const rawStart = event.startT ?? cue;
+  const rawEnd = event.endT ?? cue;
+  const eventStart = Math.min(rawStart, rawEnd, cue);
+  const eventEnd = Math.max(rawStart, rawEnd, cue);
+  const start = clamp(eventStart - cfg.preActionPaddingMs, 0, sourceDurationMs);
+  const end = clamp(Math.max(start + 1, eventEnd + cfg.postActionPaddingMs), 0, sourceDurationMs);
+  return end > start ? { start, end } : null;
 }
 
 function normalizeWindows(windows: ActionWindow[], sourceDurationMs: number): ActionWindow[] {
