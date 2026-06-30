@@ -49,11 +49,10 @@
           { "pkg": "compose", "loc": 802 },
           { "pkg": "render", "loc": 381 },
           { "pkg": "cli", "loc": 362 },
-          { "pkg": "mcp", "loc": 202 },
           { "pkg": "capture", "loc": 182 }
         ]
       },
-      "narration": "Under the hood it's seven small packages with a one-way dependency flow: core feeds compose and capture, which feed render, which the CLI and MCP server both drive.",
+      "narration": "Under the hood it's six small packages with a one-way dependency flow: core feeds compose and capture, which feed render, which the CLI drives.",
       "duration": "auto"
     },
     {

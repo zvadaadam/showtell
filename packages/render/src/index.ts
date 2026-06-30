@@ -9,9 +9,10 @@ import { createHash } from "node:crypto";
 import type { VideoSpec, AspectRatio, VideoManifest } from "@agent-video/core";
 import { buildManifest, readRepoMeta } from "@agent-video/core";
 import { renderSceneToPng, renderWatermarkPng, dimsFor, COMPOSABLE_KINDS } from "@agent-video/compose";
-import { synthesize, probeDurationMs, probeVideoSize } from "@agent-video/providers";
-import { resolveSession, compositeScreencap, loadSessionEvents, computeCameraTimeline } from "@agent-video/capture";
+import { probeDurationMs, synthesize } from "@agent-video/providers";
+import { compositeScreencap } from "@agent-video/capture";
 import { imageAudioToClip, concatClips } from "./ffmpeg.ts";
+import { prepareScreencapPresentation, type ScreencapPresentation } from "./screencap.ts";
 
 export { probeDurationMs } from "@agent-video/providers";
 export { startPreviewServer, resolvePlayerDist, type PreviewHandle } from "./preview.ts";
@@ -183,6 +184,7 @@ export async function renderVideo(
 
     const timings: SceneTiming[] = [];
     const audioByScene = new Map<number, string>();
+    const screencaps = new Map<number, ScreencapPresentation>();
     for (const { s, i } of renderable) {
       const syn = await synthesize({ text: s.narration, voice, model }, { provider, cacheDir: join(cacheDir, "tts") });
       const auto = s.duration === "auto";
@@ -219,29 +221,22 @@ export async function renderVideo(
         const clip = join(workDir, `${tag}.mp4`);
 
         if (scene.kind === "screencap") {
-          const ref = scene.content.sessionRef ?? "";
-          const source = resolveSession(ref, opts.repoPath);
-          const clipRange = scene.content.clip;
-          const clipStartSec = clipRange?.start ?? 0;
-          const clipDurationSec = clipRange ? clipRange.end - clipRange.start : undefined;
-          // Auto-direct: if the session recorded the agent's actions, compute the
-          // spring camera; otherwise it's a flat fit-to-frame.
-          const rawEvents = loadSessionEvents(ref, opts.repoPath);
-          const events =
-            rawEvents && clipRange
-              ? rawEvents
-                  .filter((e) => e.t >= clipRange.start * 1000 && e.t <= clipRange.end * 1000)
-                  .map((e) => ({ ...e, t: e.t - clipRange.start * 1000 }))
-              : rawEvents;
-          let camera, sourceSize;
-          if (events && events.length > 0) {
-            sourceSize = probeVideoSize(source);
-            camera = computeCameraTimeline(events, { durationSec: t.durationSec, fps, source: sourceSize });
+          let presentation = screencaps.get(t.scene);
+          if (!presentation) {
+            presentation = prepareScreencapPresentation(scene, {
+              repoPath: opts.repoPath,
+              durationSec: t.durationSec,
+              fps,
+            });
+            screencaps.set(t.scene, presentation);
+            for (const message of presentation.warnings) {
+              warnings.push({ scene: t.scene, message });
+            }
           }
           compositeScreencap({
-            source,
-            sourceStartSec: clipStartSec,
-            sourceDurationSec: clipDurationSec,
+            source: presentation.source,
+            sourceStartSec: presentation.sourceStartSec,
+            sourceDurationSec: presentation.sourceDurationSec,
             outPath: clip,
             width: dims.width,
             height: dims.height,
@@ -249,8 +244,10 @@ export async function renderVideo(
             fps,
             audio: audioByScene.get(t.scene),
             watermarkPng: wmPng,
-            camera,
-            sourceSize,
+            camera: presentation.camera,
+            sourceSize: presentation.sourceSize,
+            playbackPlan: presentation.playbackPlan,
+            actionEffects: presentation.actionEffects,
           });
           clips.push(clip);
           continue;

@@ -4,8 +4,8 @@ description: >-
   Evaluate and improve agent-video's agent-facing surfaces. Spawns fresh agents
   that — given ONLY the agent-video skill + CLI help — author specs for several
   video types, renders them, then an LLM judge scores the output and emits fixes
-  to the SKILL / CLI / MCP / prompts. Use to verify AGENT-USABILITY + quality, or
-  when changing the spec, SKILL, or CLI.
+  to the SKILL / CLI / prompts. Use to verify AGENT-USABILITY + quality, or when
+  changing the spec, SKILL, or CLI.
 ---
 
 # agent-video-eval
@@ -29,8 +29,8 @@ what to fix.
    - **AGENT-USABILITY** passes if ≥3 types validate + render unaided.
    - **JUDGE** passes if overall scores meet the ≥4 target.
 5. **Feed back.** Turn the friction + judge issues into concrete edits to
-   `skills/agent-video/SKILL.md`, the CLI (`--help`, error hints), the MCP tool
-   descriptions, or the spec schema. Re-run until green.
+   `skills/agent-video/SKILL.md`, the CLI (`--help`, error hints), or the spec
+   schema. Re-run until green.
 
 ## Deterministic self-test (no agents)
 

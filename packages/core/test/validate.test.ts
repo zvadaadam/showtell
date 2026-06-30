@@ -77,3 +77,62 @@ test("screencap clip ranges must move forward", () => {
   });
   expect(r.ok).toBe(false);
 });
+
+test("screencap playback modes validate", () => {
+  const r = validateSpec({
+    ...good,
+    scenes: [
+      {
+        kind: "screencap",
+        content: {
+          source: "browser",
+          sessionRef: "demo",
+          playback: {
+            mode: "action-only",
+            preActionPaddingMs: 250,
+            postActionPaddingMs: 300,
+            camera: "none",
+            actionEffects: "tap-glow",
+          },
+        },
+        narration: "x",
+      },
+      {
+        kind: "screencap",
+        content: {
+          source: "browser",
+          sessionRef: "demo2",
+          playback: { mode: "smart", visualSampleFps: 4, visualMinScore: 0.5 },
+        },
+        narration: "x",
+      },
+    ],
+  });
+  expect(r.ok).toBe(true);
+});
+
+test("screencap scenes require a sessionRef", () => {
+  const r = validateSpec({
+    ...good,
+    scenes: [{ kind: "screencap", content: { source: "browser" }, narration: "x" }],
+  });
+  expect(r.ok).toBe(false);
+});
+
+test("invalid screencap playback is rejected", () => {
+  const r = validateSpec({
+    ...good,
+    scenes: [
+      {
+        kind: "screencap",
+        content: {
+          source: "browser",
+          sessionRef: "demo",
+          playback: { mode: "smart", visualMinScore: 100 },
+        },
+        narration: "x",
+      },
+    ],
+  });
+  expect(r.ok).toBe(false);
+});

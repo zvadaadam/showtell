@@ -15,10 +15,14 @@ export type CaptureEventType = "click" | "type" | "scroll" | "navigate" | "idle"
 
 /** One agent action during the recording (ms timestamp + source-pixel point). */
 export interface CaptureEvent {
+  /** Best cue timestamp for camera/effects, in ms since recording start. */
   t: number;
   type: CaptureEventType;
   x: number;
   y: number;
+  /** Optional uncertainty window for wrapped commands that only know start/end. */
+  startT?: number;
+  endT?: number;
 }
 
 /** A sampled camera transform: viewport center (source px) + zoom multiplier. */

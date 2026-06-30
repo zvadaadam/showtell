@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -108,3 +108,209 @@ test("render --frames-only=true → frames-only mode", () => {
   expect(code).toBe(0);
   expect(out).toMatchObject({ ok: true, stage: "frames", frameCount: 1 });
 }, 30_000);
+
+test("capture import and capture event are structured and session-scoped", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-cli-cap-"));
+  const source = join(dir, "browser.webm");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc=size=64x64:rate=10:duration=0.2",
+    "-pix_fmt",
+    "yuv420p",
+    source,
+  ]);
+
+  const imported = run(["capture", "import", source, "--id", "browserdemo", "--repo", dir]);
+  expect(imported.code).toBe(0);
+  const out = imported.out as { ok: boolean; path: string; sessionId: string };
+  expect(out.ok).toBe(true);
+  expect(out.sessionId).toBe("browserdemo");
+  expect(existsSync(out.path)).toBe(true);
+
+  const event = run([
+    "capture",
+    "event",
+    "--id",
+    "browserdemo",
+    "--repo",
+    dir,
+    "--type",
+    "click",
+    "--x",
+    "10",
+    "--y",
+    "20",
+    "--t-ms",
+    "100",
+  ]);
+  expect(event.code).toBe(0);
+  expect(event.out).toMatchObject({ ok: true, eventCount: 1 });
+}, 30_000);
+
+test("capture rejects invalid numeric recording flags before invoking the recorder", () => {
+  const { code, err } = run(["capture", "--seconds", "abc"]);
+  expect(code).toBe(1);
+  expect(err).toMatchObject({ ok: false, hint: "Pass --seconds as a number." });
+});
+
+test("capture exec wraps a real CLI command and records an explicit event", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-cli-exec-"));
+  const source = join(dir, "raw.mp4");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc=size=64x64:rate=10:duration=0.3",
+    "-pix_fmt",
+    "yuv420p",
+    source,
+  ]);
+
+  const start = run(["capture", "start-external", source, "--id", "wrapdemo", "--repo", dir]);
+  expect(start.code).toBe(0);
+  expect(start.out).toMatchObject({ ok: true, sessionId: "wrapdemo" });
+
+  const exec = run([
+    "capture",
+    "exec",
+    "--id",
+    "wrapdemo",
+    "--repo",
+    dir,
+    "--event-type",
+    "click",
+    "--x",
+    "10",
+    "--y",
+    "20",
+    "--",
+    "bun",
+    "-e",
+    "process.stdout.write('done')",
+  ]);
+  expect(exec.code).toBe(0);
+  expect(exec.out).toMatchObject({ ok: true, event: { type: "click", x: 10, y: 20 }, eventCount: 1 });
+
+  const stop = run(["capture", "stop-external", "--id", "wrapdemo", "--repo", dir]);
+  expect(stop.code).toBe(0);
+  expect(stop.out).toMatchObject({ ok: true, sessionId: "wrapdemo", eventCount: 1 });
+}, 30_000);
+
+test("capture start-external supports --source plus -- command tail", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-cli-source-"));
+  const source = join(dir, "raw.mp4");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc=size=64x64:rate=10:duration=0.2",
+    "-pix_fmt",
+    "yuv420p",
+    source,
+  ]);
+
+  const started = run([
+    "capture",
+    "start-external",
+    "--source",
+    "raw.mp4",
+    "--id",
+    "sourceflag",
+    "--repo",
+    dir,
+    "--",
+    "bun",
+    "-e",
+    "process.stdout.write('started')",
+  ]);
+  expect(started.code).toBe(0);
+  expect(started.out).toMatchObject({ ok: true, command: { stdout: "started" } });
+
+  const stopped = run(["capture", "stop-external", "--id", "sourceflag", "--repo", dir]);
+  expect(stopped.code).toBe(0);
+  expect((stopped.out as { imported: { path: string } }).imported.path).toContain("sourceflag.mp4");
+}, 30_000);
+
+test("capture exec reports command timeouts", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-cli-timeout-"));
+  const source = join(dir, "raw.mp4");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc=size=64x64:rate=10:duration=0.2",
+    "-pix_fmt",
+    "yuv420p",
+    source,
+  ]);
+  expect(run(["capture", "start-external", source, "--id", "timeoutdemo", "--repo", dir]).code).toBe(0);
+  const timedOut = run([
+    "capture",
+    "exec",
+    "--id",
+    "timeoutdemo",
+    "--repo",
+    dir,
+    "--timeout-ms",
+    "20",
+    "--",
+    "bun",
+    "-e",
+    "setTimeout(() => {}, 1000)",
+  ]);
+  expect(timedOut.code).toBe(1);
+  expect(timedOut.err).toMatchObject({ ok: false, timedOut: true, exitCode: 124 });
+}, 30_000);
+
+test("capture analyze reports visual activity intervals", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-cli-analyze-"));
+  const source = join(dir, "activity.mp4");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=black:size=160x90:rate=30:d=1",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc=size=160x90:rate=30:d=1",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=black:size=160x90:rate=30:d=1",
+    "-filter_complex",
+    "[0:v][1:v][2:v]concat=n=3:v=1:a=0,format=yuv420p[v]",
+    "-map",
+    "[v]",
+    source,
+  ]);
+
+  const analyzed = run(["capture", "analyze", source, "--sample-fps", "4"]);
+  expect(analyzed.code).toBe(0);
+  const out = analyzed.out as { ok: boolean; intervalCount: number };
+  expect(out.ok).toBe(true);
+  expect(out.intervalCount).toBeGreaterThan(0);
+}, 30_000);
+
+test("capture analyze missing session returns an actionable hint", () => {
+  const { code, err } = run(["capture", "analyze", "--id", "missing"]);
+  expect(code).toBe(1);
+  expect(err).toHaveProperty("hint");
+});
