@@ -107,6 +107,82 @@ export const ChartScene = z
   .strict()
   .describe("A data-driven chart.");
 
+export const ScreencapPlayback = z
+  .object({
+    mode: z
+      .enum(["realtime", "action-only", "smart"])
+      .default("smart")
+      .describe(
+        '"realtime" plays linearly; "action-only" trims from event sidecars; "smart" merges visual activity with event hints.',
+      ),
+    preActionPaddingMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(10_000)
+      .optional()
+      .describe("Milliseconds of context to keep before each click/type/scroll/navigate event."),
+    postActionPaddingMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(10_000)
+      .optional()
+      .describe("Milliseconds of context to keep after each click/type/scroll/navigate event."),
+    targetGapOutputMs: z
+      .number()
+      .int()
+      .positive()
+      .max(10_000)
+      .optional()
+      .describe("Preferred visible length for long gaps between action windows after compression."),
+    maxGapOutputMs: z
+      .number()
+      .int()
+      .positive()
+      .max(10_000)
+      .optional()
+      .describe("Maximum visible length for any compressed gap between action windows."),
+    maxPlaybackRate: z
+      .number()
+      .min(1)
+      .max(64)
+      .optional()
+      .describe("Maximum fast-forward rate used for compressed gaps before final narration fitting."),
+    minGapToSpeedUpMs: z
+      .number()
+      .int()
+      .min(0)
+      .max(10_000)
+      .optional()
+      .describe("Gaps shorter than this stay at normal speed before final narration fitting."),
+    camera: z
+      .enum(["auto", "follow", "none"])
+      .default("auto")
+      .optional()
+      .describe('"auto" follows desktop/landscape actions but keeps portrait/mobile captures full-frame.'),
+    actionEffects: z
+      .enum(["auto", "tap-glow", "none"])
+      .default("auto")
+      .optional()
+      .describe('"auto" adds touch/type feedback when the camera is not following the action.'),
+    visualSampleFps: z
+      .number()
+      .int()
+      .min(1)
+      .max(12)
+      .optional()
+      .describe('Frame samples per second for "smart" visual activity detection. Default: 4.'),
+    visualMinScore: z
+      .number()
+      .min(0)
+      .max(50)
+      .optional()
+      .describe('Minimum average grayscale frame-diff score for "smart" visual activity. Default: 0.7.'),
+  })
+  .strict()
+  .describe("How to play back a screencap recording.");
+
 export const ScreencapScene = z
   .object({
     kind: z.literal("screencap"),
@@ -125,6 +201,7 @@ export const ScreencapScene = z
             message: "clip.end must be greater than clip.start.",
           })
           .optional(),
+        playback: ScreencapPlayback.optional(),
       })
       .strict(),
     ...SceneBase,
@@ -198,6 +275,7 @@ export type CodeScene = z.infer<typeof CodeScene>;
 export type DiffScene = z.infer<typeof DiffScene>;
 export type TalkingPointsScene = z.infer<typeof TalkingPointsScene>;
 export type ChartScene = z.infer<typeof ChartScene>;
+export type ScreencapPlayback = z.infer<typeof ScreencapPlayback>;
 export type ScreencapScene = z.infer<typeof ScreencapScene>;
 export type Meta = z.infer<typeof Meta>;
 export type AspectRatio = z.infer<typeof AspectRatio>;

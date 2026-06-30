@@ -90,9 +90,17 @@ reads the file. Pasting code is wrong and will drift from the source.
   Each datum has **exactly one string key** (the axis label) and one or more
   numeric keys (the series), e.g. `{ "file": "a.ts", "added": 10, "removed": 2 }`.
   One numeric key → one bar per label; multiple → grouped bars + a series legend.
-- **screencap** — `content: { source: "app"|"browser"|"desktop", sessionRef }`.
-  Composites a screen recording. First record one: `agent-video capture --id NAME --seconds N`,
-  then set `sessionRef: "NAME"`.
+- **screencap** — `content: { source: "app"|"browser"|"desktop", sessionRef, playback? }`.
+  Composites a screen recording. First create/import a capture session, then set
+  `sessionRef: "NAME"`. Use `playback: { "mode": "smart" }` for demos: the
+  renderer removes visually idle time from any recording, and uses an events
+  sidecar when present for better presentation. External CLI wrappers record
+  start/end event windows; smart playback aligns those cues to visual activity
+  so delayed tool dispatch does not show stale frames. `camera: "auto"` follows
+  landscape/desktop actions but keeps portrait/mobile captures full-frame;
+  `actionEffects: "auto"` adds tap/type feedback when the camera is not
+  following. Use `"action-only"` only when you intentionally require
+  event-sidecar trimming without visual analysis.
 
 ## CLI (all commands emit JSON; errors carry a `hint`)
 
@@ -101,6 +109,12 @@ reads the file. Pasting code is wrong and will drift from the source.
 - `agent-video render <spec.json> [--out DIR] [--aspect 16:9,9:16] [--frames-only]` — render MP4(s).
 - `agent-video preview <spec.json> [--port N]` — render + serve the web player; returns `watchUrl`. (Build the player once: `bun run build:player`.)
 - `agent-video capture [--id NAME] [--seconds N]` — record the screen (macOS) for a `screencap` scene.
+- `agent-video capture import <recording.webm|mp4> --id NAME [--events events.json]` — import an agent-browser recording.
+- `agent-video capture analyze --id NAME` — inspect visual activity before rendering smart playback.
+- `agent-video capture start-external <raw.webm|mp4> --id NAME -- <record-start command>` — track an external recorder.
+- `agent-video capture exec --id NAME -- <tool command>` — run a real CLI action and record an inferred event window when possible.
+- `agent-video capture stop-external --id NAME -- <record-stop command>` — stop tracking and import the raw recording.
+- `agent-video capture event --id NAME --type click --x N --y N --t-ms N` — append one action event for smarter camera targets.
   Run `agent-video help` for the latest.
 
 ## Output format

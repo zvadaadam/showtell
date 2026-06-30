@@ -5,6 +5,9 @@ Mode A: macOS screen recording (avfoundation) composited into the timeline as a
 
 - `recordScreen(opts)` — record the screen for a fixed duration (needs Screen Recording permission).
 - `sessions.ts` — sandbox-safe session store (`.agent-video/captures/<id>.mp4`); rejects path traversal.
-- `compositeScreencap(opts)` — fit the recording to the frame, hold to the narration length, mux + watermark.
+- `activity.ts` — visual activity analysis for driver-agnostic smart trimming and event-window alignment.
+- `external.ts` — external CLI bridge: supervise real tool commands and write optional event sidecars.
+- `workflow.ts` — shared agent-facing import/analyze/start/exec/stop workflows used by CLI and MCP.
+- `compositeScreencap(opts)` — trim playback, optionally follow the camera, add tap/type feedback, mux + watermark.
 
 macOS-only in v1. Internal package of [agent-video](../../README.md).

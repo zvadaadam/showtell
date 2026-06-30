@@ -12,6 +12,7 @@
     "./server": "./src/server.ts"
   },
   "dependencies": {
+    "@agent-video/capture": "workspace:*",
     "@agent-video/core": "workspace:*",
     "@agent-video/render": "workspace:*",
     "@modelcontextprotocol/sdk": "1.29.0",

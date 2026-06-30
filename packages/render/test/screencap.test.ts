@@ -1,6 +1,6 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { VideoSpec } from "@agent-video/core";
@@ -51,9 +51,14 @@ const spec: VideoSpec = {
 };
 
 function firstFrameAverageRgb(path: string): { r: number; g: number; b: number } {
+  return frameAverageRgb(path, 0);
+}
+
+function frameAverageRgb(path: string, atSec: number): { r: number; g: number; b: number } {
+  const seek = atSec > 0 ? ["-ss", atSec.toFixed(3)] : [];
   const buf = execFileSync(
     "ffmpeg",
-    ["-v", "error", "-i", path, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+    ["-v", "error", ...seek, "-i", path, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
     {
       maxBuffer: 16 * 1024 * 1024,
     },
@@ -143,4 +148,206 @@ test("screencap clip range is passed through to the compositor", async () => {
   const r = await renderVideo(clipSpec, { repoPath: repo, outDir, baseName: "clip", aspectRatios: ["16:9"] });
   const avg = firstFrameAverageRgb(r.outputs[0]!.path);
   expect(avg.b).toBeGreaterThan(avg.r);
+}, 40_000);
+
+test("screencap action-only playback drops dead lead-in around events", async () => {
+  const caps = join(repo, ".agent-video", "captures");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=red:size=160x90:rate=30:d=1",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=blue:size=160x90:rate=30:d=1",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=green:size=160x90:rate=30:d=1",
+    "-filter_complex",
+    "[0:v][1:v][2:v]concat=n=3:v=1:a=0,format=yuv420p[v]",
+    "-map",
+    "[v]",
+    join(caps, "action.mp4"),
+  ]);
+  writeFileSync(join(caps, "action.events.json"), JSON.stringify([{ t: 1500, type: "click", x: 80, y: 45 }]));
+
+  const actionSpec: VideoSpec = {
+    meta: {
+      title: "action",
+      fps: 30,
+      aspectRatios: ["16:9"],
+      watermark: false,
+      tts: { provider: "say" },
+      repo: { path: "." },
+    },
+    scenes: [
+      {
+        kind: "screencap",
+        content: {
+          source: "browser",
+          sessionRef: "action",
+          playback: { mode: "action-only", preActionPaddingMs: 0, postActionPaddingMs: 400 },
+        },
+        narration: "click.",
+        duration: 0.4,
+      },
+    ],
+  };
+
+  const r = await renderVideo(actionSpec, { repoPath: repo, outDir, baseName: "action", aspectRatios: ["16:9"] });
+  const avg = firstFrameAverageRgb(r.outputs[0]!.path);
+  expect(avg.b).toBeGreaterThan(avg.r);
+}, 40_000);
+
+test("portrait screencaps default to full-frame action effects instead of zoom camera", async () => {
+  const caps = join(repo, ".agent-video", "captures");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=red:size=80x320:rate=30:d=1",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=blue:size=80x320:rate=30:d=1",
+    "-filter_complex",
+    "[0:v][1:v]hstack=inputs=2,format=yuv420p[v]",
+    "-map",
+    "[v]",
+    join(caps, "portrait.mp4"),
+  ]);
+  writeFileSync(join(caps, "portrait.events.json"), JSON.stringify([{ t: 0, type: "click", x: 145, y: 160 }]));
+
+  const mobileSpec: VideoSpec = {
+    meta: {
+      title: "portrait",
+      fps: 30,
+      aspectRatios: ["9:16"],
+      watermark: false,
+      tts: { provider: "say" },
+      repo: { path: "." },
+    },
+    scenes: [
+      {
+        kind: "screencap",
+        content: {
+          source: "app",
+          sessionRef: "portrait",
+          playback: { mode: "realtime", actionEffects: "none" },
+        },
+        narration: "tap.",
+        duration: 1,
+      },
+    ],
+  };
+  const followSpec: VideoSpec = {
+    ...mobileSpec,
+    scenes: [
+      {
+        kind: "screencap",
+        content: {
+          source: "app",
+          sessionRef: "portrait",
+          playback: { mode: "realtime", camera: "follow", actionEffects: "none" },
+        },
+        narration: "tap.",
+        duration: 1,
+      },
+    ],
+  };
+
+  const mobile = await renderVideo(mobileSpec, {
+    repoPath: repo,
+    outDir: join(outDir, "portrait-auto"),
+    baseName: "portrait-auto",
+    aspectRatios: ["9:16"],
+  });
+  const follow = await renderVideo(followSpec, {
+    repoPath: repo,
+    outDir: join(outDir, "portrait-follow"),
+    baseName: "portrait-follow",
+    aspectRatios: ["9:16"],
+  });
+
+  const fullFrame = frameAverageRgb(mobile.outputs[0]!.path, 0.8);
+  const zoomed = frameAverageRgb(follow.outputs[0]!.path, 0.8);
+  expect(Math.abs(fullFrame.r - fullFrame.b)).toBeLessThan(35);
+  expect(zoomed.b).toBeGreaterThan(zoomed.r + 35);
+}, 40_000);
+
+test("screencap smart playback drops visually idle time without event metadata", async () => {
+  const caps = join(repo, ".agent-video", "captures");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=black:size=160x90:rate=30:d=1",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc=size=160x90:rate=30:d=1",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=black:size=160x90:rate=30:d=3",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc2=size=160x90:rate=30:d=1",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=black:size=160x90:rate=30:d=1",
+    "-filter_complex",
+    "[0:v][1:v][2:v][3:v][4:v]concat=n=5:v=1:a=0,format=yuv420p[v]",
+    "-map",
+    "[v]",
+    join(caps, "smart.mp4"),
+  ]);
+
+  const smartSpec: VideoSpec = {
+    meta: {
+      title: "smart",
+      fps: 30,
+      aspectRatios: ["16:9"],
+      watermark: false,
+      tts: { provider: "say" },
+      repo: { path: "." },
+    },
+    scenes: [
+      {
+        kind: "screencap",
+        content: {
+          source: "browser",
+          sessionRef: "smart",
+          playback: {
+            mode: "smart",
+            preActionPaddingMs: 0,
+            postActionPaddingMs: 100,
+            targetGapOutputMs: 200,
+            maxGapOutputMs: 200,
+          },
+        },
+        narration: "activity.",
+        duration: 2.2,
+      },
+    ],
+  };
+
+  const r = await renderVideo(smartSpec, { repoPath: repo, outDir, baseName: "smart", aspectRatios: ["16:9"] });
+  const first = firstFrameAverageRgb(r.outputs[0]!.path);
+  expect(first.r + first.g + first.b).toBeGreaterThan(30);
+  expect(r.warnings).toHaveLength(0);
+  expect(probeDurationMs(r.outputs[0]!.path) / 1000).toBeLessThan(2.5);
 }, 40_000);

@@ -20,7 +20,21 @@ import {
   type SpecError,
 } from "@agent-video/core";
 import { renderFrames, renderVideo, startPreviewServer, resolvePlayerDist } from "@agent-video/render";
-import { recordScreen, ensureCapturesDir, sessionPath, ensureSyntheticSession } from "@agent-video/capture";
+import {
+  recordScreen,
+  ensureCapturesDir,
+  sessionPath,
+  ensureSyntheticSession,
+  normalizeCaptureEvents,
+  recordCaptureEvent,
+  loadSessionEvents,
+  analyzeCaptureWorkflow,
+  execCapturedCommandWorkflow,
+  importCaptureWorkflow,
+  startExternalCaptureWorkflow,
+  stopExternalCaptureWorkflow,
+  type CaptureEventType,
+} from "@agent-video/capture";
 
 const VERSION = "0.0.0";
 
@@ -41,6 +55,12 @@ function fail(error: string, hint?: string, extra?: Record<string, unknown>): ne
   process.exit(1);
 }
 
+function finish<T extends { ok: boolean; error?: string; hint?: string }>(result: T): never {
+  if (result.ok) ok(result as Record<string, unknown>);
+  const { ok: _ok, error, hint, ...extra } = result;
+  fail(error ?? "Command failed.", hint, extra as Record<string, unknown>);
+}
+
 // ---------------------------------------------------------------------------
 // Minimal arg parsing (no deps)
 // ---------------------------------------------------------------------------
@@ -49,6 +69,7 @@ interface Args {
   command: string;
   positional: string[];
   flags: Record<string, string | boolean>;
+  commandTail: string[];
 }
 
 function parseArgs(argv: string[]): Args {
@@ -56,8 +77,13 @@ function parseArgs(argv: string[]): Args {
   const command = args[0] ?? "help";
   const positional: string[] = [];
   const flags: Record<string, string | boolean> = {};
+  const commandTail: string[] = [];
   for (let i = 1; i < args.length; i++) {
     const a = args[i]!;
+    if (a === "--") {
+      commandTail.push(...args.slice(i + 1));
+      break;
+    }
     if (a.startsWith("--")) {
       const raw = a.slice(2);
       const eq = raw.indexOf("=");
@@ -76,7 +102,7 @@ function parseArgs(argv: string[]): Args {
       positional.push(a);
     }
   }
-  return { command, positional, flags };
+  return { command, positional, flags, commandTail };
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +216,18 @@ function flagEnabled(value: string | boolean | undefined): boolean {
   return value === true || value === "true" || value === "1" || value === "yes";
 }
 
+function stringFlag(flags: Record<string, string | boolean>, name: string): string | undefined {
+  return typeof flags[name] === "string" ? flags[name] : undefined;
+}
+
+function numberFlag(flags: Record<string, string | boolean>, name: string): number | undefined {
+  const raw = stringFlag(flags, name);
+  if (raw === undefined) return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) fail(`Invalid --${name}: ${raw}`, `Pass --${name} as a number.`);
+  return n;
+}
+
 async function cmdPreview(args: Args): Promise<void> {
   const usage =
     "Usage: agent-video preview <spec.json> [--port N] [--repo PATH] [--aspect 16:9,9:16] [--serve-seconds N]";
@@ -256,10 +294,24 @@ async function cmdPreview(args: Args): Promise<void> {
 }
 
 function cmdCapture(args: Args): never {
+  const subcommand = args.positional[0];
+  if (subcommand === "import") return cmdCaptureImport(args);
+  if (subcommand === "event") return cmdCaptureEvent(args);
+  if (subcommand === "analyze") return cmdCaptureAnalyze(args);
+  if (subcommand === "start-external") return cmdCaptureStartExternal(args);
+  if (subcommand === "exec") return cmdCaptureExec(args);
+  if (subcommand === "stop-external") return cmdCaptureStopExternal(args);
+  if (subcommand) {
+    fail(
+      `Unknown capture subcommand: ${subcommand}`,
+      "Use `agent-video capture` to record, import, analyze, start-external, exec, stop-external, or event.",
+    );
+  }
+
   const seconds = typeof args.flags.seconds === "string" ? parseInt(args.flags.seconds, 10) : 5;
   const fps = typeof args.flags.fps === "string" ? parseInt(args.flags.fps, 10) : 30;
-  const repoRoot = typeof args.flags.repo === "string" ? args.flags.repo : ".";
-  const id = typeof args.flags.id === "string" ? args.flags.id : `cap-${randomBytes(4).toString("hex")}`;
+  const repoRoot = stringFlag(args.flags, "repo") ?? ".";
+  const id = stringFlag(args.flags, "id") ?? `cap-${randomBytes(4).toString("hex")}`;
   ensureCapturesDir(repoRoot);
   const out = sessionPath(id, repoRoot);
   try {
@@ -278,6 +330,164 @@ function cmdCapture(args: Args): never {
       "Grant Screen Recording permission (System Settings → Privacy & Security → Screen Recording), then retry. macOS only.",
     );
   }
+}
+
+function cmdCaptureImport(args: Args): never {
+  const source = args.positional[1] ?? stringFlag(args.flags, "file") ?? stringFlag(args.flags, "source");
+  if (!source) {
+    fail(
+      "Missing capture source file.",
+      "Usage: agent-video capture import <recording.webm|mp4> --id NAME [--events events.json] [--repo PATH]",
+    );
+  }
+  const repoRoot = stringFlag(args.flags, "repo") ?? ".";
+  const id = stringFlag(args.flags, "id") ?? `cap-${randomBytes(4).toString("hex")}`;
+  try {
+    finish(
+      importCaptureWorkflow({ id, sourcePath: source, root: repoRoot, eventsPath: stringFlag(args.flags, "events") }),
+    );
+  } catch (e) {
+    fail(
+      `Capture import failed: ${(e as Error).message}`,
+      "Pass a readable browser recording (agent-browser writes .webm) and optional events JSON shaped as [{t,type,x,y}].",
+    );
+  }
+}
+
+function cmdCaptureEvent(args: Args): never {
+  const id = stringFlag(args.flags, "id");
+  if (!id) fail("Missing --id.", "Usage: agent-video capture event --id NAME --type click --x 100 --y 200 --t-ms 1234");
+  const type = stringFlag(args.flags, "type");
+  const x = numberFlag(args.flags, "x");
+  const y = numberFlag(args.flags, "y");
+  const t = numberFlag(args.flags, "t-ms") ?? numberFlag(args.flags, "t");
+  if (!type || x === undefined || y === undefined || t === undefined) {
+    fail("Missing event field.", "Pass all event fields: --type click --x N --y N --t-ms N.");
+  }
+  const repoRoot = stringFlag(args.flags, "repo") ?? ".";
+  try {
+    const event = normalizeCaptureEvents([{ type, x, y, t }])[0]!;
+    recordCaptureEvent(id, repoRoot, event);
+    ok({
+      ok: true,
+      sessionId: id,
+      event,
+      eventCount: loadSessionEvents(id, repoRoot)?.length ?? 0,
+      hint: `Use playback.mode="smart" in a screencap scene to combine events with visual idle trimming.`,
+    });
+  } catch (e) {
+    fail(
+      `Capture event failed: ${(e as Error).message}`,
+      "Use --type click|type|scroll|navigate|idle and numeric --x/--y/--t-ms values.",
+    );
+  }
+}
+
+function cmdCaptureAnalyze(args: Args): never {
+  const repoRoot = stringFlag(args.flags, "repo") ?? ".";
+  const id = stringFlag(args.flags, "id");
+  try {
+    finish(
+      analyzeCaptureWorkflow({
+        id,
+        sourcePath: args.positional[1] ?? stringFlag(args.flags, "source"),
+        root: repoRoot,
+        sourceStartSec: numberFlag(args.flags, "source-start-sec"),
+        sourceDurationSec: numberFlag(args.flags, "source-duration-sec"),
+        sampleFps: numberFlag(args.flags, "sample-fps"),
+        visualMinScore: numberFlag(args.flags, "visual-min-score"),
+      }),
+    );
+  } catch (e) {
+    fail(`Capture analyze failed: ${(e as Error).message}`, "Check that ffmpeg can decode the capture source.");
+  }
+}
+
+function cmdCaptureStartExternal(args: Args): never {
+  const repoRoot = stringFlag(args.flags, "repo") ?? ".";
+  const id = stringFlag(args.flags, "id");
+  if (!id)
+    fail(
+      "Missing --id.",
+      "Usage: agent-video capture start-external <raw.webm|mp4> --id NAME -- <record-start command>",
+    );
+  const sourcePath = args.positional[1] ?? stringFlag(args.flags, "source");
+  if (!sourcePath) {
+    fail(
+      "Missing external recording source path.",
+      "Usage: agent-video capture start-external <raw.webm|mp4> --id NAME -- <record-start command>",
+    );
+  }
+  try {
+    finish(
+      startExternalCaptureWorkflow({
+        id,
+        sourcePath,
+        root: repoRoot,
+        driver: stringFlag(args.flags, "driver"),
+        command: args.commandTail,
+        timeoutMs: numberFlag(args.flags, "timeout-ms"),
+      }),
+    );
+  } catch (e) {
+    fail(`Capture start-external failed: ${(e as Error).message}`, "Use a valid --id and pass the raw recording path.");
+  }
+}
+
+function cmdCaptureExec(args: Args): never {
+  const repoRoot = stringFlag(args.flags, "repo") ?? ".";
+  const id = stringFlag(args.flags, "id");
+  if (!id) fail("Missing --id.", "Usage: agent-video capture exec --id NAME -- <tool command>");
+  const eventType = captureEventTypeFlag(args.flags, "event-type") ?? "auto";
+  try {
+    finish(
+      execCapturedCommandWorkflow({
+        id,
+        root: repoRoot,
+        command: args.commandTail,
+        eventType,
+        x: numberFlag(args.flags, "x"),
+        y: numberFlag(args.flags, "y"),
+        startedAtEpochMs: numberFlag(args.flags, "started-at-epoch-ms"),
+        timeoutMs: numberFlag(args.flags, "timeout-ms"),
+      }),
+    );
+  } catch (e) {
+    fail(
+      `Capture exec failed: ${(e as Error).message}`,
+      "Run capture start-external first, or pass --event-type click --x N --y N for tools that cannot be inferred.",
+    );
+  }
+}
+
+function cmdCaptureStopExternal(args: Args): never {
+  const repoRoot = stringFlag(args.flags, "repo") ?? ".";
+  const id = stringFlag(args.flags, "id");
+  if (!id) fail("Missing --id.", "Usage: agent-video capture stop-external --id NAME -- <record-stop command>");
+  try {
+    finish(
+      stopExternalCaptureWorkflow({
+        id,
+        root: repoRoot,
+        command: args.commandTail,
+        noImport: flagEnabled(args.flags["no-import"]),
+        timeoutMs: numberFlag(args.flags, "timeout-ms"),
+      }),
+    );
+  } catch (e) {
+    fail(`Capture stop-external failed: ${(e as Error).message}`, "Ensure the raw recording exists, then retry.");
+  }
+}
+
+function captureEventTypeFlag(
+  flags: Record<string, string | boolean>,
+  name: string,
+): CaptureEventType | "auto" | "none" | undefined {
+  const raw = stringFlag(flags, name);
+  if (!raw) return undefined;
+  if (raw === "auto" || raw === "none") return raw;
+  if (["click", "type", "scroll", "navigate", "idle"].includes(raw)) return raw as CaptureEventType;
+  fail(`Invalid --${name}: ${raw}`, "Use auto, none, click, type, scroll, navigate, or idle.");
 }
 
 async function cmdEval(args: Args): Promise<never> {
@@ -350,6 +560,22 @@ COMMANDS
                          --serve-seconds N. (Build the player once first.)
   capture                Record the screen (macOS) into a capture session for a
                          screencap scene. Flags: --seconds N, --id NAME, --fps N.
+  capture import <file>  Import an agent-browser .webm/mp4 into a sandboxed
+                         capture session. Flags: --id NAME, --events events.json.
+  capture analyze        Inspect visual activity in a capture. Flags:
+                         --id NAME or <file>, --sample-fps N.
+  capture event          Append one action event to a session sidecar. Flags:
+                         --id NAME, --type click|type|scroll|navigate|idle,
+                         --x N, --y N, --t-ms N.
+  capture start-external Start tracking an external recorder. Example:
+                         capture start-external ./demo.webm --id demo --
+                           agent-browser record start ./demo.webm
+  capture exec           Run a real CLI action and record an event window if inferred.
+                         Example: capture exec --id demo -- agent-browser click @e3
+                         For generic tools: --event-type click --x N --y N.
+  capture stop-external  Stop external tracking, optionally running a stop command,
+                         then import the raw recording. Example:
+                         capture stop-external --id demo -- agent-browser record stop
   eval                   Self-test: render the golden example (or --spec PATH) in
                          both ratios and assert every gate. Returns pass/fail JSON.
   schema                 Print the published JSON Schema for spec.json.
@@ -366,6 +592,10 @@ THE CONTRACT (author only this; never write ffmpeg or paste source)
 EXAMPLES
   agent-video schema
   agent-video validate examples/hello.spec.json
+  agent-video capture start-external ./demo.webm --id demo -- agent-browser record start ./demo.webm
+  agent-video capture exec --id demo -- agent-browser click @submit
+  agent-video capture stop-external --id demo -- agent-browser record stop
+  agent-video capture analyze --id demo
 
   Minimal spec:
   {
@@ -373,7 +603,9 @@ EXAMPLES
     "scenes": [
       { "kind": "title", "content": { "heading": "Hello" }, "narration": "Hi.", "duration": "auto" },
       { "kind": "code", "content": { "file": "packages/core/src/spec.ts", "lineStart": 1, "lineEnd": 20 },
-        "narration": "Here is the spec.", "duration": "auto" }
+        "narration": "Here is the spec.", "duration": "auto" },
+      { "kind": "screencap", "content": { "source": "browser", "sessionRef": "demo",
+        "playback": { "mode": "smart" } }, "narration": "Only the useful action is shown.", "duration": "auto" }
     ]
   }
 `,
@@ -419,7 +651,7 @@ async function main(): Promise<void> {
     default:
       fail(
         `Unknown command: '${args.command}'`,
-        "Run `agent-video help`. Commands: validate, render, schema, help, version.",
+        "Run `agent-video help`. Commands: validate, render, preview, capture, eval, schema, help, version.",
       );
   }
 }

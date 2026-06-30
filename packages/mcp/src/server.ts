@@ -9,6 +9,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { validateSpec, videoSpecJsonSchema, specContentId, type VideoSpec } from "@agent-video/core";
 import { renderVideo, startPreviewServer, resolvePlayerDist, type PreviewHandle } from "@agent-video/render";
+import {
+  analyzeCaptureWorkflow,
+  execCapturedCommandWorkflow,
+  importCaptureWorkflow,
+  normalizeCaptureEvents,
+  recordCaptureEvent,
+  loadSessionEvents,
+  startExternalCaptureWorkflow,
+  stopExternalCaptureWorkflow,
+} from "@agent-video/capture";
 
 const SPEC_EXAMPLE = `{
   "meta": { "title": "PR: idempotency keys", "aspectRatios": ["16:9","9:16"], "repo": { "path": "." } },
@@ -19,10 +29,20 @@ const SPEC_EXAMPLE = `{
 }`;
 
 const ASPECT = z.enum(["16:9", "9:16", "1:1"]);
+const CAPTURE_EVENT_TYPE = z.enum(["click", "type", "scroll", "navigate", "idle"]);
+const CAPTURE_EXEC_EVENT_TYPE = z.enum(["auto", "none", "click", "type", "scroll", "navigate", "idle"]);
 
 /** Shared error-detail shape for output schemas (mirrors validateSpec's errors). */
 const ERROR_DETAIL = z.object({ path: z.string(), message: z.string(), hint: z.string().optional() });
 const OUTPUT_Ref = z.object({ aspectRatio: z.string(), path: z.string(), durationMs: z.number().optional() });
+const CAPTURE_EVENT = z.object({
+  t: z.number(),
+  type: CAPTURE_EVENT_TYPE,
+  x: z.number(),
+  y: z.number(),
+  startT: z.number().optional(),
+  endT: z.number().optional(),
+});
 
 function textResult(
   data: unknown,
@@ -216,6 +236,347 @@ ${SPEC_EXAMPLE}`,
             ok: false,
             error: `Preview failed: ${(e as Error).message}`,
             hint: "If the player isn't built: cd packages/player && bun --bun run build.",
+          },
+          true,
+        );
+      }
+    },
+  );
+
+  server.registerTool(
+    "agent_video_import_capture",
+    {
+      title: "Import a browser recording as a capture session",
+      description: `Import an agent-browser .webm/mp4 recording into the sandboxed capture store used by screencap scenes. This transcodes the source to .agent-video/captures/<sessionId>.mp4; specs still reference only sessionRef, never raw file paths.
+
+For ScreenStudio-style smart playback, pass eventsPath with JSON shaped as [{ "t": 1200, "type": "click", "x": 640, "y": 360 }] for better camera targets, or omit events and let playback.mode="smart" trim visually idle time.
+
+Example:
+  agent-browser record start ./demo.webm
+  ...
+  agent-browser record stop
+  agent_video_import_capture({ "sourcePath": "./demo.webm", "sessionId": "demo", "eventsPath": "./demo.events.json" })
+Then in spec: { "kind": "screencap", "content": { "source": "browser", "sessionRef": "demo", "playback": { "mode": "smart" } }, "narration": "...", "duration": "auto" }`,
+      inputSchema: {
+        sourcePath: z.string().min(1).describe("Path to the agent-browser recording (.webm or mp4)."),
+        sessionId: z
+          .string()
+          .regex(/^[A-Za-z0-9_-]{1,64}$/)
+          .describe("Capture session id; becomes .agent-video/captures/<sessionId>.mp4."),
+        repoPath: z.string().optional().describe("Repo root containing .agent-video/captures. Default: ."),
+        eventsPath: z.string().optional().describe("Optional JSON file containing [{t,type,x,y}] event sidecar data."),
+      },
+      outputSchema: {
+        ok: z.boolean(),
+        sessionId: z.string().optional(),
+        path: z.string().optional(),
+        bytes: z.number().optional(),
+        eventCount: z.number().optional(),
+        error: z.string().optional(),
+        hint: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ sourcePath, sessionId, repoPath, eventsPath }) => {
+      try {
+        return textResult(importCaptureWorkflow({ id: sessionId, sourcePath, root: repoPath ?? ".", eventsPath }));
+      } catch (e) {
+        return textResult(
+          {
+            ok: false,
+            error: `Capture import failed: ${(e as Error).message}`,
+            hint: "Pass a readable agent-browser .webm/mp4 and optional events JSON shaped as [{t,type,x,y}].",
+          },
+          true,
+        );
+      }
+    },
+  );
+
+  server.registerTool(
+    "agent_video_analyze_capture",
+    {
+      title: "Analyze visual activity in a capture",
+      description: `Inspect a capture for pixel activity so a screencap scene can use playback.mode="smart" even when no browser/device/computer-use event sidecar exists.
+
+Use this before rendering if you want proof that the raw recording contains trimmable activity.
+
+Example:
+  agent_video_analyze_capture({ "sessionId": "demo" })
+Then in spec: { "kind": "screencap", "content": { "source": "browser", "sessionRef": "demo", "playback": { "mode": "smart" } }, "narration": "...", "duration": "auto" }`,
+      inputSchema: {
+        sessionId: z
+          .string()
+          .regex(/^[A-Za-z0-9_-]{1,64}$/)
+          .optional()
+          .describe("Capture session id under .agent-video/captures."),
+        sourcePath: z.string().optional().describe("Direct mp4/webm path to analyze instead of a session id."),
+        repoPath: z.string().optional().describe("Repo root containing .agent-video/captures. Default: ."),
+        sourceStartSec: z.number().min(0).optional(),
+        sourceDurationSec: z.number().positive().optional(),
+        sampleFps: z.number().int().min(1).max(12).optional(),
+        visualMinScore: z.number().min(0).max(50).optional(),
+      },
+      outputSchema: {
+        ok: z.boolean(),
+        sourcePath: z.string().optional(),
+        sampleCount: z.number().optional(),
+        sampleFps: z.number().optional(),
+        intervalCount: z.number().optional(),
+        intervals: z.array(z.record(z.unknown())).optional(),
+        suggestedEvents: z.array(CAPTURE_EVENT).optional(),
+        error: z.string().optional(),
+        hint: z.string().optional(),
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ sessionId, sourcePath, repoPath, sourceStartSec, sourceDurationSec, sampleFps, visualMinScore }) => {
+      try {
+        const result = analyzeCaptureWorkflow({
+          id: sessionId,
+          sourcePath,
+          root: repoPath ?? ".",
+          sourceStartSec,
+          sourceDurationSec,
+          sampleFps,
+          visualMinScore,
+        });
+        return textResult(result, !result.ok);
+      } catch (e) {
+        return textResult(
+          {
+            ok: false,
+            error: `Capture analyze failed: ${(e as Error).message}`,
+            hint: "Check that ffmpeg can decode the capture.",
+          },
+          true,
+        );
+      }
+    },
+  );
+
+  server.registerTool(
+    "agent_video_capture_start_external",
+    {
+      title: "Start tracking an external recorder",
+      description: `Start an agent-video capture session around an external recorder without reimplementing that recorder. Optionally runs a real record-start command first, then stores timing state for later agent_video_capture_exec_cli calls.
+
+Example:
+  agent_video_capture_start_external({
+    "sessionId": "demo",
+    "sourcePath": "./demo.webm",
+    "command": ["agent-browser", "record", "start", "./demo.webm"]
+  })`,
+      inputSchema: {
+        sessionId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+        sourcePath: z.string().min(1).describe("The raw recording path produced by the external recorder."),
+        repoPath: z.string().optional().describe("Repo root containing .agent-video/captures. Default: ."),
+        driver: z.string().optional().describe("Optional driver label, e.g. agent-browser or agent-device."),
+        command: z.array(z.string()).optional().describe("Optional real CLI command to start recording."),
+        timeoutMs: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Timeout for the optional command. Default: 120000."),
+      },
+      outputSchema: {
+        ok: z.boolean(),
+        sessionId: z.string().optional(),
+        state: z.record(z.unknown()).optional(),
+        command: z.record(z.unknown()).optional(),
+        error: z.string().optional(),
+        hint: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+    },
+    async ({ sessionId, sourcePath, repoPath, driver, command, timeoutMs }) => {
+      try {
+        const result = startExternalCaptureWorkflow({
+          id: sessionId,
+          sourcePath,
+          root: repoPath ?? ".",
+          driver,
+          command,
+          timeoutMs,
+        });
+        return textResult(result, !result.ok);
+      } catch (e) {
+        return textResult(
+          {
+            ok: false,
+            error: `Capture start-external failed: ${(e as Error).message}`,
+            hint: "Use a valid sessionId and sourcePath.",
+          },
+          true,
+        );
+      }
+    },
+  );
+
+  server.registerTool(
+    "agent_video_capture_exec_cli",
+    {
+      title: "Run a real CLI action and record its capture event",
+      description: `Execute a real external CLI command while a capture is active. agent-video records a command start/end window, infers a click/type/scroll/navigate event when possible, and records it only if the command exits 0.
+
+This does not reimplement agent-browser, computer-use, CUA, or agent-device. It supervises the command and keeps structured stdout/stderr.
+
+Examples:
+  agent_video_capture_exec_cli({ "sessionId": "demo", "command": ["agent-browser", "click", "@e3"] })
+  agent_video_capture_exec_cli({ "sessionId": "demo", "eventType": "click", "x": 120, "y": 300, "command": ["agent-device", "tap", "120", "300"] })`,
+      inputSchema: {
+        sessionId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+        command: z.array(z.string()).min(1).describe("The real CLI command to run."),
+        repoPath: z.string().optional().describe("Repo root containing .agent-video/captures. Default: ."),
+        eventType: CAPTURE_EXEC_EVENT_TYPE.optional().describe("auto infers from command; none records no event."),
+        x: z.number().optional().describe("Required with explicit click/type/scroll/navigate/idle eventType."),
+        y: z.number().optional().describe("Required with explicit click/type/scroll/navigate/idle eventType."),
+        startedAtEpochMs: z.number().optional().describe("Override start time if no start-external state exists."),
+        timeoutMs: z.number().int().positive().optional().describe("Timeout for the command. Default: 120000."),
+      },
+      outputSchema: {
+        ok: z.boolean(),
+        sessionId: z.string().optional(),
+        exitCode: z.number().optional(),
+        stdout: z.string().optional(),
+        stderr: z.string().optional(),
+        timedOut: z.boolean().optional(),
+        command: z.record(z.unknown()).optional(),
+        event: CAPTURE_EVENT.optional(),
+        eventSource: z.string().optional(),
+        eventCount: z.number().optional(),
+        error: z.string().optional(),
+        hint: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+    },
+    async ({ sessionId, command, repoPath, eventType, x, y, startedAtEpochMs, timeoutMs }) => {
+      try {
+        const result = execCapturedCommandWorkflow({
+          id: sessionId,
+          root: repoPath ?? ".",
+          command,
+          eventType: eventType ?? "auto",
+          x,
+          y,
+          startedAtEpochMs,
+          timeoutMs,
+        });
+        return textResult(result, !result.ok);
+      } catch (e) {
+        return textResult(
+          {
+            ok: false,
+            error: `Capture exec failed: ${(e as Error).message}`,
+            hint: "Run start-external first, or pass eventType with x/y for tools that cannot be inferred.",
+          },
+          true,
+        );
+      }
+    },
+  );
+
+  server.registerTool(
+    "agent_video_capture_stop_external",
+    {
+      title: "Stop tracking an external recorder and import the video",
+      description: `Stop an external recording session. Optionally runs a real record-stop command, marks the session stopped, and imports the raw recording into .agent-video/captures/<sessionId>.mp4.
+
+Example:
+  agent_video_capture_stop_external({ "sessionId": "demo", "command": ["agent-browser", "record", "stop"] })`,
+      inputSchema: {
+        sessionId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+        repoPath: z.string().optional().describe("Repo root containing .agent-video/captures. Default: ."),
+        command: z.array(z.string()).optional().describe("Optional real CLI command to stop recording."),
+        noImport: z.boolean().optional().describe("Only mark stopped; do not import the raw recording."),
+        timeoutMs: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Timeout for the optional command. Default: 120000."),
+      },
+      outputSchema: {
+        ok: z.boolean(),
+        sessionId: z.string().optional(),
+        state: z.record(z.unknown()).optional(),
+        command: z.record(z.unknown()).optional(),
+        imported: z.record(z.unknown()).optional(),
+        eventCount: z.number().optional(),
+        error: z.string().optional(),
+        hint: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+    },
+    async ({ sessionId, repoPath, command, noImport, timeoutMs }) => {
+      try {
+        const result = stopExternalCaptureWorkflow({
+          id: sessionId,
+          root: repoPath ?? ".",
+          command,
+          noImport,
+          timeoutMs,
+        });
+        return textResult(result, !result.ok);
+      } catch (e) {
+        return textResult(
+          {
+            ok: false,
+            error: `Capture stop-external failed: ${(e as Error).message}`,
+            hint: "Ensure the raw recording exists and retry.",
+          },
+          true,
+        );
+      }
+    },
+  );
+
+  server.registerTool(
+    "agent_video_record_capture_event",
+    {
+      title: "Append an action event to a capture session",
+      description: `Append one browser/app action event to a capture session sidecar. A browser MCP bridge can call this after click/type/scroll/navigate tools so screencap playback.mode="smart" knows where to zoom while visual analysis trims dead time.
+
+Example:
+  agent_video_record_capture_event({ "sessionId": "demo", "type": "click", "x": 640, "y": 360, "tMs": 1234 })`,
+      inputSchema: {
+        sessionId: z
+          .string()
+          .regex(/^[A-Za-z0-9_-]{1,64}$/)
+          .describe("Capture session id created by capture/import."),
+        type: CAPTURE_EVENT_TYPE.describe("Action type from the browser/app driver."),
+        x: z.number().describe("Source-pixel x coordinate of the action."),
+        y: z.number().describe("Source-pixel y coordinate of the action."),
+        tMs: z.number().min(0).describe("Milliseconds since recording start."),
+        repoPath: z.string().optional().describe("Repo root containing .agent-video/captures. Default: ."),
+      },
+      outputSchema: {
+        ok: z.boolean(),
+        sessionId: z.string().optional(),
+        event: CAPTURE_EVENT.optional(),
+        eventCount: z.number().optional(),
+        error: z.string().optional(),
+        hint: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ sessionId, type, x, y, tMs, repoPath }) => {
+      try {
+        const event = normalizeCaptureEvents([{ type, x, y, t: tMs }])[0]!;
+        recordCaptureEvent(sessionId, repoPath ?? ".", event);
+        return textResult({
+          ok: true,
+          sessionId,
+          event,
+          eventCount: loadSessionEvents(sessionId, repoPath ?? ".")?.length ?? 0,
+        });
+      } catch (e) {
+        return textResult(
+          {
+            ok: false,
+            error: `Capture event failed: ${(e as Error).message}`,
+            hint: "Use type click|type|scroll|navigate|idle and numeric x/y/tMs values.",
           },
           true,
         );

@@ -62,8 +62,35 @@ Run `agent-video schema` for the full contract.
 
 - **Compose** (Mode B) — the renderer draws scenes (code, diffs, charts, titles) from your
   repo. Deterministic: same spec → same mp4.
-- **Capture** (Mode A) — a `screencap` scene composites a real screen recording (macOS), for
-  showing a running app or demo.
+- **Capture** (Mode A) — a `screencap` scene composites a real screen recording, for
+  showing a running app or demo. `playback.mode: "smart"` removes visually idle time
+  from any recording, and uses click/type/scroll/navigate events when available for
+  better presentation. Wrapped external CLI actions record a start/end event window;
+  smart playback aligns that cue to visual activity so delayed tool dispatch does not
+  highlight stale frames. Landscape/desktop captures use ScreenStudio-style camera
+  follow by default; portrait/mobile captures stay full-frame and show tap/type
+  feedback instead.
+
+```bash
+agent-video capture start-external ./demo.webm --id demo -- agent-browser record start ./demo.webm
+agent-video capture exec --id demo -- agent-browser click @submit
+agent-video capture exec --id demo -- agent-browser type @email "dev@example.com"
+agent-video capture stop-external --id demo -- agent-browser record stop
+agent-video capture analyze --id demo
+```
+
+```jsonc
+{
+  "kind": "screencap",
+  "content": {
+    "source": "browser",
+    "sessionRef": "demo",
+    "playback": { "mode": "smart", "camera": "auto", "actionEffects": "auto" },
+  },
+  "narration": "Here is the useful interaction without the dead air.",
+  "duration": "auto",
+}
+```
 
 ## For agents
 
@@ -74,15 +101,15 @@ an agent the workflow (gather `git diff` → author `spec.json` → validate →
 
 ## Packages
 
-| Package                           | Role                                                |
-| --------------------------------- | --------------------------------------------------- |
-| [`core`](packages/core)           | spec types + JSON Schema + git/diff resolver        |
-| [`compose`](packages/compose)     | Mode B: spec scenes → frames (canvas + Shiki)       |
-| [`capture`](packages/capture)     | Mode A: macOS screen recording → screencap clips    |
-| [`providers`](packages/providers) | TTS gateway (narration audio)                       |
-| [`render`](packages/render)       | orchestrator: spec → mp4 (two-pass) + local preview |
-| [`cli`](packages/cli)             | the `agent-video` binary                            |
-| [`mcp`](packages/mcp)             | MCP server over the same render library             |
+| Package                           | Role                                                 |
+| --------------------------------- | ---------------------------------------------------- |
+| [`core`](packages/core)           | spec types + JSON Schema + git/diff resolver         |
+| [`compose`](packages/compose)     | Mode B: spec scenes → frames (canvas + Shiki)        |
+| [`capture`](packages/capture)     | Mode A: screen recordings → directed screencap clips |
+| [`providers`](packages/providers) | TTS gateway (narration audio)                        |
+| [`render`](packages/render)       | orchestrator: spec → mp4 (two-pass) + local preview  |
+| [`cli`](packages/cli)             | the `agent-video` binary                             |
+| [`mcp`](packages/mcp)             | MCP server over the same render library              |
 
 ## Development
 

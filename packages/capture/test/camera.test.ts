@@ -14,9 +14,13 @@ function probeSize(path: string): string {
 }
 
 function firstFrameAverageRgb(path: string): { r: number; g: number; b: number } {
+  return frameAverageRgbAt(path, 0);
+}
+
+function frameAverageRgbAt(path: string, timeSec: number): { r: number; g: number; b: number } {
   const buf = execFileSync(
     "ffmpeg",
-    ["-v", "error", "-i", path, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+    ["-v", "error", "-i", path, "-ss", String(timeSec), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
     {
       maxBuffer: 16 * 1024 * 1024,
     },
@@ -152,4 +156,95 @@ test("compositeScreencap honors sourceStartSec/sourceDurationSec", () => {
   });
   const avg = firstFrameAverageRgb(out);
   expect(avg.b).toBeGreaterThan(avg.r);
+}, 60_000);
+
+test("compositeScreencap can draw action feedback without camera zoom", () => {
+  const rec = join(root, "tap-glow.mp4");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=black:size=160x90:rate=30:d=1",
+    "-pix_fmt",
+    "yuv420p",
+    rec,
+  ]);
+  const out = join(root, "tap-glow-out.mp4");
+  compositeScreencap({
+    source: rec,
+    outPath: out,
+    width: 160,
+    height: 90,
+    durationSec: 1,
+    fps: 30,
+    actionEffects: [{ t: 250, type: "click", x: 80, y: 45 }],
+  });
+  const glow = frameAverageRgbAt(out, 0.3);
+  expect(glow.r).toBeGreaterThan(glow.b + 20);
+  expect(glow.g).toBeGreaterThan(glow.b + 20);
+}, 60_000);
+
+test("compositeScreencap preserves late sparse playback segments", () => {
+  const rec = join(root, "sparse-red-blue.mp4");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=red:size=160x90:rate=30:d=4",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=blue:size=160x90:rate=30:d=4",
+    "-filter_complex",
+    "[0:v][1:v]concat=n=2:v=1:a=0,fps=1/4,format=yuv420p[v]",
+    "-map",
+    "[v]",
+    rec,
+  ]);
+  const out = join(root, "sparse-out.mp4");
+  compositeScreencap({
+    source: rec,
+    outPath: out,
+    width: 160,
+    height: 90,
+    durationSec: 2,
+    fps: 30,
+    playbackPlan: {
+      sourceDurationMs: 8000,
+      outputDurationMs: 2000,
+      droppedBeforeMs: 0,
+      droppedAfterMs: 3000,
+      actionCount: 2,
+      segments: [
+        {
+          type: "action",
+          sourceStartMs: 0,
+          sourceEndMs: 1000,
+          sourceDurationMs: 1000,
+          outputStartMs: 0,
+          outputEndMs: 1000,
+          outputDurationMs: 1000,
+          playbackRate: 1,
+        },
+        {
+          type: "action",
+          sourceStartMs: 4000,
+          sourceEndMs: 5000,
+          sourceDurationMs: 1000,
+          outputStartMs: 1000,
+          outputEndMs: 2000,
+          outputDurationMs: 1000,
+          playbackRate: 1,
+        },
+      ],
+    },
+  });
+  const late = frameAverageRgbAt(out, 1.5);
+  expect(late.b).toBeGreaterThan(late.r);
 }, 60_000);

@@ -473,6 +473,91 @@
                           "end"
                         ],
                         "additionalProperties": false
+                      },
+                      "playback": {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "realtime",
+                              "action-only",
+                              "smart"
+                            ],
+                            "default": "smart",
+                            "description": "\"realtime\" plays linearly; \"action-only\" trims from event sidecars; \"smart\" merges visual activity with event hints."
+                          },
+                          "preActionPaddingMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10000,
+                            "description": "Milliseconds of context to keep before each click/type/scroll/navigate event."
+                          },
+                          "postActionPaddingMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10000,
+                            "description": "Milliseconds of context to keep after each click/type/scroll/navigate event."
+                          },
+                          "targetGapOutputMs": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000,
+                            "description": "Preferred visible length for long gaps between action windows after compression."
+                          },
+                          "maxGapOutputMs": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000,
+                            "description": "Maximum visible length for any compressed gap between action windows."
+                          },
+                          "maxPlaybackRate": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 64,
+                            "description": "Maximum fast-forward rate used for compressed gaps before final narration fitting."
+                          },
+                          "minGapToSpeedUpMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10000,
+                            "description": "Gaps shorter than this stay at normal speed before final narration fitting."
+                          },
+                          "camera": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "follow",
+                              "none"
+                            ],
+                            "default": "auto",
+                            "description": "\"auto\" follows desktop/landscape actions but keeps portrait/mobile captures full-frame."
+                          },
+                          "actionEffects": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "tap-glow",
+                              "none"
+                            ],
+                            "default": "auto",
+                            "description": "\"auto\" adds touch/type feedback when the camera is not following the action."
+                          },
+                          "visualSampleFps": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 12,
+                            "description": "Frame samples per second for \"smart\" visual activity detection. Default: 4."
+                          },
+                          "visualMinScore": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 50,
+                            "description": "Minimum average grayscale frame-diff score for \"smart\" visual activity. Default: 0.7."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "How to play back a screencap recording."
                       }
                     },
                     "required": [

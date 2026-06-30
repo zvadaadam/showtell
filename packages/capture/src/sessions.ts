@@ -1,5 +1,5 @@
 /** Capture session store: recordings live at <root>/.agent-video/captures/<id>.mp4. */
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
 
@@ -54,6 +54,47 @@ export function ensureSyntheticSession(id: string, root = ".", seconds = 4): str
     { stdio: ["ignore", "pipe", "pipe"] },
   );
   return p;
+}
+
+export function importCaptureSession(opts: { id: string; sourcePath: string; root?: string }): {
+  sessionId: string;
+  path: string;
+  bytes: number;
+} {
+  assertValidSessionId(opts.id);
+  if (!existsSync(opts.sourcePath)) {
+    throw new Error(`Capture source not found: ${opts.sourcePath}`);
+  }
+  ensureCapturesDir(opts.root);
+  const out = sessionPath(opts.id, opts.root);
+  execFileSync(
+    "ffmpeg",
+    [
+      "-y",
+      "-loglevel",
+      "error",
+      "-i",
+      opts.sourcePath,
+      "-map",
+      "0:v:0",
+      "-an",
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-preset",
+      "medium",
+      "-threads",
+      "1",
+      "-flags:v",
+      "+bitexact",
+      "-map_metadata",
+      "-1",
+      out,
+    ],
+    { stdio: ["ignore", "pipe", "pipe"] },
+  );
+  return { sessionId: opts.id, path: out, bytes: statSync(out).size };
 }
 
 /**
