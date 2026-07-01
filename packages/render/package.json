@@ -12,6 +12,7 @@
     "@agent-video/capture": "workspace:*",
     "@agent-video/compose": "workspace:*",
     "@agent-video/core": "workspace:*",
+    "@agent-video/hyperframes": "workspace:*",
     "@agent-video/providers": "workspace:*"
   }
 }

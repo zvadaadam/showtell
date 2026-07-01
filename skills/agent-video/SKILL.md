@@ -15,7 +15,7 @@ Turn your work into a short narrated video. You author a **`spec.json`**; the
 serves a live **web player** — a watch surface with chaptered scenes, a
 click-to-seek transcript, speed control, and the repo metadata. The deliverable
 you hand back is a **running watch URL, not a file**. Because it runs locally,
-code/diff scenes reference the repo and the renderer reads the **live bytes** —
+code/diff visuals reference the repo and the renderer reads the **live bytes** —
 the code on screen is always correct.
 
 ## Use when
@@ -29,10 +29,96 @@ the code on screen is always correct.
 
 ## The one rule
 
-You author **only** the `spec.json` (scenes + narration). You **never** write
-ffmpeg, frame math, or paste source code into the spec. `code`/`diff` scenes
-carry **references** (`file`, `lineStart`/`lineEnd`, git `ref`); the renderer
-reads the file. Pasting code is wrong and will drift from the source.
+Author intent and visuals; never author execution machinery. For quick videos,
+that can be a single `spec.json` with scenes + narration. For richer videos, it
+is a bundle with `spec.json`, hyperframes, and declared assets. You **never**
+write ffmpeg, frame math, pasted repo source, or `compiled-plan.json`.
+`code`/`diff` visuals carry **references** (`file`, `lineStart`/`lineEnd`, git
+`ref`); the renderer reads the file. Pasting code is wrong and will drift from
+the source.
+
+## Bundle Videos
+
+Use a bundle when the video needs custom pacing, richer layouts, reusable
+hyperframes, captions around visuals, music ranges, or multiple repo/data inputs
+in one narrated chapter:
+
+```text
+my-video.agent-video/
+  spec.json
+  hyperframes/*.tsx
+  assets/**
+  compiled-plan.json  # renderer-generated after compile
+```
+
+The agent is the director. It writes narration, declares repo refs/assets,
+chooses music/caption policy, and may create deterministic hyperframe code for
+richer visuals. The renderer remains the executor: it validates, resolves
+refs/assets, measures TTS, compiles exact timings, renders, and muxes. Do not
+hardcode a new renderer scene template when a smart agent can compose a one-off
+hyperframe from safe primitives. See `docs/bundle-v2.md`.
+
+Put shared video style in `meta.theme`, not scattered through component code.
+Use a preset plus small semantic overrides:
+`{ "preset": "agent-dark" | "paper" | "neutral", "colors": { "accent": "#2563eb" } }`.
+Semantic `colors` define foreground/background/surface/accent/status/caption
+tokens, and `typography` defines `display`, `body`, and `mono` roles. Hyperframe
+components receive a fully resolved `ctx.theme` and the renderer uses it for
+built-in component drawing. Do not use Tailwind-style `className` strings or CSS
+font stacks in hyperframes. `Stage tone` is a local treatment hint, not the video
+palette selector; use `meta.theme.preset` for light/dark/neutral.
+
+For hyperframes, declare resource ports once in the hyperframe module's literal
+`inputs` object. In `spec.json`, use `visual.inputs` only to map those ports to
+scene refs, bundle assets, named ranges, or direct time refs such as `line:l2`.
+Keep visual copy/layout settings in `visual.props`.
+
+Reusable components live in `@agent-video/hyperframes`. Run
+`agent-video bundle components` before writing a custom hyperframe. Think in
+three layers:
+
+- host primitives: `Stage`, `Stack`, `Grid`, `Text`, `Panel`, `Badge`, `Meter`,
+  `Callout`, `TimelineRail`, `SystemMap`, captions
+- media primitives: `CodeRef`, `DiffRef`, `Chart`, `ImageAsset`
+- story components: `DecisionGrid`, `SignalWall`, `LaneStack`, `ProofLadder`,
+  `StatusRail`, `PhaseBanner`, `CaptionDeck`
+
+The command returns structured JSON with import names, layers, prop hints, and
+JSX examples. Use those examples as the default starting point for custom
+hyperframes.
+
+Starter templates are complete examples, not the main reuse layer. Run
+`agent-video bundle templates` when a full starter is close to the story, then
+copy it into the bundle and adapt its `propsSchema`, `inputs`, and
+`render(ctx)`. Use `KineticCaption` or lower-third components for TikTok-style
+visual text. Canonical subtitles still come from exact narration text. If the
+spec uses burn-in captions, omit `KineticCaption` unless you intentionally want
+a second visual caption layer.
+
+Visual pacing rule for bundle v2: **one focal visual per narration line**. Do
+not put the system map, chart, live code, callout, and captions all on one
+frame. Great agent videos feel fast because the focus changes beat-by-beat, not
+because every possible evidence object is visible at once. If a frame has more
+than one primary panel, split it into another narration line, optional beat, or
+scene.
+
+Current hyperframe rendering samples one still frame per narration line. Use
+`ctx.scene.lineIndex`, `ctx.scene.lineId`, `ctx.range()`, `ctx.scene.progress`,
+and `ctx.viewport` to choose the right line-state visual; do not rely on
+per-frame animation yet. Hyperframes are trusted local code with static policy
+lint, not a hostile-code sandbox: import only `@agent-video/hyperframes` and
+declare all repo/assets/ranges in `spec.json`.
+
+Bundle commands:
+
+- `agent-video bundle schema`
+- `agent-video bundle validate <bundle-dir>`
+- `agent-video bundle inspect <bundle-dir>`
+- `agent-video bundle components`
+- `agent-video bundle templates`
+- `agent-video bundle workshop <bundle-dir> [--out DIR] [--aspect 16:9,9:16]`
+- `agent-video bundle compile <bundle-dir>`
+- `agent-video bundle render <bundle-dir> [--out DIR] [--aspect 16:9,9:16]`
 
 ## Workflow
 
@@ -41,6 +127,10 @@ reads the file. Pasting code is wrong and will drift from the source.
 2. **Author `spec.json`**: an ordered list of scenes, each with `narration`.
    Keep narration to ~1–2 sentences per scene; the video paces itself to the
    spoken audio (`"duration": "auto"`).
+   - **For visual clarity**, make every narration line answer: what is the one
+     thing on screen right now? One line can show a map, the next can cut to
+     code, the next can cut to data. Avoid dashboard-like frames where multiple
+     major panels compete for attention.
    - **For legibility**, keep `code` excerpts focused (~6–25 lines, lines ≤ ~90
      chars) and point `focus` at the lines your narration calls out. The
      renderer auto-fits the font, so smaller, tighter excerpts read far better.
@@ -59,6 +149,11 @@ reads the file. Pasting code is wrong and will drift from the source.
    `bun run build:player`.
 6. **Report**: reply with the `watchUrl` — a live local URL the user opens, **not
    a file path** — and one sentence describing the video.
+
+For bundle videos, run `agent-video bundle workshop <bundle-dir>` before the
+final render when visual polish matters. It renders real scene/line/aspect PNGs
+through the same hyperframe canvas renderer, producing a static gallery that is
+much faster to review than a full MP4.
 
 ## The spec
 

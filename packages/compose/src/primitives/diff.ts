@@ -1,6 +1,6 @@
 import type { SKRSContext2D } from "@napi-rs/canvas";
 import type { DiffScene, ResolvedDiff } from "@agent-video/core";
-import { THEME } from "../theme.ts";
+import { THEME, type CanvasTheme } from "../theme.ts";
 import type { Dims } from "../dims.ts";
 import { fitMonoFont, windowAround, drawCard } from "../draw.ts";
 
@@ -11,23 +11,50 @@ const DEL_FG = "#ff9492";
 const CONTEXT_FG = "#b8bdca";
 const HUNK_FG = "#7c8cff";
 
-/** Draw a unified-diff card (read from real `git diff`). Static (v1a); animated
- *  Shiki Magic Move is the HTML-engine upgrade. */
-export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDiff, dims: Dims): void {
-  const { codeX, codeY, codeW, codeH, pad } = drawCard(ctx, dims, {
-    file: scene.content.file,
-    badge: [
-      { text: `+${diff.added}`, color: ADD_FG },
-      { text: ` −${diff.removed}`, color: DEL_FG },
-    ],
-  });
+export interface DiffDrawOptions {
+  focus?: "file" | "changed" | number[];
+  reveal?: number;
+  theme?: CanvasTheme;
+}
+
+/** Draw a unified-diff card from real `git diff` bytes. */
+export function drawDiff(
+  ctx: SKRSContext2D,
+  scene: DiffScene,
+  diff: ResolvedDiff,
+  dims: Dims,
+  opts: DiffDrawOptions = {},
+): void {
+  const theme = opts.theme ?? THEME;
+  const { codeX, codeY, codeW, codeH, pad } = drawCard(
+    ctx,
+    dims,
+    {
+      file: scene.content.file,
+      badge: [
+        { text: `+${diff.added}`, color: ADD_FG },
+        { text: ` −${diff.removed}`, color: DEL_FG },
+      ],
+    },
+    theme,
+  );
 
   const innerPad = Math.round(pad * 0.5);
   // Window long diffs to a legible cap, anchored on the first actual change —
   // the +/- lines are the whole point of a diff scene, not the leading context.
   const base = Math.min(dims.width, dims.height);
   const firstChange = diff.lines.findIndex((l) => l.kind === "add" || l.kind === "del");
-  const { view, hiddenNote } = windowAround(diff.lines, firstChange < 0 ? 0 : firstChange);
+  const focusLine = Array.isArray(opts.focus) ? opts.focus[0] : undefined;
+  const anchor = opts.focus === "file" ? 0 : typeof focusLine === "number" ? focusLine : firstChange;
+  const windowed = windowAround(diff.lines, anchor < 0 ? 0 : anchor);
+  const reveal = typeof opts.reveal === "number" ? Math.max(0, Math.min(1, opts.reveal)) : undefined;
+  const visibleCount =
+    reveal === undefined ? windowed.view.length : Math.max(1, Math.ceil(windowed.view.length * reveal));
+  const view = windowed.view.slice(0, visibleCount);
+  const hiddenByWindow = diff.lines.length - windowed.view.length;
+  const hiddenByReveal = windowed.view.length - view.length;
+  const hidden = hiddenByWindow + hiddenByReveal;
+  const hiddenNote = hidden > 0 ? `+${hidden} more line${hidden > 1 ? "s" : ""}` : "";
 
   const longestChars = 2 + Math.max(1, ...view.map((l) => l.content.length));
   const noteH = hiddenNote ? Math.round(base * 0.03) : 0;
@@ -40,9 +67,9 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
     maxFont: Math.round(base * 0.028),
     minFont: Math.round(base * 0.02),
     lineHeightRatio: 1.5,
-    family: THEME.mono,
+    family: theme.mono,
   });
-  ctx.font = `${fontSize}px '${THEME.mono}'`;
+  ctx.font = `${fontSize}px '${theme.mono}'`;
   ctx.textAlign = "left";
 
   const markerX = codeX + innerPad;
@@ -77,8 +104,8 @@ export function drawDiff(ctx: SKRSContext2D, scene: DiffScene, diff: ResolvedDif
   }
 
   if (hiddenNote) {
-    ctx.font = `${Math.round(noteH * 0.6)}px '${THEME.sans}'`;
-    ctx.fillStyle = THEME.subtle;
+    ctx.font = `${Math.round(noteH * 0.6)}px '${theme.sans}'`;
+    ctx.fillStyle = theme.subtle;
     ctx.textAlign = "right";
     ctx.textBaseline = "bottom";
     ctx.fillText(hiddenNote, codeX + codeW - innerPad, codeY + codeH - innerPad * 0.4);

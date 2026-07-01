@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,6 +18,50 @@ function run(args: string[]): { code: number; out: unknown; err: unknown } {
     }
   };
   return { code: r.status ?? 1, out: parse(r.stdout), err: parse(r.stderr) };
+}
+
+function tempBundle(): string {
+  const dir = mkdtempSync(join(tmpdir(), "av-cli-bundle-"));
+  cpSync(join(ROOT, "examples", "bundle-v2"), dir, { recursive: true });
+  rmSync(join(dir, "compiled-plan.json"), { force: true });
+  const specPath = join(dir, "spec.json");
+  const spec = JSON.parse(readFileSync(specPath, "utf-8")) as { meta: { repo: { path: string } } };
+  spec.meta.repo.path = ROOT;
+  writeFileSync(specPath, JSON.stringify(spec, null, 2) + "\n");
+  return dir;
+}
+
+function miniHyperframeBundle(): string {
+  const dir = mkdtempSync(join(tmpdir(), "av-cli-workshop-"));
+  mkdirSync(join(dir, "hyperframes"), { recursive: true });
+  writeFileSync(
+    join(dir, "hyperframes", "frame.tsx"),
+    [
+      "/* @jsx h */",
+      'import { Stage, Text, h, defineHyperframe } from "@agent-video/hyperframes";',
+      'const propsSchema = { type: "object", additionalProperties: false, required: ["title"], properties: { title: { type: "string" } } };',
+      "const inputs = {};",
+      "function render(ctx) {",
+      '  return <Stage tone="dark" padding="xl"><Text variant="title">{ctx.props.title}</Text></Stage>;',
+      "}",
+      "export default defineHyperframe({ schemaVersion: 1, propsSchema, inputs, render });",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(dir, "spec.json"),
+    JSON.stringify({
+      version: 2,
+      meta: { title: "Workshop mini", repo: { path: ROOT }, aspectRatios: ["16:9"] },
+      scenes: [
+        {
+          id: "intro",
+          narration: { lines: [{ id: "l1", text: "This workshop frame renders one line." }] },
+          visual: { kind: "hyperframe", src: "hyperframes/frame.tsx", props: { title: "Workshop mini" } },
+        },
+      ],
+    }),
+  );
+  return dir;
 }
 
 test("schema → JSON Schema on stdout, exit 0", () => {
@@ -38,6 +82,124 @@ test("validate a good spec → ok:true, exit 0", () => {
   expect(out).toMatchObject({ ok: true });
   expect((out as { sceneCount: number }).sceneCount).toBeGreaterThan(0);
 });
+
+test("bundle schema → JSON Schema on stdout, exit 0", () => {
+  const { code, out } = run(["bundle", "schema"]);
+  expect(code).toBe(0);
+  expect(out).toHaveProperty("definitions");
+});
+
+test("bundle validate → ok:true with hyperframes", () => {
+  const { code, out } = run(["bundle", "validate", "examples/bundle-v2"]);
+  expect(code).toBe(0);
+  const o = out as { ok: boolean; hyperframes: unknown[] };
+  expect(o.ok).toBe(true);
+  expect(o.hyperframes.length).toBeGreaterThan(0);
+});
+
+test("bundle inspect → hyperframe contracts and implicit beats", () => {
+  const { code, out } = run(["bundle", "inspect", "examples/bundle-v2"]);
+  expect(code).toBe(0);
+  const o = out as {
+    ok: boolean;
+    stage: string;
+    scenes: {
+      beats: { source: string; items: { id: string }[] };
+      visual: {
+        kind: string;
+        inputs: { name: string; kind: string; required: boolean; value: unknown }[];
+      };
+    }[];
+  };
+  expect(o).toMatchObject({ ok: true, stage: "bundle-inspect" });
+  expect(o.scenes[0]!.beats.source).toBe("implicit-per-line");
+  expect(o.scenes[0]!.beats.items.map((beat) => beat.id)).toContain("l1");
+  expect(o.scenes[0]!.visual.kind).toBe("hyperframe");
+  expect(o.scenes[0]!.visual.inputs.find((input) => input.name === "source")).toMatchObject({
+    kind: "repo",
+    required: true,
+    value: "contract",
+  });
+  expect(o.scenes[0]!.visual.inputs.find((input) => input.name === "metrics")).toMatchObject({
+    kind: "asset",
+    required: true,
+    value: "metrics",
+  });
+  expect(o.scenes[0]!.visual.inputs.find((input) => input.name === "reveal")).toMatchObject({
+    kind: "range",
+    required: true,
+    value: "line:l2",
+  });
+});
+
+test("bundle templates → reusable hyperframe starter list", () => {
+  const { code, out } = run(["bundle", "templates"]);
+  expect(code).toBe(0);
+  const o = out as {
+    ok: boolean;
+    stage: string;
+    package: string;
+    templates: { id: string; path: string; visualCaption?: boolean }[];
+  };
+  expect(o).toMatchObject({ ok: true, stage: "bundle-templates", package: "@agent-video/hyperframes" });
+  expect(o.templates.map((template) => template.id)).toContain("code-kinetic-caption");
+  expect(o.templates.some((template) => template.visualCaption)).toBe(true);
+});
+
+test("bundle components → reusable hyperframe component kit", () => {
+  const { code, out } = run(["bundle", "components"]);
+  expect(code).toBe(0);
+  const o = out as {
+    ok: boolean;
+    stage: string;
+    package: string;
+    components: { importName: string; layer: string }[];
+  };
+  expect(o).toMatchObject({ ok: true, stage: "bundle-components", package: "@agent-video/hyperframes" });
+  expect(o.components).toContainEqual(expect.objectContaining({ importName: "DecisionGrid", layer: "story" }));
+  expect(o.components).toContainEqual(expect.objectContaining({ importName: "CodeRef", layer: "media" }));
+});
+
+test("bundle compile → measured plan and refs", () => {
+  const dir = tempBundle();
+  const { code, out } = run(["bundle", "compile", dir]);
+  expect(code).toBe(0);
+  const o = out as { ok: boolean; stage: string; durationMs: number; refs: unknown[] };
+  expect(o).toMatchObject({ ok: true, stage: "bundle-compile" });
+  expect(o.durationMs).toBeGreaterThan(0);
+  expect(o.refs.length).toBeGreaterThan(0);
+}, 30_000);
+
+test("bundle workshop → static rendered frame gallery", () => {
+  const dir = miniHyperframeBundle();
+  const outDir = mkdtempSync(join(tmpdir(), "av-cli-workshop-out-"));
+  const { code, out } = run(["bundle", "workshop", dir, "--out", outDir, "--aspect", "16:9"]);
+  expect(code).toBe(0);
+  const o = out as { ok: boolean; stage: string; frames: { sceneId?: string; lineId?: string; path?: string }[] };
+  expect(o).toMatchObject({ ok: true, stage: "bundle-workshop" });
+  expect(o.frames).toHaveLength(1);
+  expect(o.frames[0]).toMatchObject({ sceneId: "intro", lineId: "l1" });
+}, 30_000);
+
+test("workshop render → built-in component gallery", () => {
+  const outDir = mkdtempSync(join(tmpdir(), "av-cli-component-workshop-"));
+  const { code, out } = run(["workshop", "render", "--out", outDir, "--aspect", "16:9"]);
+  expect(code).toBe(0);
+  const o = out as { ok: boolean; stage: string; frames: { id: string }[] };
+  expect(o).toMatchObject({ ok: true, stage: "workshop-render" });
+  expect(o.frames.map((frame) => frame.id)).toContain("signal-wall");
+}, 30_000);
+
+test("bundle render → mp4 output and compiled plan", () => {
+  const dir = tempBundle();
+  const outDir = mkdtempSync(join(tmpdir(), "av-cli-bundle-out-"));
+  const { code, out } = run(["bundle", "render", dir, "--out", outDir, "--aspect", "16:9"]);
+  expect(code).toBe(0);
+  const o = out as { ok: boolean; stage: string; durationMs: number; outputs: { path: string; durationMs: number }[] };
+  expect(o).toMatchObject({ ok: true, stage: "bundle-render" });
+  expect(o.outputs).toHaveLength(1);
+  expect(o.outputs[0]!.durationMs).toBeGreaterThan(0);
+}, 120_000);
 
 test("validate a bad spec → ok:false, errors carry a hint, exit 1", () => {
   const dir = mkdtempSync(join(tmpdir(), "av-cli-"));

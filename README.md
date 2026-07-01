@@ -12,6 +12,12 @@ spec.json  ──▶  agent-video render  ──▶  out-16x9.mp4 + out-9x16.mp4
                   TTS → ffmpeg)
 ```
 
+For great videos, use a bundle: a directory with `spec.json`,
+agent-authored `hyperframes/*.tsx`, declared assets, and a renderer-emitted
+`compiled-plan.json`. For quick videos, the CLI can also render a single
+`spec.json` with built-in visuals. See
+[docs/bundle-v2.md](docs/bundle-v2.md) and [examples/bundle-v2](examples/bundle-v2).
+
 ## Quickstart
 
 Prereqs: [bun](https://bun.sh) and [ffmpeg](https://ffmpeg.org) (`brew install ffmpeg`).
@@ -23,16 +29,25 @@ bun run build:cli                 # → ./dist/agent-video (a standalone binary)
 ./dist/agent-video validate examples/how-it-works.spec.json
 ./dist/agent-video render   examples/how-it-works.spec.json --out .agent-video/out
 ./dist/agent-video preview  examples/how-it-works.spec.json   # serves a local watch page
+
+./dist/agent-video bundle validate examples/bundle-v2
+./dist/agent-video bundle inspect  examples/bundle-v2
+./dist/agent-video bundle components
+./dist/agent-video bundle templates
+./dist/agent-video bundle compile  examples/bundle-v2
+./dist/agent-video bundle render   examples/bundle-v2 --out .agent-video/bundle-v2 --aspect 16:9,9:16
 ```
 
 During development you can skip the build and run the CLI directly: `bun packages/cli/src/index.ts <cmd>`.
 
-## The one rule
+## The Authoring Rule
 
-You (or an agent) author **only** a `spec.json` — an ordered list of scenes, each with
-`narration`. You **never** write ffmpeg, frame math, or paste source code. `code`/`diff`
-scenes carry **references** (`file`, `lineStart`/`lineEnd`, git `ref`); the renderer reads
-the live bytes, so the code is always ground-truth.
+The agent authors intent and visuals, never execution machinery. In a simple
+`spec.json`, that means scenes with narration and built-in visuals. In a bundle,
+that means `spec.json` plus deterministic hyperframes. The agent **never**
+writes ffmpeg, frame math, pasted source code, or `compiled-plan.json`.
+`code`/`diff` visuals carry **references** (`file`, `lineStart`/`lineEnd`, git
+`ref`); the renderer reads the live bytes, so the code is always ground-truth.
 
 ```jsonc
 {
@@ -54,14 +69,14 @@ the live bytes, so the code is always ground-truth.
 }
 ```
 
-Six scene kinds: **title · code · diff · talking-points · chart · screencap**. Every scene
-has `narration` + `"duration": "auto"` (length derived from the spoken audio).
-Run `agent-video schema` for the full contract.
+Built-in visuals cover **title · code · diff · talking-points · chart · screencap**.
+Every scene has `narration` + `"duration": "auto"` (length derived from the
+spoken audio). Run `agent-video schema` for the simple spec contract.
 
 ## Two modes
 
 - **Compose** (Mode B) — the renderer draws scenes (code, diffs, charts, titles) from your
-  repo. Deterministic: same spec → same mp4.
+  repo, assets, and hyperframe primitives. Deterministic: same spec → same mp4.
 - **Capture** (Mode A) — a `screencap` scene composites a real screen recording, for
   showing a running app or demo. `playback.mode: "smart"` removes visually idle time
   from any recording, and uses click/type/scroll/navigate events when available for
@@ -100,16 +115,25 @@ self-describing `--help`. The [`skills/agent-video`](skills/agent-video/SKILL.md
 skill teaches an agent the workflow (gather `git diff` → author `spec.json` →
 validate → render → report).
 
+For richer videos, bundle v2 keeps the agent as the director. The agent writes
+narration, refs, assets, music/caption policy, and hyperframe code; the
+renderer validates, measures, compiles exact timings, renders, and muxes. This
+avoids a giant hand-timed JSON timeline while still giving agents a path to
+custom line-state changes and layouts. Reuse starts with hyperframe components
+from `agent-video bundle components`; templates are complete examples, not the
+main abstraction.
+
 ## Packages
 
-| Package                           | Role                                                 |
-| --------------------------------- | ---------------------------------------------------- |
-| [`core`](packages/core)           | spec types + JSON Schema + git/diff resolver         |
-| [`compose`](packages/compose)     | Mode B: spec scenes → frames (canvas + Shiki)        |
-| [`capture`](packages/capture)     | Mode A: screen recordings → directed screencap clips |
-| [`providers`](packages/providers) | TTS gateway (narration audio)                        |
-| [`render`](packages/render)       | orchestrator: spec → mp4 (two-pass) + local preview  |
-| [`cli`](packages/cli)             | the `agent-video` binary                             |
+| Package                               | Role                                                 |
+| ------------------------------------- | ---------------------------------------------------- |
+| [`core`](packages/core)               | spec types + JSON Schema + git/diff resolver         |
+| [`compose`](packages/compose)         | Mode B: built-in visuals + hyperframe primitives     |
+| [`capture`](packages/capture)         | Mode A: screen recordings → directed screencap clips |
+| [`hyperframes`](packages/hyperframes) | typed authoring kit + reusable components            |
+| [`providers`](packages/providers)     | TTS gateway (narration audio)                        |
+| [`render`](packages/render)           | orchestrator: spec → mp4 (two-pass) + local preview  |
+| [`cli`](packages/cli)                 | the `agent-video` binary                             |
 
 ## Development
 

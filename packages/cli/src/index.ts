@@ -13,13 +13,30 @@ import { randomBytes } from "node:crypto";
 import {
   validateSpec,
   videoSpecJsonSchema,
+  bundleSpecJsonSchema,
+  validateBundle,
   IMPLEMENTED_SCENE_KINDS,
   specContentId,
+  bundleHyperframeFile,
+  effectiveBeats,
+  loadHyperframeContractFromSource,
   type VideoSpec,
   type AspectRatio,
   type SpecError,
 } from "@agent-video/core";
-import { renderFrames, renderVideo, startPreviewServer, resolvePlayerDist } from "@agent-video/render";
+import {
+  renderFrames,
+  renderVideo,
+  startPreviewServer,
+  resolvePlayerDist,
+  compileBundle,
+  renderBundle,
+  BundleCompileError,
+  renderBundleWorkshop,
+  renderWorkshop,
+  startWorkshopServer,
+} from "@agent-video/render";
+import { hyperframeComponents, hyperframeTemplates } from "@agent-video/hyperframes";
 import {
   recordScreen,
   ensureCapturesDir,
@@ -156,6 +173,14 @@ function cmdValidate(args: Args): never {
 
 const VALID_ASPECTS: AspectRatio[] = ["16:9", "9:16", "1:1"];
 
+function parseAspectRatios(args: Args): AspectRatio[] | undefined {
+  if (typeof args.flags.aspect !== "string") return undefined;
+  const requested = args.flags.aspect.split(",").map((s) => s.trim());
+  const bad = requested.filter((a) => !(VALID_ASPECTS as string[]).includes(a));
+  if (bad.length) fail(`Invalid aspect ratio(s): ${bad.join(", ")}`, `Valid: ${VALID_ASPECTS.join(", ")}.`);
+  return requested as AspectRatio[];
+}
+
 async function cmdRender(args: Args): Promise<never> {
   const usage = "Usage: agent-video render <spec.json> [--out DIR] [--repo PATH] [--aspect 16:9,9:16] [--frames-only]";
   const file = args.positional[0]!;
@@ -167,13 +192,7 @@ async function cmdRender(args: Args): Promise<never> {
     (typeof args.flags.out === "string" ? args.flags.out : undefined) ??
     (framesOnly ? ".agent-video/frames" : ".agent-video/out");
 
-  let aspectRatios: AspectRatio[] | undefined;
-  if (typeof args.flags.aspect === "string") {
-    const requested = args.flags.aspect.split(",").map((s) => s.trim());
-    const bad = requested.filter((a) => !(VALID_ASPECTS as string[]).includes(a));
-    if (bad.length) fail(`Invalid aspect ratio(s): ${bad.join(", ")}`, `Valid: ${VALID_ASPECTS.join(", ")}.`);
-    aspectRatios = requested as AspectRatio[];
-  }
+  const aspectRatios = parseAspectRatios(args);
 
   try {
     if (framesOnly) {
@@ -239,13 +258,7 @@ async function cmdPreview(args: Args): Promise<void> {
     .replace(/\.json$/, "")
     .replace(/\.spec$/, "");
 
-  let aspectRatios: AspectRatio[] | undefined;
-  if (typeof args.flags.aspect === "string") {
-    const requested = args.flags.aspect.split(",").map((s) => s.trim());
-    const bad = requested.filter((a) => !(VALID_ASPECTS as string[]).includes(a));
-    if (bad.length) fail(`Invalid aspect ratio(s): ${bad.join(", ")}`, `Valid: ${VALID_ASPECTS.join(", ")}.`);
-    aspectRatios = requested as AspectRatio[];
-  }
+  const aspectRatios = parseAspectRatios(args);
 
   let playerDir: string;
   try {
@@ -490,6 +503,268 @@ function captureEventTypeFlag(
   fail(`Invalid --${name}: ${raw}`, "Use auto, none, click, type, scroll, navigate, or idle.");
 }
 
+async function cmdBundle(args: Args): Promise<never> {
+  const subcommand = args.positional[0] ?? "help";
+  const bundleDir = args.positional[1];
+
+  if (subcommand === "schema") {
+    ok(bundleSpecJsonSchema());
+  }
+  if (subcommand === "help" || args.flags.help) {
+    ok({
+      ok: true,
+      usage:
+        "agent-video bundle <validate|inspect|compile|render|workshop|components|templates|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
+      examples: [
+        "agent-video bundle validate examples/bundle-v2",
+        "agent-video bundle inspect examples/bundle-v2",
+        "agent-video bundle components",
+        "agent-video bundle templates",
+        "agent-video bundle workshop examples/bundle-v2 --out .agent-video/workshop --aspect 16:9",
+        "agent-video bundle compile examples/bundle-v2",
+        "agent-video bundle render examples/bundle-v2 --out .agent-video/bundle-v2 --aspect 16:9",
+      ],
+    });
+  }
+  if (subcommand === "templates") {
+    ok({
+      ok: true,
+      stage: "bundle-templates",
+      package: "@agent-video/hyperframes",
+      templates: hyperframeTemplates,
+      usage:
+        "Use templates as complete examples. Prefer reusable components for common patterns; run `agent-video bundle components`.",
+    });
+  }
+  if (subcommand === "components") {
+    ok({
+      ok: true,
+      stage: "bundle-components",
+      package: "@agent-video/hyperframes",
+      components: hyperframeComponents,
+      usage:
+        'Import components from "@agent-video/hyperframes" inside hyperframes/*.tsx; use the requiredProps/commonProps/example fields, then compose with ctx.props, ctx.repo(), ctx.asset(), ctx.range(), and ctx.scene.lineIndex.',
+    });
+  }
+
+  if (!bundleDir) {
+    fail(
+      "Missing bundle directory.",
+      "Usage: agent-video bundle <validate|inspect|compile|render|workshop|components|templates|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
+    );
+  }
+
+  if (subcommand === "validate") {
+    const result = validateBundle(bundleDir);
+    if (!result.ok) {
+      fail("Bundle failed validation.", "Fix each error below; then re-run bundle validate.", {
+        errors: result.errors,
+        warnings: result.warnings,
+      });
+    }
+    ok({
+      ok: true,
+      stage: "bundle-validate",
+      bundleDir: result.bundleDir,
+      repoPath: result.repoPath,
+      sceneCount: result.spec.scenes.length,
+      assetCount: Object.keys(result.spec.assets).length,
+      hyperframes: result.spec.scenes
+        .filter((scene) => scene.visual.kind === "hyperframe")
+        .map((scene) => ({ scene: scene.id, src: scene.visual.kind === "hyperframe" ? scene.visual.src : undefined })),
+      warnings: result.warnings,
+    });
+  }
+
+  if (subcommand === "inspect") {
+    const result = validateBundle(bundleDir);
+    if (!result.ok) {
+      fail("Bundle failed validation.", "Fix each error below; then re-run bundle inspect.", {
+        errors: result.errors,
+        warnings: result.warnings,
+      });
+    }
+    ok({
+      ok: true,
+      stage: "bundle-inspect",
+      bundleDir: result.bundleDir,
+      repoPath: result.repoPath,
+      meta: {
+        title: result.spec.meta.title,
+        fps: result.spec.meta.fps,
+        aspectRatios: result.spec.meta.aspectRatios,
+      },
+      assets: Object.entries(result.spec.assets).map(([id, asset]) => ({
+        id,
+        type: asset.type,
+        src: asset.src,
+      })),
+      scenes: result.spec.scenes.map((scene, index) => ({
+        index,
+        id: scene.id,
+        narrationLines: scene.narration.lines.map((line) => ({
+          id: line.id,
+          text: line.text,
+        })),
+        beats: {
+          source: scene.beats.length ? "authored" : "implicit-per-line",
+          items: effectiveBeats(scene),
+        },
+        refs: Object.entries(scene.refs).map(([id, ref]) => ({
+          id,
+          kind: ref.kind,
+          file: ref.file,
+        })),
+        ranges: scene.ranges,
+        visual:
+          scene.visual.kind === "hyperframe"
+            ? inspectHyperframeVisual(bundleDir, scene.visual)
+            : {
+                kind: scene.visual.kind,
+                name: scene.visual.name,
+                ref: scene.visual.ref,
+                propsKeys: Object.keys(scene.visual.props),
+              },
+      })),
+      warnings: result.warnings,
+    });
+  }
+
+  const aspectRatios = parseAspectRatios(args);
+  const outDir = typeof args.flags.out === "string" ? args.flags.out : undefined;
+  const cacheDir = typeof args.flags.cache === "string" ? args.flags.cache : undefined;
+  try {
+    if (subcommand === "compile") {
+      const result = await compileBundle(bundleDir, { cacheDir });
+      ok({
+        ok: true,
+        stage: "bundle-compile",
+        planPath: result.planPath,
+        durationMs: result.plan.meta.durationMs,
+        sceneCount: result.plan.meta.sceneCount,
+        assetCount: Object.keys(result.plan.assets).length,
+        musicCount: result.plan.audio.music.length,
+        refs: result.plan.scenes.flatMap((scene) =>
+          Object.entries(scene.refs).map(([id, ref]) => ({ scene: scene.id, id, kind: ref.kind, file: ref.file })),
+        ),
+        warnings: result.warnings,
+      });
+    }
+    if (subcommand === "render") {
+      const result = await renderBundle(bundleDir, { outDir, aspectRatios, cacheDir });
+      ok({
+        ok: true,
+        stage: "bundle-render",
+        outDir: result.outDir,
+        planPath: result.planPath,
+        durationMs: result.plan.meta.durationMs,
+        outputs: result.outputs,
+        resolvedCode: result.resolvedCode,
+        warnings: result.warnings,
+      });
+    }
+    if (subcommand === "workshop") {
+      const result = await renderBundleWorkshop(bundleDir, { outDir, aspectRatios });
+      const serveSeconds =
+        typeof args.flags["serve-seconds"] === "string" ? parseInt(args.flags["serve-seconds"], 10) : undefined;
+      if (serveSeconds !== undefined) {
+        const handle = startWorkshopServer({ outDir: result.outDir });
+        process.stdout.write(
+          JSON.stringify(
+            {
+              ...result,
+              url: handle.url,
+              port: handle.port,
+            },
+            null,
+            2,
+          ) + "\n",
+        );
+        if (serveSeconds > 0) {
+          await Bun.sleep(serveSeconds * 1000);
+          handle.stop();
+          process.exit(0);
+        }
+        await new Promise<void>(() => {});
+      }
+      ok(result as unknown as Record<string, unknown>);
+    }
+  } catch (e) {
+    if (e instanceof BundleCompileError) {
+      fail(e.message, "Fix each bundle error below; then re-run the command.", {
+        errors: e.errors,
+        warnings: e.warnings,
+      });
+    }
+    fail(
+      `Bundle ${subcommand} failed: ${(e as Error).message}`,
+      "Run `agent-video bundle validate <bundle-dir>` first, then check ffmpeg/TTS prerequisites.",
+    );
+  }
+
+  fail(
+    `Unknown bundle command: '${subcommand}'`,
+    "Run `agent-video bundle help`. Commands: validate, inspect, compile, render, workshop, components, templates, schema.",
+  );
+}
+
+async function cmdWorkshop(args: Args): Promise<never> {
+  const subcommand = args.positional[0] ?? "render";
+  const aspectRatios = parseAspectRatios(args);
+  const outDir = typeof args.flags.out === "string" ? args.flags.out : undefined;
+  if (subcommand !== "render") {
+    fail(
+      "Unknown workshop command.",
+      "Usage: agent-video workshop render [--out DIR] [--aspect 16:9,9:16] [--serve-seconds N]",
+    );
+  }
+  const result = await renderWorkshop({ outDir, aspectRatios });
+  const serveSeconds =
+    typeof args.flags["serve-seconds"] === "string" ? parseInt(args.flags["serve-seconds"], 10) : undefined;
+  if (serveSeconds !== undefined) {
+    const handle = startWorkshopServer({ outDir: result.outDir });
+    process.stdout.write(JSON.stringify({ ...result, url: handle.url, port: handle.port }, null, 2) + "\n");
+    if (serveSeconds > 0) {
+      await Bun.sleep(serveSeconds * 1000);
+      handle.stop();
+      process.exit(0);
+    }
+    await new Promise<void>(() => {});
+  }
+  ok(result as unknown as Record<string, unknown>);
+}
+
+function inspectHyperframeVisual(
+  bundleDir: string,
+  visual: {
+    kind: "hyperframe";
+    src: string;
+    export: "default";
+    props: Record<string, unknown>;
+    inputs: Record<string, unknown>;
+  },
+): Record<string, unknown> {
+  const source = readFileSync(bundleHyperframeFile(bundleDir, visual.src).path, "utf-8");
+  const contract = loadHyperframeContractFromSource(source);
+  return {
+    kind: "hyperframe",
+    src: visual.src,
+    export: visual.export,
+    sourceSha256: contract.sourceSha256,
+    propsKeys: Object.keys(visual.props),
+    propsSchema: contract.propsSchema,
+    inputs: Object.entries(contract.inputs).map(([name, input]) => ({
+      name,
+      kind: input.kind,
+      optional: input.optional,
+      required: !input.optional,
+      refKind: input.kind === "repo" ? input.refKind : undefined,
+      assetType: input.kind === "asset" ? input.assetType : undefined,
+      value: visual.inputs[name] ?? null,
+    })),
+  };
+}
+
 async function cmdEval(args: Args): Promise<never> {
   const file = (typeof args.flags.spec === "string" ? args.flags.spec : undefined) ?? "examples/golden.spec.json";
   const { spec } = loadSpecOrFail(file, "Usage: agent-video eval [--spec PATH]");
@@ -576,6 +851,24 @@ COMMANDS
   capture stop-external  Stop external tracking, optionally running a stop command,
                          then import the raw recording. Example:
                          capture stop-external --id demo -- agent-browser record stop
+  bundle validate DIR    Validate a v2 bundle directory (spec.json + assets +
+                         hyperframes). Structured errors include hints.
+  bundle inspect DIR     Print scenes, refs, ranges, hyperframe ports, props
+                         schemas, and warnings for agent planning.
+  bundle templates       List reusable hyperframe starter templates from
+                         @agent-video/hyperframes.
+  bundle components      List reusable hyperframe components from
+                         @agent-video/hyperframes.
+  bundle workshop DIR    Render every bundle scene/line/aspect as PNGs in a
+                         static workshop gallery. Flags: --out DIR, --aspect,
+                         --serve-seconds N.
+  bundle compile DIR     TTS + measure + resolve refs/assets/ranges, then write
+                         compiled-plan.json. Flags: --cache DIR.
+  bundle render DIR      Compile and render the v2 bundle to MP4. Flags:
+                         --out DIR, --aspect 16:9,9:16, --cache DIR.
+  workshop render        Render the built-in component workshop gallery.
+                         Flags: --out DIR, --aspect 16:9,9:16,
+                         --serve-seconds N.
   eval                   Self-test: render the golden example (or --spec PATH) in
                          both ratios and assert every gate. Returns pass/fail JSON.
   schema                 Print the published JSON Schema for spec.json.
@@ -596,6 +889,9 @@ EXAMPLES
   agent-video capture exec --id demo -- agent-browser click @submit
   agent-video capture stop-external --id demo -- agent-browser record stop
   agent-video capture analyze --id demo
+  agent-video bundle components
+  agent-video bundle workshop examples/bundle-v2 --out .agent-video/workshop --aspect 16:9
+  agent-video bundle render examples/bundle-v2 --out .agent-video/bundle-v2 --aspect 16:9
 
   Minimal spec:
   {
@@ -637,6 +933,12 @@ async function main(): Promise<void> {
     case "capture":
       cmdCapture(args);
       break;
+    case "bundle":
+      await cmdBundle(args);
+      break;
+    case "workshop":
+      await cmdWorkshop(args);
+      break;
     case "eval":
       await cmdEval(args);
       break;
@@ -651,7 +953,7 @@ async function main(): Promise<void> {
     default:
       fail(
         `Unknown command: '${args.command}'`,
-        "Run `agent-video help`. Commands: validate, render, preview, capture, eval, schema, help, version.",
+        "Run `agent-video help`. Commands: validate, render, preview, capture, bundle, workshop, eval, schema, help, version.",
       );
   }
 }

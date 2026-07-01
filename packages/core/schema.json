@@ -379,6 +379,14 @@
                       "title": {
                         "type": "string"
                       },
+                      "x": {
+                        "type": "string",
+                        "description": "Optional label/category field. Hyperframe Chart requires this."
+                      },
+                      "y": {
+                        "type": "string",
+                        "description": "Optional numeric value field. Hyperframe Chart requires this."
+                      },
                       "data": {
                         "type": "array",
                         "items": {

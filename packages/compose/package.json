@@ -3,13 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Mode B compose: render a VideoSpec scene to image frames (deterministic). v1a engine = canvas+Shiki; hyperframes/HTML for animated kinds (v1b).",
+  "description": "Deterministic canvas renderer for built-in visuals and hyperframe primitive trees.",
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
     "@agent-video/core": "workspace:*",
+    "@agent-video/hyperframes": "workspace:*",
     "@fontsource/inter": "5.2.8",
     "@fontsource/jetbrains-mono": "5.2.8",
     "@napi-rs/canvas": "0.1.100",

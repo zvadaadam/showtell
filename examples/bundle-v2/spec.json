@@ -1,0 +1,260 @@
+{
+  "$schema": "https://agent-video.dev/schemas/bundle-v2.json",
+  "version": 2,
+  "meta": {
+    "title": "How agent-video bundle v2 works",
+    "fps": 30,
+    "aspectRatios": ["16:9", "9:16"],
+    "repo": {
+      "path": "../..",
+      "baseRef": "main",
+      "headRef": "HEAD"
+    }
+  },
+  "assets": {
+    "bed": {
+      "type": "audio",
+      "src": "assets/audio/bed.wav"
+    },
+    "metrics": {
+      "type": "data",
+      "src": "assets/data/metrics.json"
+    }
+  },
+  "audio": {
+    "tts": {
+      "provider": "say"
+    },
+    "captions": {
+      "mode": "burn-in",
+      "source": "narration"
+    },
+    "music": [
+      {
+        "id": "bed",
+        "asset": "bed",
+        "range": {
+          "from": "scene:overview@start",
+          "to": "scene:proof@end"
+        },
+        "loop": true,
+        "gainDb": -28,
+        "duckUnderNarration": true,
+        "fadeInMs": 800,
+        "fadeOutMs": 1400
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "overview",
+      "narration": {
+        "lines": [
+          {
+            "id": "l1",
+            "text": "agent-video is Loom for agents: the agent directs the story, but the renderer owns every irreversible operation."
+          },
+          {
+            "id": "l2",
+            "text": "That split is why the video can be creative without giving the model raw ffmpeg, frame math, or pasted source code."
+          }
+        ]
+      },
+      "refs": {
+        "contract": {
+          "kind": "code",
+          "file": "AGENTS.md",
+          "lineStart": 1,
+          "lineEnd": 45,
+          "focus": [10, 12, 15]
+        }
+      },
+      "visual": {
+        "kind": "hyperframe",
+        "src": "hyperframes/product-system.tsx",
+        "export": "default",
+        "props": {
+          "eyebrow": "product model",
+          "title": "Loom for agents",
+          "body": "A local, repo-aware video renderer where the model authors intent and the renderer owns execution.",
+          "steps": ["agent directs", "renderer executes"],
+          "callouts": ["repo-aware storytelling", "no ffmpeg or pasted source"],
+          "chartTitle": "Pipeline leverage"
+        },
+        "inputs": {
+          "source": "contract",
+          "metrics": "metrics",
+          "reveal": "line:l2"
+        }
+      }
+    },
+    {
+      "id": "authoring",
+      "narration": {
+        "lines": [
+          {
+            "id": "l1",
+            "text": "A bundle starts as intent: narration lines, repo references, declared assets, beats, ranges, music, and a hyperframe entry point."
+          },
+          {
+            "id": "l2",
+            "text": "The JSON is not a giant frame timeline. It is the part an agent can reason about and the renderer can validate."
+          }
+        ]
+      },
+      "refs": {
+        "bundleSchema": {
+          "kind": "code",
+          "file": "packages/core/src/bundle.ts",
+          "lineStart": 1,
+          "lineEnd": 130,
+          "focus": [102, 112, 122]
+        }
+      },
+      "visual": {
+        "kind": "hyperframe",
+        "src": "hyperframes/product-system.tsx",
+        "export": "default",
+        "props": {
+          "eyebrow": "authoring",
+          "title": "spec.json describes the edit",
+          "body": "The agent names the story pieces; the renderer validates paths, refs, assets, and time references.",
+          "steps": ["declare inputs", "validate contract"],
+          "callouts": ["narration + refs + assets", "strict schema with hints"],
+          "chartTitle": "Bundle contract"
+        },
+        "inputs": {
+          "source": "bundleSchema",
+          "metrics": "metrics",
+          "reveal": "line:l2"
+        }
+      }
+    },
+    {
+      "id": "compile",
+      "narration": {
+        "lines": [
+          {
+            "id": "l1",
+            "text": "Compile is the first pass. It synthesizes each narration line, measures it, resolves live repo bytes, hashes assets, and builds the ledger."
+          },
+          {
+            "id": "l2",
+            "text": "Beats and ranges become exact milliseconds, so captions, callouts, music, and visuals all agree before any MP4 is muxed."
+          }
+        ]
+      },
+      "refs": {
+        "compiler": {
+          "kind": "code",
+          "file": "packages/render/src/bundle.ts",
+          "lineStart": 475,
+          "lineEnd": 590,
+          "focus": [517, 558, 583]
+        }
+      },
+      "visual": {
+        "kind": "hyperframe",
+        "src": "hyperframes/product-system.tsx",
+        "export": "default",
+        "props": {
+          "eyebrow": "pass one",
+          "title": "compile creates the ledger",
+          "body": "TTS, repo refs, asset hashes, beats, ranges, captions, and music are resolved before rendering.",
+          "steps": ["measure audio", "resolve timeline"],
+          "callouts": ["per-line TTS cache", "beat/range milliseconds"],
+          "chartTitle": "Compile responsibilities"
+        },
+        "inputs": {
+          "source": "compiler",
+          "metrics": "metrics",
+          "reveal": "line:l2"
+        }
+      }
+    },
+    {
+      "id": "render",
+      "narration": {
+        "lines": [
+          {
+            "id": "l1",
+            "text": "Render is the second pass. Each narration line gets one focused visual state, so the video cuts between map, code, data, and callout moments."
+          },
+          {
+            "id": "l2",
+            "text": "After muxing, the video is normalized back to the compiled duration, which keeps audio, video, and the plan locked together."
+          }
+        ]
+      },
+      "refs": {
+        "renderer": {
+          "kind": "code",
+          "file": "packages/render/src/bundle.ts",
+          "lineStart": 727,
+          "lineEnd": 826,
+          "focus": [754, 761, 821]
+        }
+      },
+      "visual": {
+        "kind": "hyperframe",
+        "src": "hyperframes/product-system.tsx",
+        "export": "default",
+        "props": {
+          "eyebrow": "pass two",
+          "title": "render keeps moving",
+          "body": "The renderer turns compiled timing into per-line frames, captions, music, muxed clips, and normalized outputs.",
+          "steps": ["line visuals", "normalize output"],
+          "callouts": ["dynamic per-line frames", "audio/video duration lock"],
+          "chartTitle": "Render responsibilities"
+        },
+        "inputs": {
+          "source": "renderer",
+          "metrics": "metrics",
+          "reveal": "line:l2"
+        }
+      }
+    },
+    {
+      "id": "proof",
+      "narration": {
+        "lines": [
+          {
+            "id": "l1",
+            "text": "The output is an MP4 pair plus sidecar captions and a compiled plan that records timings, repo hashes, asset hashes, and final paths."
+          },
+          {
+            "id": "l2",
+            "text": "A fresh agent can validate, compile, render, and inspect those structured results without guessing hidden renderer behavior."
+          }
+        ]
+      },
+      "refs": {
+        "cli": {
+          "kind": "code",
+          "file": "packages/cli/src/index.ts",
+          "lineStart": 289,
+          "lineEnd": 369,
+          "focus": [341, 357, 365]
+        }
+      },
+      "visual": {
+        "kind": "hyperframe",
+        "src": "hyperframes/product-system.tsx",
+        "export": "default",
+        "props": {
+          "eyebrow": "agent surface",
+          "title": "proof, not vibes",
+          "body": "The CLI returns structured JSON, output paths, durations, warnings, and live-byte hashes for the rendered video.",
+          "steps": ["emit outputs", "inspect proof"],
+          "callouts": ["mp4 + srt + compiled plan", "JSON commands with hints"],
+          "chartTitle": "Verification surface"
+        },
+        "inputs": {
+          "source": "cli",
+          "metrics": "metrics",
+          "reveal": "line:l2"
+        }
+      }
+    }
+  ]
+}
