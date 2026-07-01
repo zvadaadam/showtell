@@ -128,7 +128,7 @@ function buildRepoResolver(opts: ExecuteHyperframeOpts): HyperframeContext<Recor
         id: input.target,
         file: ref.file,
         ref: ref.ref,
-        lineStart: ref.lineStart,
+        lineStart: resolved.startLine,
         lineEnd: resolved.endLine,
         focus: ref.focus,
         language: resolved.language,

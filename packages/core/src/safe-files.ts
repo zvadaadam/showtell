@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 
 export type SafeFileErrorCode = "ABSOLUTE_PATH" | "PATH_ESCAPE" | "MISSING_FILE" | "SYMLINK" | "NOT_FILE" | "TOO_LARGE";
 
@@ -13,7 +13,8 @@ export class SafeFileError extends Error {
 }
 
 function isInside(root: string, child: string): boolean {
-  return child === root || child.startsWith(root + "/");
+  const rel = relative(root, child);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 export function resolveRelativePath(rootInput: string, rel: string): string {

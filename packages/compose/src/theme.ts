@@ -9,6 +9,8 @@ export interface SemanticTheme {
     warning: string;
     surface: string;
     border: string;
+    captionBg?: string;
+    captionFg?: string;
   };
   typography: {
     display: string;
@@ -34,6 +36,8 @@ export interface CanvasTheme {
   mono: string;
   shikiTheme: "github-dark" | "github-light";
   watermarkFg: string;
+  captionBg: string;
+  captionFg: string;
 }
 
 /** The single default theme. Pinned for determinism (same spec → same pixels). */
@@ -54,6 +58,8 @@ export const THEME: CanvasTheme = {
   mono: "JetBrains Mono",
   shikiTheme: "github-dark",
   watermarkFg: "rgba(255,255,255,0.5)",
+  captionBg: "rgba(7,10,18,0.78)",
+  captionFg: "#e8e8f2",
 } as const;
 
 function rgba(hex: string, opacity: number): string {
@@ -83,5 +89,7 @@ export function canvasTheme(theme?: SemanticTheme): CanvasTheme {
     mono: theme.typography.mono,
     shikiTheme: theme.mode === "paper" ? "github-light" : "github-dark",
     watermarkFg: rgba(theme.colors.fg, 0.5),
+    captionBg: rgba(theme.colors.captionBg ?? theme.colors.bg, 0.88),
+    captionFg: theme.colors.captionFg ?? theme.colors.fg,
   };
 }

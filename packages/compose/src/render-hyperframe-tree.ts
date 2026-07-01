@@ -6,15 +6,9 @@ import { dimsFor, type Dims } from "./dims.ts";
 import { drawBackground, drawWatermark, roundRect, wrapText } from "./draw.ts";
 import { ensureFonts } from "./fonts.ts";
 import { renderChart, renderCodeRef, renderDiffRef, renderImageAsset } from "./render-hyperframe-media.ts";
-import { canvasTheme, THEME } from "./theme.ts";
+import { emptyResult, panelRadius, propsOf, type Box, type DrawResult } from "./render-hyperframe-shared.ts";
 import type { RenderedScene } from "./render-scene.ts";
-
-interface Box {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+import { canvasTheme, THEME } from "./theme.ts";
 
 interface Palette {
   fg: string;
@@ -31,11 +25,6 @@ interface RenderEnv {
   palette: Palette;
   activeCue?: CaptionCue;
   theme?: HyperframeTheme;
-}
-
-interface DrawResult {
-  resolvedRefs: RenderedScene["resolvedRefs"];
-  warning?: string;
 }
 
 export interface HyperframeTreeRenderOpts {
@@ -104,10 +93,6 @@ function textSize(env: RenderEnv, variant: unknown): number {
   return Math.round(base * 0.028);
 }
 
-function panelRadius(box: Box, scale = 0.035): number {
-  return Math.min(18, Math.round(Math.min(box.w, box.h) * scale));
-}
-
 function gapPx(gap: unknown, base: number): number {
   if (gap === "xs") return Math.round(base * 0.012);
   if (gap === "sm") return Math.round(base * 0.02);
@@ -143,10 +128,6 @@ function elementChildren(element: HyperframeElement): HyperframeChild[] {
 
 function elementChildElements(element: HyperframeElement): HyperframeElement[] {
   return elementChildren(element).filter(isElement);
-}
-
-function propsOf(element: HyperframeElement): Record<string, unknown> {
-  return element.props as Record<string, unknown>;
 }
 
 function textContent(children: HyperframeChild[]): string {
@@ -237,10 +218,6 @@ function estimateHeight(ctx: SKRSContext2D, child: HyperframeElement, box: Box, 
 function mergeResult(target: DrawResult, source: DrawResult): void {
   target.resolvedRefs.push(...source.resolvedRefs);
   target.warning = target.warning ?? source.warning;
-}
-
-function emptyResult(): DrawResult {
-  return { resolvedRefs: [] };
 }
 
 function drawPanel(ctx: SKRSContext2D, box: Box, env: RenderEnv): void {
@@ -725,10 +702,7 @@ async function renderNode(
   if (element.type === "CodeRef") return renderCodeRef(ctx, element, box, env);
   if (element.type === "DiffRef") return renderDiffRef(ctx, element, box, env);
   if (element.type === "Chart") return renderChart(ctx, element, box, env);
-  if (element.type === "ImageAsset") {
-    await renderImageAsset(ctx, element, box, env);
-    return emptyResult();
-  }
+  if (element.type === "ImageAsset") return renderImageAsset(ctx, element, box, env);
   if (element.type === "SystemMap") {
     drawSystemMap(ctx, element, box, env);
     return emptyResult();
@@ -796,9 +770,9 @@ function drawKineticCaption(ctx: SKRSContext2D, element: HyperframeElement, env:
 async function renderStage(ctx: SKRSContext2D, element: HyperframeElement, env: RenderEnv): Promise<DrawResult> {
   const props = propsOf(element);
   const tone = typeof props.tone === "string" ? props.tone : "dark";
-  env.palette = paletteFor(tone, env.theme);
-  drawStageBackground(ctx, env.dims, tone, env.theme);
-  const base = Math.min(env.dims.width, env.dims.height);
+  const stageEnv: RenderEnv = { ...env, palette: paletteFor(tone, env.theme) };
+  drawStageBackground(ctx, stageEnv.dims, tone, stageEnv.theme);
+  const base = Math.min(stageEnv.dims.width, stageEnv.dims.height);
   const pad = paddingPx(props.padding, base);
   const content: HyperframeElement = {
     type: "Stack",
@@ -808,10 +782,10 @@ async function renderStage(ctx: SKRSContext2D, element: HyperframeElement, env: 
   const result = await renderStack(
     ctx,
     content,
-    { x: pad, y: pad, w: env.dims.width - pad * 2, h: env.dims.height - pad * 2 },
-    env,
+    { x: pad, y: pad, w: stageEnv.dims.width - pad * 2, h: stageEnv.dims.height - pad * 2 },
+    stageEnv,
   );
-  for (const caption of collectKineticCaptions(element)) drawKineticCaption(ctx, caption, env);
+  for (const caption of collectKineticCaptions(element)) drawKineticCaption(ctx, caption, stageEnv);
   return result;
 }
 

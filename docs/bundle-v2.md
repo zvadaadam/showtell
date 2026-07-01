@@ -16,7 +16,7 @@ my-video.agent-video/
   spec.json
   hyperframes/
     intro.tsx
-    code-walk.tsx
+    product-system.tsx
     proof-chart.tsx
   assets/
     audio/bed.wav
@@ -184,7 +184,7 @@ The bundle root is the directory containing `spec.json`.
       },
       "visual": {
         "kind": "hyperframe",
-        "src": "hyperframes/code-walk.tsx",
+        "src": "hyperframes/product-system.tsx",
         "export": "default",
         "inputs": {
           "source": "store",
@@ -850,12 +850,12 @@ the execution ledger:
       },
       "visual": {
         "kind": "hyperframe",
-        "src": "hyperframes/code-walk.tsx",
+        "src": "hyperframes/product-system.tsx",
         "props": { "title": "Retry guard" },
         "inputs": { "source": "store", "metrics": "metrics", "reveal": "line:l2" },
       },
       "hyperframe": {
-        "src": "hyperframes/code-walk.tsx",
+        "src": "hyperframes/product-system.tsx",
         "sourceSha256": "sha256...",
         "propsSha256": "sha256...",
         "inputs": {
@@ -901,7 +901,7 @@ Success shapes:
   "bundleDir": "my-video.agent-video",
   "sceneCount": 2,
   "assetCount": 2,
-  "hyperframes": [{ "path": "hyperframes/code-walk.tsx", "export": "default" }],
+  "hyperframes": [{ "path": "hyperframes/product-system.tsx", "export": "default" }],
   "warnings": [],
 }
 ```
@@ -917,7 +917,7 @@ Success shapes:
       "beats": { "source": "implicit-per-line", "items": [{ "id": "l1", "lines": ["l1"] }] },
       "visual": {
         "kind": "hyperframe",
-        "src": "hyperframes/code-walk.tsx",
+        "src": "hyperframes/product-system.tsx",
         "propsSchema": { "type": "object" },
         "inputs": [
           { "name": "source", "kind": "repo", "required": true, "refKind": "code", "value": "store" },

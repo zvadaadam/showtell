@@ -20,7 +20,7 @@ agent-authored `hyperframes/*.tsx`, declared assets, and a renderer-emitted
 
 ## Quickstart
 
-Prereqs: [bun](https://bun.sh) and [ffmpeg](https://ffmpeg.org) (`brew install ffmpeg`).
+Prereqs: [bun](https://bun.sh), [ffmpeg](https://ffmpeg.org) (`brew install ffmpeg`), and Git 2.24+.
 
 ```bash
 bun install

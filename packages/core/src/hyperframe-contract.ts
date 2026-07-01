@@ -39,6 +39,7 @@ export interface HyperframeContract extends z.infer<typeof HyperframeContractSch
 }
 
 export interface JsonSchemaIssue {
+  kind: "schema" | "value";
   path: string;
   message: string;
 }
@@ -60,9 +61,14 @@ export function loadHyperframeContractFromSource(source: string): HyperframeCont
   };
 }
 
-export function validateJsonSchemaValue(schema: unknown, value: unknown, path: string): JsonSchemaIssue[] {
+export function validateJsonSchemaValue(
+  schema: unknown,
+  value: unknown,
+  path: string,
+  schemaPath = path,
+): JsonSchemaIssue[] {
   const issues: JsonSchemaIssue[] = [];
-  validateSchemaDialect(schema, path, issues);
+  validateSchemaDialect(schema, schemaPath, issues);
   validateSchemaNode(schema, value, path, issues);
   return issues;
 }
@@ -193,19 +199,28 @@ function validateSchemaDialect(schema: unknown, path: string, issues: JsonSchema
   for (const key of Object.keys(schema)) {
     if (!SUPPORTED_SCHEMA_KEYS.has(key)) {
       issues.push({
+        kind: "schema",
         path,
         message: `Unsupported propsSchema keyword "${key}".`,
       });
     }
   }
   if (schema.type !== undefined && typeof schema.type !== "string") {
-    issues.push({ path: `${path}.type`, message: "Supported propsSchema type must be a string." });
+    issues.push({ kind: "schema", path: `${path}.type`, message: "Supported propsSchema type must be a string." });
   }
   if (schema.properties !== undefined && !isRecord(schema.properties)) {
-    issues.push({ path: `${path}.properties`, message: "Supported propsSchema properties must be an object." });
+    issues.push({
+      kind: "schema",
+      path: `${path}.properties`,
+      message: "Supported propsSchema properties must be an object.",
+    });
   }
   if (schema.required !== undefined && !isStringArray(schema.required)) {
-    issues.push({ path: `${path}.required`, message: "Supported propsSchema required must be a string array." });
+    issues.push({
+      kind: "schema",
+      path: `${path}.required`,
+      message: "Supported propsSchema required must be a string array.",
+    });
   }
   if (
     schema.additionalProperties !== undefined &&
@@ -213,6 +228,7 @@ function validateSchemaDialect(schema: unknown, path: string, issues: JsonSchema
     schema.additionalProperties !== false
   ) {
     issues.push({
+      kind: "schema",
       path: `${path}.additionalProperties`,
       message: "Supported propsSchema additionalProperties must be boolean.",
     });
@@ -229,23 +245,25 @@ function validateSchemaNode(schema: unknown, value: unknown, path: string, issue
   if (!isRecord(schema)) return;
 
   if (Array.isArray(schema.enum) && !schema.enum.some((item) => Object.is(item, value))) {
-    issues.push({ path, message: `Expected one of: ${schema.enum.map(String).join(", ")}.` });
+    issues.push({ kind: "value", path, message: `Expected one of: ${schema.enum.map(String).join(", ")}.` });
     return;
   }
 
   const type = typeof schema.type === "string" ? schema.type : undefined;
   if (type && !matchesType(type, value)) {
-    issues.push({ path, message: `Expected ${type}.` });
+    issues.push({ kind: "value", path, message: `Expected ${type}.` });
     return;
   }
 
   if (type === "object" || (isRecord(value) && isRecord(schema.properties))) {
     validateObjectSchema(schema, value, path, issues);
   }
-  if (type === "array" && Array.isArray(value) && schema.items) {
+  if (type === "array" && Array.isArray(value)) {
     validateNumberLimit(schema.minItems, value.length, path, "at least", "items", issues, (a, b) => a < b);
     validateNumberLimit(schema.maxItems, value.length, path, "at most", "items", issues, (a, b) => a > b);
-    value.forEach((item, index) => validateSchemaNode(schema.items, item, `${path}.${index}`, issues));
+    if (schema.items) {
+      value.forEach((item, index) => validateSchemaNode(schema.items, item, `${path}.${index}`, issues));
+    }
   }
   if (type === "string" && typeof value === "string") {
     validateNumberLimit(schema.minLength, value.length, path, "at least", "characters", issues, (a, b) => a < b);
@@ -271,7 +289,7 @@ function validateObjectSchema(
 
   for (const key of required) {
     if (!Object.prototype.hasOwnProperty.call(value, key)) {
-      issues.push({ path: `${path}.${key}`, message: "Missing required property." });
+      issues.push({ kind: "value", path: `${path}.${key}`, message: "Missing required property." });
     }
   }
 
@@ -283,7 +301,7 @@ function validateObjectSchema(
   if (schema.additionalProperties === false) {
     for (const key of Object.keys(value)) {
       if (!Object.prototype.hasOwnProperty.call(properties, key)) {
-        issues.push({ path: `${path}.${key}`, message: "Unknown property." });
+        issues.push({ kind: "value", path: `${path}.${key}`, message: "Unknown property." });
       }
     }
   }
@@ -311,7 +329,7 @@ function validateNumberLimit(
   if (typeof limit !== "number") return;
   if (fails(actual, limit)) {
     const suffix = unit ? ` ${unit}` : "";
-    issues.push({ path, message: `Expected ${phrase} ${limit}${suffix}.` });
+    issues.push({ kind: "value", path, message: `Expected ${phrase} ${limit}${suffix}.` });
   }
 }
 

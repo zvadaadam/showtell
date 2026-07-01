@@ -3,7 +3,13 @@ import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { dimsFor, renderHyperframeElementToPng } from "@agent-video/compose";
-import { effectiveBeats, resolveBundleTheme, type AspectRatio, type BundleScene } from "@agent-video/core";
+import {
+  effectiveBeats,
+  resolveBundleTheme,
+  type AspectRatio,
+  type BundleError,
+  type BundleScene,
+} from "@agent-video/core";
 import {
   Badge,
   Callout,
@@ -629,6 +635,8 @@ export async function renderBundleWorkshop(
   const ratios = opts.aspectRatios ?? compiled.spec.meta.aspectRatios;
   mkdirSync(outDir, { recursive: true });
   const frames: WorkshopRenderedFrame[] = [];
+  const warnings: BundleError[] = [...compiled.warnings];
+  const warningKeys = new Set(warnings.map((warning) => `${warning.path}:${warning.message}`));
 
   for (const aspectRatio of ratios) {
     for (const scene of compiled.spec.scenes) {
@@ -644,6 +652,19 @@ export async function renderBundleWorkshop(
           progress: planScene.narration.lines.length === 1 ? 1 : lineIndex / (planScene.narration.lines.length - 1),
         };
         const rendered = await renderBundleScene(scene, planScene, compiled, aspectRatio, moment);
+        if (rendered.warning) {
+          const warning: BundleError = {
+            code: "RENDER_WARNING",
+            path: `scenes.${planScene.index}.narration.lines.${lineIndex}`,
+            message: rendered.warning,
+            hint: "Inspect the visual inputs for this line; the renderer produced a fallback or warning state.",
+          };
+          const key = `${warning.path}:${warning.message}`;
+          if (!warningKeys.has(key)) {
+            warnings.push(warning);
+            warningKeys.add(key);
+          }
+        }
         const file = `scene-${String(planScene.index).padStart(3, "0")}-${scene.id}-${line.id}-${aspectRatio.replace(":", "x")}.png`;
         writeFileSync(join(outDir, file), rendered.png);
         frames.push({
@@ -678,11 +699,11 @@ export async function renderBundleWorkshop(
       {
         version: 1,
         title: `${compiled.spec.meta.title} Workshop`,
-        bundleDir: compiled.bundleDir,
-        planPath: compiled.planPath,
+        bundleDir: ".",
+        planPath: "compiled-plan.json",
         frames,
         themeTokens: WORKSHOP_THEMES,
-        warnings: compiled.warnings,
+        warnings,
       },
       null,
       2,
@@ -696,7 +717,7 @@ export async function renderBundleWorkshop(
     manifestPath,
     frames,
     themeTokens: WORKSHOP_THEMES,
-    warnings: compiled.warnings,
+    warnings,
   };
 }
 

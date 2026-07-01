@@ -96,6 +96,18 @@ test("chart parsing honors explicit x/y fields", () => {
   expect(parsed.series).toEqual([{ name: "weight", values: [4, 7] }]);
 });
 
+test("chart parsing preserves numeric strings for explicit y fields", () => {
+  const parsed = parseChartData(
+    [
+      { stage: "compile", weight: "4" },
+      { stage: "render", weight: "7" },
+    ],
+    { x: "stage", y: "weight" },
+  );
+
+  expect(parsed.series).toEqual([{ name: "weight", values: [4, 7] }]);
+});
+
 test("bar and line charts scale negative values around a zero baseline", () => {
   const s = valueScale([-10, 20], 100, 200);
   const zeroY = s.yFor(0);

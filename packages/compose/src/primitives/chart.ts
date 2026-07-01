@@ -42,7 +42,10 @@ export function parseChartData(
       series: [
         {
           name: fields.y,
-          values: data.map((d) => (typeof d[fields.y!] === "number" ? Number(d[fields.y!]) : 0)),
+          values: data.map((d) => {
+            const value = Number(d[fields.y!]);
+            return Number.isFinite(value) ? value : 0;
+          }),
         },
       ],
     };

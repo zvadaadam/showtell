@@ -553,6 +553,86 @@ test("hyperframe propsSchema supported constraints are enforced", () => {
   }
 });
 
+test("hyperframe propsSchema array length constraints do not require item schemas", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-bundle-props-array-schema-"));
+  mkdirSync(join(dir, "hyperframes"), { recursive: true });
+  writeFileSync(
+    join(dir, "hyperframes", "source.tsx"),
+    [
+      'const propsSchema = { type: "object", properties: { steps: { type: "array", minItems: 1 } } };',
+      "const inputs = {};",
+      "function render() { return null; }",
+      "export default { schemaVersion: 1, propsSchema, inputs, render };",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(dir, "spec.json"),
+    JSON.stringify({
+      version: 2,
+      meta: { title: "Props schema", repo: { path: ROOT } },
+      scenes: [
+        {
+          id: "intro",
+          narration: { lines: [{ id: "l1", text: "Intro." }] },
+          visual: {
+            kind: "hyperframe",
+            src: "hyperframes/source.tsx",
+            props: { steps: [] },
+          },
+        },
+      ],
+    }),
+  );
+
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: "BAD_HYPERFRAME_PROPS", path: "scenes.0.visual.props.steps" }),
+    );
+  }
+});
+
+test("hyperframe propsSchema dialect errors point at the hyperframe module", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-bundle-props-schema-dialect-"));
+  mkdirSync(join(dir, "hyperframes"), { recursive: true });
+  writeFileSync(
+    join(dir, "hyperframes", "source.tsx"),
+    [
+      'const propsSchema = { type: "object", properties: { title: { type: "string", format: "email" } } };',
+      "const inputs = {};",
+      "function render() { return null; }",
+      "export default { schemaVersion: 1, propsSchema, inputs, render };",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(dir, "spec.json"),
+    JSON.stringify({
+      version: 2,
+      meta: { title: "Props schema", repo: { path: ROOT } },
+      scenes: [
+        {
+          id: "intro",
+          narration: { lines: [{ id: "l1", text: "Intro." }] },
+          visual: {
+            kind: "hyperframe",
+            src: "hyperframes/source.tsx",
+            props: { title: "hello" },
+          },
+        },
+      ],
+    }),
+  );
+
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: "BAD_HYPERFRAME_SCHEMA", path: "scenes.0.visual.src" }),
+    );
+  }
+});
+
 test("hyperframe contract must come from the default export object", () => {
   const dir = mkdtempSync(join(tmpdir(), "av-bundle-default-export-"));
   mkdirSync(join(dir, "hyperframes"), { recursive: true });
@@ -603,7 +683,8 @@ test("hyperframe policy lint rejects ambient APIs and unsupported imports", () =
       'const propsSchema = { type: "object", properties: { title: { type: "string" } } };',
       "const inputs = {};",
       "function render() {",
-      "  process.cwd();",
+      '  Date["now"]();',
+      '  process["cwd"]();',
       "  readFileSync('/etc/hosts', 'utf-8');",
       "  return null;",
       "}",
@@ -642,5 +723,54 @@ test("hyperframe policy lint rejects ambient APIs and unsupported imports", () =
         message: expect.stringContaining("process."),
       }),
     );
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        code: "BANNED_HYPERFRAME_API",
+        path: "scenes.0.visual.src",
+        message: expect.stringContaining("Date.now"),
+      }),
+    );
+  }
+});
+
+test("hyperframe policy lint ignores banned-looking strings and comments", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-bundle-hyperframe-policy-clean-"));
+  mkdirSync(join(dir, "hyperframes"), { recursive: true });
+  writeFileSync(
+    join(dir, "hyperframes", "safe.tsx"),
+    [
+      'const propsSchema = { type: "object", properties: { title: { type: "string" } } };',
+      "const inputs = {};",
+      "function render() {",
+      "  // Date.now and Math.random are only mentioned in documentation text.",
+      '  const label = "fetch( process.cwd Date.now Math.random";',
+      "  return label;",
+      "}",
+      "export default { schemaVersion: 1, propsSchema, inputs, render };",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(dir, "spec.json"),
+    JSON.stringify({
+      version: 2,
+      meta: { title: "Safe hyperframe", repo: { path: ROOT } },
+      scenes: [
+        {
+          id: "intro",
+          narration: { lines: [{ id: "l1", text: "Unsafe API names in strings should not fail validation." }] },
+          visual: {
+            kind: "hyperframe",
+            src: "hyperframes/safe.tsx",
+            props: { title: "Safe" },
+          },
+        },
+      ],
+    }),
+  );
+
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.warnings).toHaveLength(0);
   }
 });

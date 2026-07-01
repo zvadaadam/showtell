@@ -13,15 +13,8 @@ import { tokenize } from "./highlight.ts";
 import { drawChart } from "./primitives/chart.ts";
 import { drawCode } from "./primitives/code.ts";
 import { drawDiff } from "./primitives/diff.ts";
-import type { RenderedScene } from "./render-scene.ts";
+import { emptyResult, panelRadius, propsOf, type Box, type DrawResult } from "./render-hyperframe-shared.ts";
 import { canvasTheme } from "./theme.ts";
-
-interface Box {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
 
 interface MediaRenderEnv {
   dims: Dims;
@@ -32,28 +25,11 @@ interface MediaRenderEnv {
   theme?: HyperframeTheme;
 }
 
-interface DrawResult {
-  resolvedRefs: RenderedScene["resolvedRefs"];
-  warning?: string;
-}
-
 interface PngCanvas {
   toBuffer(mimeType?: "image/png"): Buffer;
 }
 
 type HyperResolvedDiffWithLines = HyperResolvedDiff & Pick<ResolvedDiff, "lines" | "language" | "rawText">;
-
-function propsOf(element: HyperframeElement): Record<string, unknown> {
-  return element.props as Record<string, unknown>;
-}
-
-function panelRadius(box: Box, scale = 0.035): number {
-  return Math.min(18, Math.round(Math.min(box.w, box.h) * scale));
-}
-
-function emptyResult(): DrawResult {
-  return { resolvedRefs: [] };
-}
 
 async function drawCanvasInto(ctx: SKRSContext2D, source: PngCanvas, box: Box): Promise<void> {
   const image = await loadImage(source.toBuffer("image/png"));
@@ -207,12 +183,20 @@ export async function renderImageAsset(
   element: HyperframeElement,
   box: Box,
   env: MediaRenderEnv,
-): Promise<void> {
+): Promise<DrawResult> {
   const props = propsOf(element);
   const asset = props.asset as ResolvedAsset | undefined;
-  if (!asset || asset.type !== "image") return;
+  if (!asset || asset.type !== "image") return emptyResult();
   drawPanel(ctx, box, env);
-  const image = await loadImage(asset.path);
+  let image;
+  try {
+    image = await loadImage(asset.path);
+  } catch {
+    return {
+      resolvedRefs: [],
+      warning: `image asset "${asset.path}" could not be loaded.`,
+    };
+  }
   const cover = props.fit === "cover";
   const scale = cover
     ? Math.max(box.w / image.width, box.h / image.height)
@@ -224,4 +208,5 @@ export async function renderImageAsset(
   ctx.clip();
   ctx.drawImage(image, box.x + (box.w - dw) / 2, box.y + (box.h - dh) / 2, dw, dh);
   ctx.restore();
+  return emptyResult();
 }

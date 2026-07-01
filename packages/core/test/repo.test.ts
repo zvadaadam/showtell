@@ -19,6 +19,10 @@ test("working-tree code refs must stay repo-relative", () => {
   expect(() => readFileAtRef(repo, "nested\\..\\..\\outside.ts")).toThrow(/inside the repo/);
 });
 
+test("working-tree code refs wrap unreadable repo paths", () => {
+  expect(() => readFileAtRef(join(repo, "missing"), "a.ts")).toThrow(/Unsafe working-tree file "a.ts"/);
+});
+
 test("git diff refs also reject paths outside the repo", () => {
   expect(() => resolveDiff(repo, { file: "../outside.ts", ref: "HEAD" })).toThrow(/inside the repo/);
 });

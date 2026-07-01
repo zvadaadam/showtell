@@ -69,8 +69,14 @@ function assertSafeGitRef(ref: string): void {
 
 function safeWorkingTreeFile(repoPath: string, file: string): string {
   const rel = repoRelativeFile(file);
+  let realRepoPath: string;
   try {
-    return safeExistingFileInRoot(realpathSync(repoPath), rel, { maxBytes: 64 * 1024 * 1024 }).path;
+    realRepoPath = realpathSync(repoPath);
+  } catch (e) {
+    throw new Error(`Unsafe working-tree file "${file}": repo path is not readable: ${(e as Error).message}`);
+  }
+  try {
+    return safeExistingFileInRoot(realRepoPath, rel, { maxBytes: 64 * 1024 * 1024 }).path;
   } catch (e) {
     if (e instanceof SafeFileError) throw new Error(`Unsafe working-tree file "${file}": ${e.message}`);
     throw e;
@@ -82,7 +88,7 @@ export function readFileAtRef(repoPath: string, file: string, ref?: string): str
   const rel = repoRelativeFile(file);
   if (ref) {
     assertSafeGitRef(ref);
-    // `git show <ref>:<path>` — path must be repo-relative and posix-style.
+    // Requires Git 2.24+ for `--end-of-options`; path must be repo-relative and posix-style.
     return execFileSync("git", ["-C", repoPath, "show", "--end-of-options", `${ref}:${rel}`], {
       encoding: "utf-8",
       maxBuffer: 64 * 1024 * 1024,

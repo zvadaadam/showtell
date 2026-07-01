@@ -52,6 +52,9 @@ function render(ctx: HyperframeContext<Props>) {
   const metrics = metricsInput.type === "data" && Array.isArray(metricsInput.data) ? metricsInput.data : [];
   const callout = ctx.props.callouts?.[Math.min(ctx.props.callouts.length - 1, Math.floor(ctx.scene.progress * 2))];
   const isPortrait = ctx.viewport.aspectRatio === "9:16";
+  const openingFocal = callout && ctx.scene.index % 2 === 1 ? "callout" : "chart";
+  const focal = ctx.scene.lineIndex === ctx.scene.lineCount - 1 ? "code" : openingFocal;
+  const revealProgress = Math.max(0.35, ctx.scene.progress, reveal.progress);
 
   if (source.kind !== "code") {
     return (
@@ -69,18 +72,22 @@ function render(ctx: HyperframeContext<Props>) {
             <Text variant="eyebrow">{ctx.props.eyebrow ?? "agent-video bundle v2"}</Text>
             <Text variant="title">{ctx.props.title}</Text>
             {ctx.props.body ? <Text variant="body">{ctx.props.body}</Text> : null}
-            <Chart
-              data={metrics}
-              type="bar"
-              x="stage"
-              y="weight"
-              title={ctx.props.chartTitle ?? "Pipeline leverage"}
-              reveal={ctx.scene.progress}
-            />
           </Stack>
           <Stack grow>
-            <CodeRef source={source} focus={source.focus} reveal={reveal.progress} maxLines={26} />
-            {callout ? <Callout text={callout} /> : null}
+            {focal === "chart" ? (
+              <Chart
+                data={metrics}
+                type="bar"
+                x="stage"
+                y="weight"
+                title={ctx.props.chartTitle ?? "Pipeline leverage"}
+                reveal={revealProgress}
+              />
+            ) : null}
+            {focal === "code" ? (
+              <CodeRef source={source} focus={source.focus} reveal={revealProgress} maxLines={26} />
+            ) : null}
+            {focal === "callout" && callout ? <Callout text={callout} /> : null}
           </Stack>
         </Stack>
       </CaptionSafeArea>

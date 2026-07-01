@@ -6,4 +6,4 @@ export { renderCaptionedFrame } from "./render-caption.ts";
 export { dimsFor, type Dims } from "./dims.ts";
 export { probeImageInfo } from "./image-info.ts";
 export type { ImageInfo } from "./image-info.ts";
-export { THEME } from "./theme.ts";
+export { THEME, canvasTheme, type CanvasTheme, type SemanticTheme } from "./theme.ts";

@@ -25,6 +25,7 @@ import {
 } from "@agent-video/core";
 import {
   probeImageInfo,
+  canvasTheme,
   renderCaptionedFrame,
   renderHyperframeElementToPng,
   renderSceneToPng,
@@ -778,6 +779,7 @@ export async function renderBundle(
   const warnings = [...compiled.warnings];
   const warningKeys = new Set(warnings.map((warning) => `${warning.path}:${warning.message}`));
   const outputs: CompiledBundleOutput[] = [];
+  const captionTheme = canvasTheme(hyperframeThemeFromSpec(compiled.spec));
   try {
     for (const aspectRatio of ratios) {
       const clips: string[] = [];
@@ -832,7 +834,7 @@ export async function renderBundle(
 
           const visualPng = burnInCaptions ? join(workDir, `${tag}-${line.id}-caption.png`) : png;
           if (burnInCaptions) {
-            writeFileSync(visualPng, await renderCaptionedFrame(rendered.png, aspectRatio, line.text));
+            writeFileSync(visualPng, await renderCaptionedFrame(rendered.png, aspectRatio, line.text, captionTheme));
           }
           const lineClip = join(workDir, `${tag}-${line.id}.mp4`);
           imageAudioToClip({
