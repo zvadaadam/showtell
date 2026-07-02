@@ -8,7 +8,7 @@ import { existsSync, statSync, rmSync } from "node:fs";
 import { platform } from "node:os";
 
 /** Auto-detect the "Capture screen N" avfoundation device index. */
-export function detectScreenDevice(): string | null {
+function detectScreenDevice(): string | null {
   if (platform() !== "darwin") return null;
   let output = "";
   try {

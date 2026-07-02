@@ -21,7 +21,6 @@ export interface PlaybackPlan {
   /** Dead time after the last kept action window. */
   droppedAfterMs: number;
   actionCount: number;
-  fittedToDurationMs?: number;
 }
 
 export interface ActionPlaybackConfig {
@@ -33,7 +32,7 @@ export interface ActionPlaybackConfig {
   minGapToSpeedUpMs: number;
 }
 
-export const DEFAULT_ACTION_PLAYBACK_CONFIG: ActionPlaybackConfig = {
+const DEFAULT_ACTION_PLAYBACK_CONFIG: ActionPlaybackConfig = {
   preActionPaddingMs: 600,
   postActionPaddingMs: 400,
   targetGapOutputMs: 900,
@@ -52,7 +51,7 @@ export interface ActivityWindow {
   endMs: number;
 }
 
-export function isMeaningfulCaptureEvent(event: CaptureEvent): boolean {
+function isMeaningfulCaptureEvent(event: CaptureEvent): boolean {
   return event.type === "click" || event.type === "type" || event.type === "scroll" || event.type === "navigate";
 }
 
@@ -70,21 +69,6 @@ export function createActionPlaybackPlan(
 
   const windows = eventActionWindows(actionEvents, sourceMs, cfg);
   return createWindowPlaybackPlan(windows, sourceMs, cfg, fitToDurationMs, actionEvents.length);
-}
-
-export function createVisualPlaybackPlan(
-  windows: ActivityWindow[],
-  sourceDurationMs: number,
-  config?: Partial<ActionPlaybackConfig>,
-  fitToDurationMs?: number,
-): PlaybackPlan | null {
-  const sourceMs = Math.max(0, sourceDurationMs);
-  const cfg = { ...DEFAULT_ACTION_PLAYBACK_CONFIG, ...dropUndefined(config) };
-  const padded = windows.map((window) => ({
-    start: Math.max(0, window.startMs - cfg.preActionPaddingMs),
-    end: Math.min(sourceMs, window.endMs + cfg.postActionPaddingMs),
-  }));
-  return createWindowPlaybackPlan(padded, sourceMs, cfg, fitToDurationMs, windows.length);
 }
 
 export function createSmartPlaybackPlan(opts: {
@@ -317,7 +301,7 @@ function stretchActionsToDuration(plan: PlaybackPlan, targetDurationMs: number):
     outputTime += outputDuration;
     return next;
   });
-  return { ...plan, segments, outputDurationMs: targetDurationMs, fittedToDurationMs: targetDurationMs };
+  return { ...plan, segments, outputDurationMs: targetDurationMs };
 }
 
 function scalePlaybackPlanToDuration(plan: PlaybackPlan, targetDurationMs: number): PlaybackPlan {
@@ -337,7 +321,7 @@ function scalePlaybackPlanToDuration(plan: PlaybackPlan, targetDurationMs: numbe
     outputTime += outputDuration;
     return next;
   });
-  return { ...plan, segments, outputDurationMs: targetDurationMs, fittedToDurationMs: targetDurationMs };
+  return { ...plan, segments, outputDurationMs: targetDurationMs };
 }
 
 function dropUndefined(config: Partial<ActionPlaybackConfig> | undefined): Partial<ActionPlaybackConfig> {

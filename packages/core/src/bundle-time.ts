@@ -1,6 +1,7 @@
 import type { BundleScene } from "./bundle.ts";
+import { ID_PATTERN } from "./id.ts";
 
-const ID = "[A-Za-z][A-Za-z0-9_-]{0,63}";
+const ID = ID_PATTERN;
 const SCOPED = `(?:(?<scene>${ID})\\/)?(?<id>${ID})`;
 
 export type BundleTimePointRef =

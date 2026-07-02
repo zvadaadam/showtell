@@ -1,17 +1,9 @@
 /** Hyperframe Workshop: render real component stories with the canvas renderer. */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { extname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { dimsFor, renderHyperframeElementToPng } from "@agent-video/compose";
-import {
-  effectiveBeats,
-  resolveBundleTheme,
-  safeExistingFileInRoot,
-  SafeFileError,
-  type AspectRatio,
-  type BundleError,
-  type BundleScene,
-} from "@agent-video/core";
+import { resolveBundleTheme, type AspectRatio, type BundleError } from "@agent-video/core";
 import {
   Badge,
   Callout,
@@ -41,7 +33,8 @@ import {
   type ResolvedCode,
   type ResolvedDiff,
 } from "@agent-video/hyperframes";
-import { compileBundle, renderBundleScene, type BundleVisualMoment } from "./bundle.ts";
+import { addUniqueWarning, compileBundle, lineMoment, renderBundleScene } from "./bundle.ts";
+import { serveStaticFile } from "./static-server.ts";
 
 export interface WorkshopRenderedFrame {
   id: string;
@@ -624,10 +617,6 @@ export async function renderWorkshop(
   };
 }
 
-function beatIdForLine(scene: BundleScene, lineId: string): string | undefined {
-  return effectiveBeats(scene).find((beat) => beat.lines.includes(lineId))?.id;
-}
-
 export async function renderBundleWorkshop(
   bundleDirInput: string,
   opts: { outDir?: string; aspectRatios?: AspectRatio[] } = {},
@@ -645,14 +634,7 @@ export async function renderBundleWorkshop(
       const planScene = compiled.plan.scenes.find((item) => item.id === scene.id)!;
       for (let lineIndex = 0; lineIndex < planScene.narration.lines.length; lineIndex++) {
         const line = planScene.narration.lines[lineIndex]!;
-        const moment: BundleVisualMoment = {
-          sceneIndex: planScene.index,
-          lineIndex,
-          lineCount: planScene.narration.lines.length,
-          lineId: line.id,
-          beatId: beatIdForLine(scene, line.id),
-          progress: planScene.narration.lines.length === 1 ? 1 : lineIndex / (planScene.narration.lines.length - 1),
-        };
+        const moment = lineMoment(planScene, lineIndex);
         const rendered = await renderBundleScene(scene, planScene, compiled, aspectRatio, moment);
         if (rendered.warning) {
           const warning: BundleError = {
@@ -661,11 +643,7 @@ export async function renderBundleWorkshop(
             message: rendered.warning,
             hint: "Inspect the visual inputs for this line; the renderer produced a fallback or warning state.",
           };
-          const key = `${warning.path}:${warning.message}`;
-          if (!warningKeys.has(key)) {
-            warnings.push(warning);
-            warningKeys.add(key);
-          }
+          addUniqueWarning(warnings, warningKeys, warning);
         }
         const file = `scene-${String(planScene.index).padStart(3, "0")}-${scene.id}-${line.id}-${aspectRatio.replace(":", "x")}.png`;
         writeFileSync(join(outDir, file), rendered.png);
@@ -723,24 +701,6 @@ export async function renderBundleWorkshop(
   };
 }
 
-const CTYPE: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-};
-
-function safeFile(root: string, rel: string): string | null {
-  if (rel.split(/[\\/]/).some((part) => part.startsWith("."))) return null;
-  try {
-    return safeExistingFileInRoot(root, rel).path;
-  } catch (e) {
-    if (e instanceof SafeFileError) return null;
-    throw e;
-  }
-}
-
 export function startWorkshopServer(opts: { outDir: string; port?: number }): WorkshopHandle {
   const outDir = resolve(opts.outDir);
   const server = Bun.serve({
@@ -749,11 +709,9 @@ export function startWorkshopServer(opts: { outDir: string; port?: number }): Wo
       let path = decodeURIComponent(new URL(req.url).pathname);
       if (path === "/status") return Response.json({ ok: true, stage: "workshop-serve", outDir });
       if (path === "/") path = "/index.html";
-      const file = safeFile(outDir, path.slice(1));
-      if (!file) return new Response("not found", { status: 404 });
-      return new Response(Bun.file(file), {
-        headers: { "content-type": CTYPE[extname(file).toLowerCase()] ?? "application/octet-stream" },
-      });
+      const res = serveStaticFile(outDir, path.slice(1));
+      if (!res) return new Response("not found", { status: 404 });
+      return res;
     },
   });
   const port = server.port;

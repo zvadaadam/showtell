@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import * as ts from "typescript";
 import { z } from "zod";
+import { ID_PATTERN } from "./id.ts";
 
 const Id = z
   .string()
-  .regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/, "Use 1-64 chars: letters, digits, underscore, hyphen; start with a letter.");
+  .regex(new RegExp(`^${ID_PATTERN}$`), "Use 1-64 chars: letters, digits, underscore, hyphen; start with a letter.");
 
 const HyperframeInput = z.discriminatedUnion("kind", [
   z

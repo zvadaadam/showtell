@@ -1,10 +1,11 @@
 # Bundle v2: agent-authored hyperframe videos
 
 Status: implemented runtime. The repo now supports `agent-video bundle
-validate|inspect|compile|render|schema` for a v2 source bundle. The current renderer
-validates hyperframe modules, extracts their literal input contracts, executes
-their pure `render(ctx)` function, and renders the returned tree with
-deterministic map, code, diff, chart, caption, and image primitives.
+validate|inspect|compile|render|workshop|components|templates|schema` for a v2
+source bundle. The current renderer validates hyperframe modules, extracts
+their literal input contracts, executes their pure `render(ctx)` function, and
+renders the returned tree with deterministic map, code, diff, chart, caption,
+and image primitives.
 
 ## Summary
 
@@ -874,8 +875,8 @@ No wall-clock `generatedAt` belongs in hash inputs.
 
 ## Verification gates
 
-Every CLI and MCP command must return structured JSON. Failures include
-`code`, `path`, `message`, and `hint`.
+Every CLI command must return structured JSON. Failures include `code`, `path`,
+`message`, and `hint`.
 
 Recommended command surface:
 
@@ -901,7 +902,7 @@ Success shapes:
   "bundleDir": "my-video.agent-video",
   "sceneCount": 2,
   "assetCount": 2,
-  "hyperframes": [{ "path": "hyperframes/product-system.tsx", "export": "default" }],
+  "hyperframes": [{ "scene": "proof", "src": "hyperframes/product-system.tsx" }],
   "warnings": [],
 }
 ```

@@ -7,6 +7,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CameraKeyframe, CaptureEvent } from "./camera.ts";
+import {
+  DETERMINISTIC_AUDIO_ARGS,
+  DETERMINISTIC_CONTAINER_ARGS,
+  DETERMINISTIC_VIDEO_ARGS,
+  FASTSTART_ARGS,
+} from "./encode.ts";
 import type { PlaybackPlan } from "./playback.ts";
 
 export interface CompositeOpts {
@@ -176,26 +182,11 @@ export function compositeScreencap(o: CompositeOpts): void {
 
     const args = ["-y", "-loglevel", "error", ...inputs, "-filter_complex", vf, "-map", "[v]"];
     if (audioIdx >= 0) args.push("-map", `${audioIdx}:a`);
-    args.push(
-      "-t",
-      o.durationSec.toFixed(3),
-      "-r",
-      String(o.fps),
-      "-c:v",
-      "libx264",
-      "-pix_fmt",
-      "yuv420p",
-      "-preset",
-      "medium",
-      "-threads",
-      "1",
-      "-flags:v",
-      "+bitexact",
-    );
+    args.push("-t", o.durationSec.toFixed(3), "-r", String(o.fps), ...DETERMINISTIC_VIDEO_ARGS);
     if (audioIdx >= 0) {
-      args.push("-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2", "-flags:a", "+bitexact");
+      args.push(...DETERMINISTIC_AUDIO_ARGS);
     }
-    args.push("-movflags", "+faststart", "-map_metadata", "-1", "-fflags", "+bitexact", o.outPath);
+    args.push(...FASTSTART_ARGS, ...DETERMINISTIC_CONTAINER_ARGS, o.outPath);
 
     execFileSync("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024 });
   } finally {

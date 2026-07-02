@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { alignEventsToVisualActivity, analyzeVisualActivity, createVisualPlaybackPlan } from "../src/index.ts";
+import { alignEventsToVisualActivity, analyzeVisualActivity } from "../src/index.ts";
 
 test("visual activity aligns command-window events to the moving pixels", () => {
   const [event] = alignEventsToVisualActivity(
@@ -54,17 +54,6 @@ test("visual activity detects moving intervals without event metadata", () => {
     expect(activity.intervals.length).toBeGreaterThanOrEqual(2);
     expect(activity.intervals[0]!.startMs).toBeGreaterThan(700);
     expect(activity.events.length).toBe(activity.intervals.length);
-
-    const plan = createVisualPlaybackPlan(
-      activity.intervals,
-      6000,
-      { preActionPaddingMs: 100, postActionPaddingMs: 150, targetGapOutputMs: 250, maxGapOutputMs: 250 },
-      2500,
-    );
-    expect(plan).not.toBeNull();
-    expect(plan!.droppedBeforeMs).toBeGreaterThan(700);
-    expect(plan!.outputDurationMs).toBe(2500);
-    expect(plan!.segments.some((seg) => seg.type === "gap" && seg.playbackRate > 1)).toBe(true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

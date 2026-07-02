@@ -21,7 +21,6 @@ interface Props {
   callout?: string;
   fit?: "contain" | "cover";
   captionMode?: "word-pop" | "karaoke" | "stacked" | "minimal";
-  focus?: "image";
 }
 
 const propsSchema: JsonSchema = {
@@ -35,7 +34,6 @@ const propsSchema: JsonSchema = {
     callout: { type: "string" },
     fit: { enum: ["contain", "cover"] },
     captionMode: { enum: ["word-pop", "karaoke", "stacked", "minimal"] },
-    focus: { enum: ["image"] },
   },
 };
 

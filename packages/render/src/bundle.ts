@@ -185,7 +185,6 @@ export interface BundleVisualMoment {
   lineIndex: number;
   lineCount: number;
   lineId: string;
-  beatId?: string;
   progress: number;
 }
 
@@ -466,13 +465,13 @@ function compileHyperframe(
 
 export async function compileBundle(
   bundleDirInput: string,
-  opts: { cacheDir?: string; planPath?: string } = {},
+  opts: { cacheDir?: string } = {},
 ): Promise<BundleCompileResult> {
   const validation = validateBundle(bundleDirInput);
   if (!validation.ok) throw new BundleCompileError(validation.errors, validation.warnings);
 
   const { spec, bundleDir, repoPath, warnings } = validation;
-  const planPath = opts.planPath ? resolve(opts.planPath) : join(bundleDir, "compiled-plan.json");
+  const planPath = join(bundleDir, "compiled-plan.json");
   const cacheDir = opts.cacheDir ?? join(bundleDir, ".agent-video", "cache");
   const rawSpec = readFileSync(join(bundleDir, "spec.json"));
 
@@ -759,8 +758,23 @@ function musicMixTracks(compiled: BundleCompileResult): MusicMixTrack[] {
   });
 }
 
-function beatIdForLine(scene: BundleScene, lineId: string): string | undefined {
-  return effectiveBeats(scene).find((beat) => beat.lines.includes(lineId))?.id;
+export function lineMoment(planScene: CompiledBundleScene, lineIndex: number): BundleVisualMoment {
+  const line = planScene.narration.lines[lineIndex]!;
+  return {
+    sceneIndex: planScene.index,
+    lineIndex,
+    lineCount: planScene.narration.lines.length,
+    lineId: line.id,
+    progress: planScene.narration.lines.length === 1 ? 1 : lineIndex / (planScene.narration.lines.length - 1),
+  };
+}
+
+export function addUniqueWarning(list: BundleError[], seenKeys: Set<string>, warning: BundleError): void {
+  const key = `${warning.path}:${warning.message}`;
+  if (!seenKeys.has(key)) {
+    list.push(warning);
+    seenKeys.add(key);
+  }
 }
 
 function renderWarning(sceneIndex: number, lineIndex: number, message: string): BundleError {
@@ -803,14 +817,7 @@ export async function renderBundle(
         let tailPng: string | undefined;
         for (let lineIndex = 0; lineIndex < planScene.narration.lines.length; lineIndex++) {
           const line = planScene.narration.lines[lineIndex]!;
-          const moment: BundleVisualMoment = {
-            sceneIndex: planScene.index,
-            lineIndex,
-            lineCount: planScene.narration.lines.length,
-            lineId: line.id,
-            beatId: beatIdForLine(scene, line.id),
-            progress: planScene.narration.lines.length === 1 ? 1 : lineIndex / (planScene.narration.lines.length - 1),
-          };
+          const moment = lineMoment(planScene, lineIndex);
           const rendered = await renderBundleScene(scene, planScene, compiled, aspectRatio, moment);
           if (aspectRatio === ratios[0]) {
             for (const resolved of rendered.resolvedRefs) {
@@ -829,11 +836,7 @@ export async function renderBundle(
           }
           if (aspectRatio === ratios[0] && rendered.warning) {
             const warning = renderWarning(planScene.index, lineIndex, rendered.warning);
-            const key = `${warning.path}:${warning.message}`;
-            if (!warningKeys.has(key)) {
-              warnings.push(warning);
-              warningKeys.add(key);
-            }
+            addUniqueWarning(warnings, warningKeys, warning);
           }
 
           const png = join(workDir, `${tag}-${line.id}.png`);

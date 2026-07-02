@@ -610,7 +610,8 @@ export const hyperframeComponents: HyperframeComponentManifest[] = [
     title: "Kinetic Caption",
     importName: "KineticCaption",
     layer: "host",
-    description: "Visual narration caption layer inside a hyperframe.",
+    description:
+      "Visual narration caption layer inside a hyperframe. mode is accepted; all modes currently produce the same static treatment (one frame per line); it exists for forward-compat. emphasized words render in the theme accent color.",
     bestFor: ["TikTok-style captions", "word-pop overlays", "visual emphasis"],
     commonProps: ["mode", "emphasis", "maxWords", "position"],
     example: '<KineticCaption source="narration" mode="word-pop" position="bottom" />',

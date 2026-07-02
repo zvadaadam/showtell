@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
+import { DETERMINISTIC_CONTAINER_ARGS, DETERMINISTIC_VIDEO_ARGS, FASTSTART_ARGS } from "./encode.ts";
 
 /** Session ids are sandbox-safe by construction — no path separators, no traversal. */
 const VALID_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -15,7 +16,7 @@ export function assertValidSessionId(id: string): void {
   }
 }
 
-export function capturesDir(root = "."): string {
+function capturesDir(root = "."): string {
   return join(root, ".agent-video", "captures");
 }
 
@@ -81,18 +82,9 @@ export function importCaptureSession(opts: { id: string; sourcePath: string; roo
         "-map",
         "0:v:0",
         "-an",
-        "-c:v",
-        "libx264",
-        "-pix_fmt",
-        "yuv420p",
-        "-preset",
-        "medium",
-        "-threads",
-        "1",
-        "-flags:v",
-        "+bitexact",
-        "-map_metadata",
-        "-1",
+        ...DETERMINISTIC_VIDEO_ARGS,
+        ...FASTSTART_ARGS,
+        ...DETERMINISTIC_CONTAINER_ARGS,
         tmp,
       ],
       { stdio: ["ignore", "pipe", "pipe"] },

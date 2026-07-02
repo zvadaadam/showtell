@@ -54,6 +54,7 @@ import {
 } from "@agent-video/capture";
 
 const VERSION = "0.0.0";
+const BOOLEAN_FLAGS = new Set(["frames-only", "no-import", "help"]);
 
 // ---------------------------------------------------------------------------
 // Output helpers — everything an agent consumes is JSON.
@@ -106,6 +107,8 @@ function parseArgs(argv: string[]): Args {
       const eq = raw.indexOf("=");
       if (eq !== -1) {
         flags[raw.slice(0, eq)] = raw.slice(eq + 1);
+      } else if (BOOLEAN_FLAGS.has(raw)) {
+        flags[raw] = true;
       } else {
         const next = args[i + 1];
         if (next && !next.startsWith("--")) {
@@ -247,6 +250,26 @@ function numberFlag(flags: Record<string, string | boolean>, name: string): numb
   return n;
 }
 
+function integerFlag(flags: Record<string, string | boolean>, name: string): number | undefined {
+  const n = numberFlag(flags, name);
+  if (n !== undefined && !Number.isInteger(n)) fail(`Invalid --${name}: ${n}`, `Pass --${name} as an integer.`);
+  return n;
+}
+
+async function emitAndServe(
+  payload: Record<string, unknown>,
+  handle: { stop(): void },
+  serveSeconds: number | undefined,
+): Promise<never> {
+  process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
+  if (serveSeconds && serveSeconds > 0) {
+    await Bun.sleep(serveSeconds * 1000);
+    handle.stop();
+    process.exit(0);
+  }
+  return new Promise<never>(() => {}); // serve until killed
+}
+
 async function cmdPreview(args: Args): Promise<void> {
   const usage =
     "Usage: agent-video preview <spec.json> [--port N] [--repo PATH] [--aspect 16:9,9:16] [--serve-seconds N]";
@@ -259,6 +282,8 @@ async function cmdPreview(args: Args): Promise<void> {
     .replace(/\.spec$/, "");
 
   const aspectRatios = parseAspectRatios(args);
+  const port = integerFlag(args.flags, "port");
+  const serveSeconds = integerFlag(args.flags, "serve-seconds");
 
   let playerDir: string;
   try {
@@ -275,35 +300,23 @@ async function cmdPreview(args: Args): Promise<void> {
   }
 
   const videoId = specContentId(spec);
-  const port = typeof args.flags.port === "string" ? parseInt(args.flags.port, 10) : undefined;
   const handle = startPreviewServer({ bundleDir: outDir, playerDir, title: spec.meta.title, videoId, port });
 
   // Agent-first: emit the result (stable watchUrl) immediately, then keep serving.
-  process.stdout.write(
-    JSON.stringify(
-      {
-        ok: true,
-        videoId,
-        status: "success",
-        watchUrl: handle.watchUrl,
-        url: handle.url,
-        port: handle.port,
-        manifestPath: result.manifestPath,
-        outputs: result.outputs,
-      },
-      null,
-      2,
-    ) + "\n",
+  await emitAndServe(
+    {
+      ok: true,
+      videoId,
+      status: "success",
+      watchUrl: handle.watchUrl,
+      url: handle.url,
+      port: handle.port,
+      manifestPath: result.manifestPath,
+      outputs: result.outputs,
+    },
+    handle,
+    serveSeconds,
   );
-
-  const serveSeconds =
-    typeof args.flags["serve-seconds"] === "string" ? parseInt(args.flags["serve-seconds"], 10) : undefined;
-  if (serveSeconds && serveSeconds > 0) {
-    await Bun.sleep(serveSeconds * 1000);
-    handle.stop();
-    process.exit(0);
-  }
-  await new Promise<void>(() => {}); // serve until killed
 }
 
 function cmdCapture(args: Args): never {
@@ -664,28 +677,19 @@ async function cmdBundle(args: Args): Promise<never> {
       });
     }
     if (subcommand === "workshop") {
+      const serveSeconds = integerFlag(args.flags, "serve-seconds");
       const result = await renderBundleWorkshop(bundleDir, { outDir, aspectRatios });
-      const serveSeconds =
-        typeof args.flags["serve-seconds"] === "string" ? parseInt(args.flags["serve-seconds"], 10) : undefined;
       if (serveSeconds !== undefined) {
         const handle = startWorkshopServer({ outDir: result.outDir });
-        process.stdout.write(
-          JSON.stringify(
-            {
-              ...result,
-              url: handle.url,
-              port: handle.port,
-            },
-            null,
-            2,
-          ) + "\n",
+        await emitAndServe(
+          {
+            ...result,
+            url: handle.url,
+            port: handle.port,
+          },
+          handle,
+          serveSeconds,
         );
-        if (serveSeconds > 0) {
-          await Bun.sleep(serveSeconds * 1000);
-          handle.stop();
-          process.exit(0);
-        }
-        await new Promise<void>(() => {});
       }
       ok(result as unknown as Record<string, unknown>);
     }
@@ -718,18 +722,11 @@ async function cmdWorkshop(args: Args): Promise<never> {
       "Usage: agent-video workshop render [--out DIR] [--aspect 16:9,9:16] [--serve-seconds N]",
     );
   }
+  const serveSeconds = integerFlag(args.flags, "serve-seconds");
   const result = await renderWorkshop({ outDir, aspectRatios });
-  const serveSeconds =
-    typeof args.flags["serve-seconds"] === "string" ? parseInt(args.flags["serve-seconds"], 10) : undefined;
   if (serveSeconds !== undefined) {
     const handle = startWorkshopServer({ outDir: result.outDir });
-    process.stdout.write(JSON.stringify({ ...result, url: handle.url, port: handle.port }, null, 2) + "\n");
-    if (serveSeconds > 0) {
-      await Bun.sleep(serveSeconds * 1000);
-      handle.stop();
-      process.exit(0);
-    }
-    await new Promise<void>(() => {});
+    await emitAndServe({ ...result, url: handle.url, port: handle.port }, handle, serveSeconds);
   }
   ok(result as unknown as Record<string, unknown>);
 }
@@ -816,8 +813,7 @@ function cmdSchema(): never {
 }
 
 function cmdHelp(): never {
-  // Human-readable to stderr so stdout stays JSON-clean for `--help` scrapers;
-  // but help is the one place we print prose. Keep it example-rich (agent-first).
+  // Human-readable to stdout. Keep it example-rich (agent-first).
   process.stdout.write(
     `agent-video — Loom for agents. Author a spec.json; render a narrated video.
 

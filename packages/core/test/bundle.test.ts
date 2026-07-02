@@ -77,6 +77,30 @@ test("bundle validation accepts documented cross-scene time refs", () => {
   expect(result.ok).toBe(true);
 });
 
+test("bundle validation warns when screencap builtin is used", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-bundle-screencap-warning-"));
+  writeFileSync(
+    join(dir, "spec.json"),
+    JSON.stringify({
+      version: 2,
+      meta: { title: "Screencap", repo: { path: ROOT } },
+      scenes: [
+        {
+          id: "intro",
+          narration: { lines: [{ id: "l1", text: "Intro." }] },
+          visual: { kind: "builtin", name: "screencap" },
+        },
+      ],
+    }),
+  );
+
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.warnings).toContainEqual(expect.objectContaining({ code: "UNSUPPORTED_BUNDLE_BUILTIN" }));
+  }
+});
+
 test("bundle validation accepts semantic theme presets and partial overrides", () => {
   const dir = mkdtempSync(join(tmpdir(), "av-bundle-theme-"));
   writeFileSync(

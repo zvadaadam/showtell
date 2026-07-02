@@ -1,11 +1,16 @@
 import { test, expect } from "bun:test";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const CLI = join(import.meta.dir, "..", "src", "index.ts");
 const ROOT = join(import.meta.dir, "..", "..", "..");
+type BundleSpecForTest = {
+  audio?: { tts?: { provider?: string; voice?: string; model?: string } };
+  scenes: { narration: { lines: { text: string }[] } }[];
+};
 
 /** Run the CLI as a real subprocess (agent-first: JSON out, exit codes, hints). */
 function run(args: string[]): { code: number; out: unknown; err: unknown } {
@@ -23,12 +28,39 @@ function run(args: string[]): { code: number; out: unknown; err: unknown } {
 function tempBundle(): string {
   const dir = mkdtempSync(join(tmpdir(), "av-cli-bundle-"));
   cpSync(join(ROOT, "examples", "bundle-v2"), dir, { recursive: true });
+  rmSync(join(dir, ".agent-video"), { recursive: true, force: true });
   rmSync(join(dir, "compiled-plan.json"), { force: true });
   const specPath = join(dir, "spec.json");
-  const spec = JSON.parse(readFileSync(specPath, "utf-8")) as { meta: { repo: { path: string } } };
+  const spec = JSON.parse(readFileSync(specPath, "utf-8")) as BundleSpecForTest & { meta: { repo: { path: string } } };
   spec.meta.repo.path = ROOT;
   writeFileSync(specPath, JSON.stringify(spec, null, 2) + "\n");
+  seedSayTtsCache(dir, spec);
   return dir;
+}
+
+function seedSayTtsCache(bundleDir: string, spec: BundleSpecForTest): void {
+  const tts = spec.audio?.tts;
+  if (tts?.provider && tts.provider !== "say") return;
+  const cacheDir = join(bundleDir, ".agent-video", "cache", "tts");
+  mkdirSync(cacheDir, { recursive: true });
+  for (const line of spec.scenes.flatMap((scene) => scene.narration.lines)) {
+    const key = createHash("sha256")
+      .update(JSON.stringify({ provider: "say", voice: tts?.voice ?? "", model: tts?.model ?? "", text: line.text }))
+      .digest("hex")
+      .slice(0, 32);
+    execFileSync("ffmpeg", [
+      "-y",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "anullsrc=r=44100:cl=mono",
+      "-t",
+      "0.4",
+      join(cacheDir, `say-${key}.wav`),
+    ]);
+  }
 }
 
 function miniHyperframeBundle(): string {
@@ -47,20 +79,20 @@ function miniHyperframeBundle(): string {
       "export default defineHyperframe({ schemaVersion: 1, propsSchema, inputs, render });",
     ].join("\n"),
   );
-  writeFileSync(
-    join(dir, "spec.json"),
-    JSON.stringify({
-      version: 2,
-      meta: { title: "Workshop mini", repo: { path: ROOT }, aspectRatios: ["16:9"] },
-      scenes: [
-        {
-          id: "intro",
-          narration: { lines: [{ id: "l1", text: "This workshop frame renders one line." }] },
-          visual: { kind: "hyperframe", src: "hyperframes/frame.tsx", props: { title: "Workshop mini" } },
-        },
-      ],
-    }),
-  );
+  const spec = {
+    audio: { tts: { provider: "say" } },
+    version: 2,
+    meta: { title: "Workshop mini", repo: { path: ROOT }, aspectRatios: ["16:9"] },
+    scenes: [
+      {
+        id: "intro",
+        narration: { lines: [{ id: "l1", text: "This workshop frame renders one line." }] },
+        visual: { kind: "hyperframe", src: "hyperframes/frame.tsx", props: { title: "Workshop mini" } },
+      },
+    ],
+  };
+  writeFileSync(join(dir, "spec.json"), JSON.stringify(spec));
+  seedSayTtsCache(dir, spec);
   return dir;
 }
 
@@ -229,6 +261,57 @@ test("help → human text on stdout, exit 0", () => {
   expect(r.status).toBe(0);
   expect(r.stdout).toContain("USAGE");
 });
+
+test("render --frames-only before positional does not swallow the spec path", () => {
+  const outDir = mkdtempSync(join(tmpdir(), "av-cli-frames-before-"));
+  const { code, out } = run([
+    "render",
+    "--frames-only",
+    "examples/hello.spec.json",
+    "--out",
+    outDir,
+    "--aspect",
+    "16:9",
+  ]);
+  expect(code).toBe(0);
+  expect(out).toMatchObject({ ok: true, stage: "frames", outDir });
+}, 30_000);
+
+test("render --frames-only after positional still works", () => {
+  const outDir = mkdtempSync(join(tmpdir(), "av-cli-frames-after-"));
+  const { code, out } = run([
+    "render",
+    "examples/hello.spec.json",
+    "--frames-only",
+    "--out",
+    outDir,
+    "--aspect",
+    "16:9",
+  ]);
+  expect(code).toBe(0);
+  expect(out).toMatchObject({ ok: true, stage: "frames", outDir });
+}, 30_000);
+
+test("preview rejects invalid port with a flag-specific hint", () => {
+  const { code, err } = run(["preview", "examples/hello.spec.json", "--port", "abc"]);
+  expect(code).toBe(1);
+  expect(err).toMatchObject({ ok: false });
+  expect((err as { hint?: string }).hint).toContain("--port");
+});
+
+test("--out=value equals form still parses", () => {
+  const outDir = mkdtempSync(join(tmpdir(), "av-cli-out-equals-"));
+  const { code, out } = run([
+    "render",
+    "examples/hello.spec.json",
+    "--frames-only",
+    `--out=${outDir}`,
+    "--aspect",
+    "16:9",
+  ]);
+  expect(code).toBe(0);
+  expect(out).toMatchObject({ ok: true, stage: "frames", outDir });
+}, 30_000);
 
 test("render --frames-only → ok, frames, and live-byte proof for a code scene", () => {
   const dir = mkdtempSync(join(tmpdir(), "av-cli-render-"));
