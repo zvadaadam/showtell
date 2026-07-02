@@ -382,6 +382,45 @@ test("compileBundle reports invalid image assets with spec paths", async () => {
   }
 });
 
+test("compileBundle reports repo-ref compile failures with spec paths", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-bundle-bad-repo-ref-"));
+  writeFileSync(
+    join(dir, "spec.json"),
+    JSON.stringify({
+      version: 2,
+      meta: { title: "Bad repo ref", repo: { path: ROOT }, aspectRatios: ["16:9"] },
+      scenes: [
+        {
+          id: "intro",
+          narration: { lines: [{ id: "l1", text: "This bad repo range should fail during compile." }] },
+          refs: {
+            source: {
+              kind: "code",
+              file: "package.json",
+              lineStart: 9999,
+              lineEnd: 10000,
+            },
+          },
+          visual: { kind: "builtin", name: "title", props: { title: "Bad repo ref" } },
+        },
+      ],
+    }),
+  );
+
+  try {
+    await compileBundle(dir);
+    throw new Error("compileBundle should have failed");
+  } catch (e) {
+    expect(e).toBeInstanceOf(BundleCompileError);
+    expect((e as BundleCompileError).errors).toContainEqual(
+      expect.objectContaining({
+        code: "BAD_REPO_REF",
+        path: "scenes.0.refs.source",
+      }),
+    );
+  }
+});
+
 test("renderBundle can render copied diff and image starter templates", async () => {
   const repo = mkdtempSync(join(tmpdir(), "av-bundle-template-repo-"));
   execFileSync("git", ["-C", repo, "init", "-q"]);

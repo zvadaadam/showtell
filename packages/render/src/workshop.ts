@@ -1,11 +1,13 @@
 /** Hyperframe Workshop: render real component stories with the canvas renderer. */
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
-import { extname, join, normalize, resolve } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { extname, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { dimsFor, renderHyperframeElementToPng } from "@agent-video/compose";
 import {
   effectiveBeats,
   resolveBundleTheme,
+  safeExistingFileInRoot,
+  SafeFileError,
   type AspectRatio,
   type BundleError,
   type BundleScene,
@@ -731,10 +733,12 @@ const CTYPE: Record<string, string> = {
 
 function safeFile(root: string, rel: string): string | null {
   if (rel.split(/[\\/]/).some((part) => part.startsWith("."))) return null;
-  const full = normalize(join(root, rel));
-  if (full !== root && !full.startsWith(root + "/")) return null;
-  if (!existsSync(full) || !statSync(full).isFile()) return null;
-  return full;
+  try {
+    return safeExistingFileInRoot(root, rel).path;
+  } catch (e) {
+    if (e instanceof SafeFileError) return null;
+    throw e;
+  }
 }
 
 export function startWorkshopServer(opts: { outDir: string; port?: number }): WorkshopHandle {

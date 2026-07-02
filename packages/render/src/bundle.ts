@@ -517,6 +517,7 @@ export async function compileBundle(
   const model = spec.audio.tts.model;
   const lineAudio = new Map<string, string>();
   const scenes: CompiledBundleScene[] = [];
+  const compileErrors: BundleError[] = [];
   let cursorMs = 0;
 
   for (let sceneIndex = 0; sceneIndex < spec.scenes.length; sceneIndex++) {
@@ -560,7 +561,18 @@ export async function compileBundle(
       compiled.beats[beat.id] = { lines: beat.lines, startMs, endMs, durationMs: endMs - startMs };
     }
     for (const [refId, ref] of Object.entries(scene.refs)) {
-      compiled.refs[refId] = compileRepoRef(repoPath, ref);
+      try {
+        compiled.refs[refId] = compileRepoRef(repoPath, ref);
+      } catch (e) {
+        compileErrors.push(
+          compileError(
+            "BAD_REPO_REF",
+            `scenes.${sceneIndex}.refs.${refId}`,
+            `Could not compile repo ref "${refId}": ${(e as Error).message}`,
+            "Use a valid repo-relative file, line range, and git ref/range for this scene ref.",
+          ),
+        );
+      }
     }
     scenes.push(compiled);
   }
@@ -571,7 +583,6 @@ export async function compileBundle(
     lastScene.endMs = totalMs;
     lastScene.durationMs += totalMs - cursorMs;
   }
-  const compileErrors: BundleError[] = [];
   for (let sceneIndex = 0; sceneIndex < spec.scenes.length; sceneIndex++) {
     const scene = spec.scenes[sceneIndex]!;
     const compiled = scenes.find((item) => item.id === scene.id)!;

@@ -1,4 +1,5 @@
 import { test, expect, beforeEach, afterEach } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,6 +26,28 @@ test("working-tree code refs wrap unreadable repo paths", () => {
 
 test("git diff refs also reject paths outside the repo", () => {
   expect(() => resolveDiff(repo, { file: "../outside.ts", ref: "HEAD" })).toThrow(/inside the repo/);
+});
+
+test("git refs reject option-like, colon, and control characters before invoking git", () => {
+  for (const ref of ["-x", "main:HEAD", "HEAD\nmain", "HEAD\tmain"]) {
+    expect(() => readFileAtRef(repo, "a.ts", ref)).toThrow(/Git ref\/range/);
+    expect(() => resolveDiff(repo, { file: "a.ts", ref })).toThrow(/Git ref\/range/);
+  }
+});
+
+test("safe git refs can read committed files and ranges", () => {
+  execFileSync("git", ["-C", repo, "init", "-q"]);
+  execFileSync("git", ["-C", repo, "config", "user.email", "t@t"]);
+  execFileSync("git", ["-C", repo, "config", "user.name", "t"]);
+  execFileSync("git", ["-C", repo, "add", "a.ts"]);
+  execFileSync("git", ["-C", repo, "commit", "-q", "-m", "one"]);
+  writeFileSync(join(repo, "a.ts"), "one\ntwo\nthree\n");
+  execFileSync("git", ["-C", repo, "add", "a.ts"]);
+  execFileSync("git", ["-C", repo, "commit", "-q", "-m", "two"]);
+
+  expect(readFileAtRef(repo, "a.ts", "HEAD~1")).toBe("one\ntwo\n");
+  const diff = resolveDiff(repo, { file: "a.ts", ref: "HEAD~1..HEAD" });
+  expect(diff.added).toBe(1);
 });
 
 test("lineStart past EOF fails instead of rendering an empty code scene", () => {
