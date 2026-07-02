@@ -997,6 +997,17 @@ export function validateBundle(bundleDirInput: string): BundleValidationResult {
     );
     validateTimeRefs(scene, sceneIndex, spec.scenes, errors);
 
+    if (scene.visual.kind === "builtin" && scene.visual.name === "screencap") {
+      warnings.push(
+        err(
+          "UNSUPPORTED_BUNDLE_BUILTIN",
+          `scenes.${sceneIndex}.visual.name`,
+          'Builtin "screencap" is not renderable in bundles yet; it renders a placeholder card.',
+          "Use a simple spec.json with a screencap scene for screen recordings, or author a hyperframe visual.",
+        ),
+      );
+    }
+
     Object.entries(scene.refs).forEach(([id, ref]) => {
       try {
         repoRelativeFile(ref.file);

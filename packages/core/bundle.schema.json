@@ -28,21 +28,35 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "enum": ["16:9", "9:16", "1:1"]
+                "enum": [
+                  "16:9",
+                  "9:16",
+                  "1:1"
+                ]
               },
               "minItems": 1,
-              "default": ["16:9"]
+              "default": [
+                "16:9"
+              ]
             },
             "theme": {
               "type": "object",
               "properties": {
                 "preset": {
                   "type": "string",
-                  "enum": ["agent-dark", "paper", "neutral"]
+                  "enum": [
+                    "agent-dark",
+                    "paper",
+                    "neutral"
+                  ]
                 },
                 "mode": {
                   "type": "string",
-                  "enum": ["dark", "paper", "neutral"]
+                  "enum": [
+                    "dark",
+                    "paper",
+                    "neutral"
+                  ]
                 },
                 "colors": {
                   "type": "object",
@@ -139,7 +153,9 @@
               }
             }
           },
-          "required": ["title"],
+          "required": [
+            "title"
+          ],
           "additionalProperties": false
         },
         "assets": {
@@ -158,7 +174,10 @@
                     "minLength": 1
                   }
                 },
-                "required": ["type", "src"],
+                "required": [
+                  "type",
+                  "src"
+                ],
                 "additionalProperties": false
               },
               {
@@ -173,7 +192,10 @@
                     "minLength": 1
                   }
                 },
-                "required": ["type", "src"],
+                "required": [
+                  "type",
+                  "src"
+                ],
                 "additionalProperties": false
               },
               {
@@ -188,7 +210,10 @@
                     "minLength": 1
                   }
                 },
-                "required": ["type", "src"],
+                "required": [
+                  "type",
+                  "src"
+                ],
                 "additionalProperties": false
               }
             ]
@@ -206,7 +231,12 @@
               "properties": {
                 "provider": {
                   "type": "string",
-                  "enum": ["say", "replicate", "openai", "elevenlabs"],
+                  "enum": [
+                    "say",
+                    "replicate",
+                    "openai",
+                    "elevenlabs"
+                  ],
                   "description": "TTS provider. Local 'say' needs no key; others are BYO-API."
                 },
                 "model": {
@@ -216,7 +246,9 @@
                   "type": "string"
                 }
               },
-              "required": ["provider"],
+              "required": [
+                "provider"
+              ],
               "additionalProperties": false,
               "default": {
                 "provider": "say"
@@ -227,7 +259,12 @@
               "properties": {
                 "mode": {
                   "type": "string",
-                  "enum": ["off", "sidecar", "burn-in", "sidecar-and-burn-in"],
+                  "enum": [
+                    "off",
+                    "sidecar",
+                    "burn-in",
+                    "sidecar-and-burn-in"
+                  ],
                   "default": "off"
                 },
                 "source": {
@@ -273,7 +310,10 @@
                             "minLength": 1
                           }
                         },
-                        "required": ["from", "to"],
+                        "required": [
+                          "from",
+                          "to"
+                        ],
                         "additionalProperties": false
                       }
                     ]
@@ -302,7 +342,11 @@
                     "default": 0
                   }
                 },
-                "required": ["id", "asset", "range"],
+                "required": [
+                  "id",
+                  "asset",
+                  "range"
+                ],
                 "additionalProperties": false
               },
               "default": []
@@ -351,13 +395,18 @@
                           "minLength": 1
                         }
                       },
-                      "required": ["id", "text"],
+                      "required": [
+                        "id",
+                        "text"
+                      ],
                       "additionalProperties": false
                     },
                     "minItems": 1
                   }
                 },
-                "required": ["lines"],
+                "required": [
+                  "lines"
+                ],
                 "additionalProperties": false
               },
               "refs": {
@@ -397,7 +446,10 @@
                           "type": "string"
                         }
                       },
-                      "required": ["kind", "file"],
+                      "required": [
+                        "kind",
+                        "file"
+                      ],
                       "additionalProperties": false
                     },
                     {
@@ -416,7 +468,11 @@
                           "minLength": 1
                         }
                       },
-                      "required": ["kind", "file", "ref"],
+                      "required": [
+                        "kind",
+                        "file",
+                        "ref"
+                      ],
                       "additionalProperties": false
                     }
                   ]
@@ -444,7 +500,10 @@
                       "minItems": 1
                     }
                   },
-                  "required": ["id", "lines"],
+                  "required": [
+                    "id",
+                    "lines"
+                  ],
                   "additionalProperties": false
                 },
                 "default": []
@@ -463,7 +522,10 @@
                       "minLength": 1
                     }
                   },
-                  "required": ["id", "at"],
+                  "required": [
+                    "id",
+                    "at"
+                  ],
                   "additionalProperties": false
                 },
                 "default": []
@@ -488,7 +550,10 @@
                           "minLength": 1
                         }
                       },
-                      "required": ["from", "to"],
+                      "required": [
+                        "from",
+                        "to"
+                      ],
                       "additionalProperties": false
                     }
                   ]
@@ -541,7 +606,10 @@
                                   "minLength": 1
                                 }
                               },
-                              "required": ["from", "to"],
+                              "required": [
+                                "from",
+                                "to"
+                              ],
                               "additionalProperties": false
                             }
                           ]
@@ -552,7 +620,10 @@
                         "default": {}
                       }
                     },
-                    "required": ["kind", "src"],
+                    "required": [
+                      "kind",
+                      "src"
+                    ],
                     "additionalProperties": false
                   },
                   {
@@ -564,7 +635,14 @@
                       },
                       "name": {
                         "type": "string",
-                        "enum": ["title", "code", "diff", "talking-points", "chart", "screencap"]
+                        "enum": [
+                          "title",
+                          "code",
+                          "diff",
+                          "talking-points",
+                          "chart",
+                          "screencap"
+                        ]
                       },
                       "ref": {
                         "type": "string",
@@ -576,19 +654,30 @@
                         "default": {}
                       }
                     },
-                    "required": ["kind", "name"],
+                    "required": [
+                      "kind",
+                      "name"
+                    ],
                     "additionalProperties": false
                   }
                 ]
               }
             },
-            "required": ["id", "narration", "visual"],
+            "required": [
+              "id",
+              "narration",
+              "visual"
+            ],
             "additionalProperties": false
           },
           "minItems": 1
         }
       },
-      "required": ["version", "meta", "scenes"],
+      "required": [
+        "version",
+        "meta",
+        "scenes"
+      ],
       "additionalProperties": false
     }
   },

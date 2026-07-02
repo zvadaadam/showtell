@@ -23,7 +23,7 @@ function hintFor(issue: ZodIssue): string | undefined {
     return 'Set "kind" to one of: title, code, diff, talking-points, chart, screencap.';
   }
   if (issue.code === "unrecognized_keys") {
-    return "Remove the unexpected key(s); the spec schema is strict. Run with --schema to see allowed fields.";
+    return "Remove the unexpected key(s); the spec schema is strict. Run `agent-video schema` to see allowed fields.";
   }
   if (path.endsWith("narration")) {
     return "Every scene needs a non-empty 'narration' string — it drives the audio and the auto duration.";

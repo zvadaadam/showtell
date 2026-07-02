@@ -71,3 +71,12 @@ without guessing hidden rules. Validation errors must point to the exact
 - Runtime: **bun** (runs TS directly; no build step needed in dev). Lint: **oxlint**. Tests: `bun test`.
 - Prereq: `ffmpeg` (`brew install ffmpeg`).
 - Run the CLI locally: `bun packages/cli/src/index.ts <command>`.
+
+## Multi-agent workflow (maintainers)
+
+How maintenance work on this repo is orchestrated across models:
+
+- **Fable (Claude) plans, coordinates, and judges.** It scopes the work, writes the briefs, and reviews every diff before it lands.
+- **Scoped subtasks go to WORKER subagents (Codex `gpt-5.5`, high reasoning).** Each worker gets a clear goal, the relevant context, explicit file ownership, and verification commands. Workers do not invent the plan.
+- Run independent pieces in parallel — with **disjoint file ownership** per worker.
+- Review worker results before merging. If something's off, rewrite the brief and spin another worker; don't silently patch over it (unless the fix is trivial).

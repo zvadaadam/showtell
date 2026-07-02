@@ -1,5 +1,11 @@
 export { detectScreenDevice, recordScreen, type RecordOpts } from "./record.ts";
 export {
+  DETERMINISTIC_AUDIO_ARGS,
+  DETERMINISTIC_CONTAINER_ARGS,
+  DETERMINISTIC_VIDEO_ARGS,
+  FASTSTART_ARGS,
+} from "./encode.ts";
+export {
   capturesDir,
   ensureCapturesDir,
   sessionPath,

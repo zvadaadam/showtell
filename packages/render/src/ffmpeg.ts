@@ -2,8 +2,12 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-
-const COMMON = ["-map_metadata", "-1", "-fflags", "+bitexact"];
+import {
+  DETERMINISTIC_AUDIO_ARGS,
+  DETERMINISTIC_CONTAINER_ARGS,
+  DETERMINISTIC_VIDEO_ARGS,
+  FASTSTART_ARGS,
+} from "@agent-video/capture";
 
 /** A still image + a narration wav → a fixed-duration mp4 clip. */
 export function imageAudioToClip(o: {
@@ -27,29 +31,10 @@ export function imageAudioToClip(o: {
     o.durationSec.toFixed(3),
     "-r",
     String(o.fps),
-    "-c:v",
-    "libx264",
-    "-pix_fmt",
-    "yuv420p",
-    "-preset",
-    "medium",
-    "-threads",
-    "1",
-    "-flags:v",
-    "+bitexact",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
-    "-ar",
-    "44100",
-    "-ac",
-    "2",
-    "-flags:a",
-    "+bitexact",
-    "-movflags",
-    "+faststart",
-    ...COMMON,
+    ...DETERMINISTIC_VIDEO_ARGS,
+    ...DETERMINISTIC_AUDIO_ARGS,
+    ...FASTSTART_ARGS,
+    ...DETERMINISTIC_CONTAINER_ARGS,
     o.outPath,
   ]);
 }
@@ -70,9 +55,8 @@ export function concatClips(clips: string[], outPath: string, workDir: string): 
     list,
     "-c",
     "copy",
-    "-movflags",
-    "+faststart",
-    ...COMMON,
+    ...FASTSTART_ARGS,
+    ...DETERMINISTIC_CONTAINER_ARGS,
     outPath,
   ]);
 }
@@ -119,7 +103,7 @@ export function mixMusicTracks(videoPath: string, tracks: MusicMixTrack[], outPa
       "44100",
       "-ac",
       "2",
-      ...COMMON,
+      ...DETERMINISTIC_CONTAINER_ARGS,
       out,
     ]);
     return out;
@@ -156,17 +140,9 @@ export function mixMusicTracks(videoPath: string, tracks: MusicMixTrack[], outPa
     "[a]",
     "-c:v",
     "copy",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
-    "-ar",
-    "44100",
-    "-ac",
-    "2",
-    "-movflags",
-    "+faststart",
-    ...COMMON,
+    ...DETERMINISTIC_AUDIO_ARGS,
+    ...FASTSTART_ARGS,
+    ...DETERMINISTIC_CONTAINER_ARGS,
     outPath,
   ]);
 }
@@ -187,27 +163,10 @@ export function normalizeVideoDuration(videoPath: string, outPath: string, durat
     "[v]",
     "-map",
     "[a]",
-    "-c:v",
-    "libx264",
-    "-pix_fmt",
-    "yuv420p",
-    "-preset",
-    "medium",
-    "-threads",
-    "1",
-    "-flags:v",
-    "+bitexact",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
-    "-ar",
-    "44100",
-    "-ac",
-    "2",
-    "-movflags",
-    "+faststart",
-    ...COMMON,
+    ...DETERMINISTIC_VIDEO_ARGS,
+    ...DETERMINISTIC_AUDIO_ARGS,
+    ...FASTSTART_ARGS,
+    ...DETERMINISTIC_CONTAINER_ARGS,
     outPath,
   ]);
 }
@@ -226,7 +185,7 @@ export function silentAudio(outPath: string, durationSec: number): void {
     durationSec.toFixed(3),
     "-c:a",
     "pcm_s16le",
-    ...COMMON,
+    ...DETERMINISTIC_CONTAINER_ARGS,
     outPath,
   ]);
 }
