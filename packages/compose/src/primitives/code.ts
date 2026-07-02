@@ -1,9 +1,15 @@
 import type { SKRSContext2D } from "@napi-rs/canvas";
 import type { CodeScene, ResolvedCode } from "@agent-video/core";
-import { THEME } from "../theme.ts";
+import { THEME, type CanvasTheme } from "../theme.ts";
 import type { Dims } from "../dims.ts";
 import { fitMonoFont, windowAround, drawCard } from "../draw.ts";
 import type { Tok } from "../highlight.ts";
+
+export interface CodeDrawOptions {
+  maxLines?: number;
+  reveal?: number;
+  theme?: CanvasTheme;
+}
 
 /**
  * Draw a code card: a window-chrome bar with the file path, then line numbers
@@ -18,8 +24,10 @@ export function drawCode(
   resolved: ResolvedCode,
   tokens: Tok[][],
   dims: Dims,
+  opts: CodeDrawOptions = {},
 ): void {
-  const { codeX, codeY, codeW, codeH, pad } = drawCard(ctx, dims, { file: scene.content.file });
+  const theme = opts.theme ?? THEME;
+  const { codeX, codeY, codeW, codeH, pad } = drawCard(ctx, dims, { file: scene.content.file }, theme);
 
   const innerPad = Math.round(pad * 0.6);
   const base = Math.min(dims.width, dims.height);
@@ -27,7 +35,17 @@ export function drawCode(
   // Window to a legible number of lines (a fixed card can't show 40 lines big),
   // anchored on the focus line. The full range is still read for the sha.
   const anchor = resolved.focus.length ? resolved.focus[0]! - resolved.startLine : 0;
-  const { view, start, hiddenNote } = windowAround(tokens, anchor);
+  const maxLines = typeof opts.maxLines === "number" && opts.maxLines > 0 ? Math.floor(opts.maxLines) : undefined;
+  const windowed = windowAround(tokens, anchor, maxLines);
+  const reveal = typeof opts.reveal === "number" ? Math.max(0, Math.min(1, opts.reveal)) : undefined;
+  const visibleCount =
+    reveal === undefined ? windowed.view.length : Math.max(1, Math.ceil(windowed.view.length * reveal));
+  const view = windowed.view.slice(0, visibleCount);
+  const start = windowed.start;
+  const hiddenByWindow = tokens.length - windowed.view.length;
+  const hiddenByReveal = windowed.view.length - view.length;
+  const hidden = hiddenByWindow + hiddenByReveal;
+  const hiddenNote = hidden > 0 ? `+${hidden} more line${hidden > 1 ? "s" : ""}` : "";
   const startLineNo = resolved.startLine + start;
 
   const gutterChars = String(startLineNo + view.length - 1).length + 2;
@@ -42,9 +60,9 @@ export function drawCode(
     maxFont: Math.round(base * 0.03),
     minFont: Math.round(base * 0.02),
     lineHeightRatio: 1.5,
-    family: THEME.mono,
+    family: theme.mono,
   });
-  ctx.font = `${fontSize}px '${THEME.mono}'`;
+  ctx.font = `${fontSize}px '${theme.mono}'`;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
 
@@ -59,10 +77,10 @@ export function drawCode(
   for (let i = 0; i < view.length; i++) {
     const absLine = startLineNo + i;
     if (focus.has(absLine)) {
-      ctx.fillStyle = THEME.focus;
+      ctx.fillStyle = theme.focus;
       ctx.fillRect(codeX, y - lineH / 2, codeW, lineH);
     }
-    ctx.fillStyle = THEME.gutter;
+    ctx.fillStyle = theme.gutter;
     ctx.fillText(String(absLine), startX, y);
     let x = codeStartX;
     for (const tok of view[i]!) {
@@ -74,8 +92,8 @@ export function drawCode(
   }
 
   if (hiddenNote) {
-    ctx.font = `${Math.round(noteH * 0.6)}px '${THEME.sans}'`;
-    ctx.fillStyle = THEME.subtle;
+    ctx.font = `${Math.round(noteH * 0.6)}px '${theme.sans}'`;
+    ctx.fillStyle = theme.subtle;
     ctx.textAlign = "right";
     ctx.textBaseline = "bottom";
     ctx.fillText(hiddenNote, codeX + codeW - innerPad, codeY + codeH - innerPad * 0.4);

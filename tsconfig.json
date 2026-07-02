@@ -8,15 +8,22 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
+    "jsx": "react",
+    "jsxFactory": "h",
     "strict": true,
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
     "types": ["bun"],
     "paths": {
-      "@agent-video/core": ["./packages/core/src/index.ts"]
+      "@agent-video/core": ["./packages/core/src/index.ts"],
+      "@agent-video/hyperframes": ["./packages/hyperframes/src/index.ts"]
     }
   },
-  "include": ["packages/*/src/**/*.ts"],
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/hyperframes/templates/**/*.tsx",
+    "examples/bundle-v2/hyperframes/**/*.tsx"
+  ],
   "exclude": ["packages/player/**"]
 }

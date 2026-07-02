@@ -1,6 +1,6 @@
 import type { SKRSContext2D } from "@napi-rs/canvas";
 import type { ChartScene } from "@agent-video/core";
-import { THEME } from "../theme.ts";
+import { THEME, type CanvasTheme } from "../theme.ts";
 import type { Dims } from "../dims.ts";
 
 const SERIES_COLORS = [
@@ -32,7 +32,24 @@ interface ValueScale {
   yFor(value: number): number;
 }
 
-export function parseChartData(data: Record<string, string | number>[]): Parsed {
+export function parseChartData(
+  data: Record<string, string | number>[],
+  fields: { x?: string; y?: string } = {},
+): Parsed {
+  if (fields.x && fields.y) {
+    return {
+      labels: data.map((d) => String(d[fields.x!] ?? "")),
+      series: [
+        {
+          name: fields.y,
+          values: data.map((d) => {
+            const value = Number(d[fields.y!]);
+            return Number.isFinite(value) ? value : 0;
+          }),
+        },
+      ],
+    };
+  }
   const keys = Object.keys(data[0] ?? {});
   const labelKey = keys.find((k) => typeof data[0]![k] === "string") ?? keys[0]!;
   const numKeys = keys.filter((k) => k !== labelKey && typeof data[0]![k] === "number");
@@ -67,16 +84,19 @@ export function valueScale(values: number[], plotY: number, chartH: number): Val
 }
 
 /** Returns true if the chart had data to plot; false if it drew a "no data" placeholder. */
-export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims): boolean {
+export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims, theme: CanvasTheme = THEME): boolean {
   const base = Math.min(dims.width, dims.height);
   const pad = Math.round(base * 0.1);
-  const p = parseChartData(scene.content.data as Record<string, string | number>[]);
+  const p = parseChartData(scene.content.data as Record<string, string | number>[], {
+    x: scene.content.x,
+    y: scene.content.y,
+  });
 
   let top = pad;
   if (scene.content.title) {
     const tSize = Math.round(base * 0.045);
-    ctx.font = `${tSize}px '${THEME.sansBold}'`;
-    ctx.fillStyle = THEME.fg;
+    ctx.font = `${tSize}px '${theme.sansBold}'`;
+    ctx.fillStyle = theme.fg;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
     ctx.fillText(scene.content.title, dims.width / 2, top + tSize);
@@ -87,8 +107,8 @@ export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims): bo
   // visible placeholder instead of a blank/broken card, and let the caller warn.
   const hasData = p.series.length > 0 && p.series.some((s) => s.values.some((v) => v !== 0));
   if (!hasData) {
-    ctx.font = `${Math.round(base * 0.03)}px '${THEME.sans}'`;
-    ctx.fillStyle = THEME.subtle;
+    ctx.font = `${Math.round(base * 0.03)}px '${theme.sans}'`;
+    ctx.fillStyle = theme.subtle;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("No numeric data to chart", dims.width / 2, top + (dims.height - top) / 2);
@@ -98,9 +118,9 @@ export function drawChart(ctx: SKRSContext2D, scene: ChartScene, dims: Dims): bo
   const plot = { x: pad, y: top, w: dims.width - pad * 2, h: dims.height - top - pad };
 
   if (scene.content.chartType === "pie") drawPie(ctx, p, plot);
-  else drawBarOrLine(ctx, p, plot, base, scene.content.chartType);
+  else drawBarOrLine(ctx, p, plot, base, scene.content.chartType, theme);
 
-  drawLegend(ctx, legendItems(scene.content.chartType, p), dims, base, pad);
+  drawLegend(ctx, legendItems(scene.content.chartType, p), dims, base, pad, theme);
   return true;
 }
 
@@ -110,6 +130,7 @@ function drawBarOrLine(
   plot: { x: number; y: number; w: number; h: number },
   base: number,
   kind: "bar" | "line",
+  theme: CanvasTheme,
 ): void {
   const allVals = p.series.flatMap((s) => s.values);
   const axisFont = Math.round(base * 0.022);
@@ -118,14 +139,14 @@ function drawBarOrLine(
   const baseY = scale.yFor(0);
 
   // axis line
-  ctx.strokeStyle = THEME.cardBorder;
+  ctx.strokeStyle = theme.cardBorder;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(plot.x, baseY);
   ctx.lineTo(plot.x + plot.w, baseY);
   ctx.stroke();
 
-  ctx.font = `${axisFont}px '${THEME.sans}'`;
+  ctx.font = `${axisFont}px '${theme.sans}'`;
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   const groups = p.labels.length;
@@ -134,7 +155,7 @@ function drawBarOrLine(
   for (let g = 0; g < groups; g++) {
     const gx = plot.x + groupW * g;
     // label
-    ctx.fillStyle = THEME.subtle;
+    ctx.fillStyle = theme.subtle;
     ctx.fillText(p.labels[g]!, gx + groupW / 2, baseY + axisFont * 0.6);
 
     if (kind === "bar") {
@@ -151,7 +172,7 @@ function drawBarOrLine(
         ctx.fillRect(x, v >= 0 ? y : baseY, barW * 0.86, h);
         // value label outside the bar (skip zeros — they'd float with no bar)
         if (v !== 0) {
-          ctx.fillStyle = THEME.fg;
+          ctx.fillStyle = theme.fg;
           ctx.textAlign = "center";
           ctx.textBaseline = v > 0 ? "bottom" : "top";
           ctx.fillText(String(v), x + barW * 0.43, y + (v > 0 ? -axisFont * 0.3 : axisFont * 0.3));
@@ -198,10 +219,17 @@ function drawPie(ctx: SKRSContext2D, p: Parsed, plot: { x: number; y: number; w:
   });
 }
 
-function drawLegend(ctx: SKRSContext2D, items: LegendItem[], dims: Dims, base: number, pad: number): void {
+function drawLegend(
+  ctx: SKRSContext2D,
+  items: LegendItem[],
+  dims: Dims,
+  base: number,
+  pad: number,
+  theme: CanvasTheme,
+): void {
   if (items.length <= 1) return;
   const fs = Math.round(base * 0.022);
-  ctx.font = `${fs}px '${THEME.sans}'`;
+  ctx.font = `${fs}px '${theme.sans}'`;
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   const y = dims.height - pad * 0.45;
@@ -209,7 +237,7 @@ function drawLegend(ctx: SKRSContext2D, items: LegendItem[], dims: Dims, base: n
   items.forEach((item) => {
     ctx.fillStyle = SERIES_COLORS[item.colorIndex % SERIES_COLORS.length]!;
     ctx.fillRect(x, y - fs * 0.4, fs * 0.8, fs * 0.8);
-    ctx.fillStyle = THEME.subtle;
+    ctx.fillStyle = theme.subtle;
     ctx.fillText(item.label, x + fs * 1.1, y);
     x += fs * 1.1 + ctx.measureText(item.label).width + fs * 1.2;
   });

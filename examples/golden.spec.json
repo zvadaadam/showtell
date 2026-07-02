@@ -31,11 +31,12 @@
         "chartType": "bar",
         "title": "Scene kinds shipped",
         "data": [
-          { "phase": "v1a", "kinds": 2 },
-          { "phase": "v1b", "kinds": 4 }
+          { "phase": "built-ins", "kinds": 4 },
+          { "phase": "capture", "kinds": 1 },
+          { "phase": "bundle", "kinds": 1 }
         ]
       },
-      "narration": "Two scene kinds in the v1a skeleton, four more in v1b — six in total.",
+      "narration": "Built-in visuals, screen capture, and bundle hyperframes cover the video formats we need.",
       "duration": "auto"
     },
     {

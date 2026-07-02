@@ -1,10 +1,10 @@
 import type { SKRSContext2D } from "@napi-rs/canvas";
 import type { TitleScene } from "@agent-video/core";
-import { THEME } from "../theme.ts";
+import { THEME, type CanvasTheme } from "../theme.ts";
 import type { Dims } from "../dims.ts";
 import { wrapText } from "../draw.ts";
 
-export function drawTitle(ctx: SKRSContext2D, scene: TitleScene, dims: Dims): void {
+export function drawTitle(ctx: SKRSContext2D, scene: TitleScene, dims: Dims, theme: CanvasTheme = THEME): void {
   const { heading, subtitle } = scene.content;
   const portrait = dims.height > dims.width;
   const maxWidth = dims.width * 0.82;
@@ -19,20 +19,20 @@ export function drawTitle(ctx: SKRSContext2D, scene: TitleScene, dims: Dims): vo
   ctx.textBaseline = "middle";
 
   // Wrap heading
-  ctx.font = `${headSize}px '${THEME.sansBold}'`;
+  ctx.font = `${headSize}px '${theme.sansBold}'`;
   const headLines = wrapText(ctx, heading, maxWidth);
-  const subLines = subtitle ? wrapText(setFont(ctx, subSize, THEME.sans), subtitle, maxWidth) : [];
+  const subLines = subtitle ? wrapText(setFont(ctx, subSize, theme.sans), subtitle, maxWidth) : [];
 
   const totalH = headLines.length * headLineH + (subLines.length ? gap + subLines.length * subSize * 1.3 : 0);
   let y = dims.height / 2 - totalH / 2 + headLineH / 2;
 
   // Accent rule above
-  ctx.fillStyle = THEME.accent;
+  ctx.fillStyle = theme.accent;
   const ruleW = headSize * 1.6;
   ctx.fillRect(cx - ruleW / 2, y - headLineH * 0.9, ruleW, Math.max(3, headSize * 0.06));
 
-  ctx.font = `${headSize}px '${THEME.sansBold}'`;
-  ctx.fillStyle = THEME.fg;
+  ctx.font = `${headSize}px '${theme.sansBold}'`;
+  ctx.fillStyle = theme.fg;
   for (const line of headLines) {
     ctx.fillText(line, cx, y);
     y += headLineH;
@@ -40,8 +40,8 @@ export function drawTitle(ctx: SKRSContext2D, scene: TitleScene, dims: Dims): vo
 
   if (subLines.length) {
     y += gap - headLineH + subSize * 1.3 * 0.5;
-    ctx.font = `${subSize}px '${THEME.sans}'`;
-    ctx.fillStyle = THEME.subtle;
+    ctx.font = `${subSize}px '${theme.sans}'`;
+    ctx.fillStyle = theme.subtle;
     for (const line of subLines) {
       ctx.fillText(line, cx, y);
       y += subSize * 1.3;

@@ -7,9 +7,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema.json": "./schema.json",
+    "./bundle.schema.json": "./bundle.schema.json",
     "./manifest.schema.json": "./manifest.schema.json"
   },
   "dependencies": {
+    "typescript": "5.9.3",
     "zod": "3.25.76",
     "zod-to-json-schema": "3.25.2"
   }

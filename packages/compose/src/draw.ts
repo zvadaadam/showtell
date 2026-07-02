@@ -1,20 +1,20 @@
 /** Shared canvas drawing helpers: background, watermark, text wrapping, cards. */
 import type { SKRSContext2D } from "@napi-rs/canvas";
-import { THEME } from "./theme.ts";
+import { THEME, type CanvasTheme } from "./theme.ts";
 import type { Dims } from "./dims.ts";
 
-export function drawBackground(ctx: SKRSContext2D, dims: Dims): void {
+export function drawBackground(ctx: SKRSContext2D, dims: Dims, theme: CanvasTheme = THEME): void {
   const g = ctx.createLinearGradient(0, 0, dims.width, dims.height);
-  g.addColorStop(0, THEME.bg[0]);
-  g.addColorStop(1, THEME.bg[1]);
+  g.addColorStop(0, theme.bg[0]);
+  g.addColorStop(1, theme.bg[1]);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, dims.width, dims.height);
 }
 
-export function drawWatermark(ctx: SKRSContext2D, dims: Dims, text: string): void {
+export function drawWatermark(ctx: SKRSContext2D, dims: Dims, text: string, theme: CanvasTheme = THEME): void {
   const size = Math.round(Math.min(dims.width, dims.height) * 0.022);
-  ctx.font = `${size}px '${THEME.sans}'`;
-  ctx.fillStyle = THEME.watermarkFg;
+  ctx.font = `${size}px '${theme.sans}'`;
+  ctx.fillStyle = theme.watermarkFg;
   ctx.textAlign = "right";
   ctx.textBaseline = "alphabetic";
   const pad = Math.round(size * 1.4);
@@ -39,7 +39,7 @@ export function wrapText(ctx: SKRSContext2D, text: string, maxWidth: number): st
   return lines;
 }
 
-/** A fixed card can't show many lines legibly, so code/diff window to this many. */
+/** A fixed card can't show many lines legibly, so repo text primitives window to this many. */
 export const MAX_WINDOW_LINES = 22;
 
 /**
@@ -47,7 +47,7 @@ export const MAX_WINDOW_LINES = 22;
  * for code, the first change for a diff), biased so the anchor sits in the top
  * third (more context follows). Returns the slice, its start offset, and a
  * "+N more lines" footer string (empty when nothing is hidden). Shared by the
- * code and diff scenes so the windowing rule lives in one place.
+ * code and diff primitives so the windowing rule lives in one place.
  */
 export function windowAround<T>(
   items: T[],
@@ -127,7 +127,12 @@ export interface CardChrome {
  * to the code area. Calls `ctx.save()`; the caller draws content and `ctx.restore()`s.
  * One chrome for code and diff so they read as the same component.
  */
-export function drawCard(ctx: SKRSContext2D, dims: Dims, opts: { file: string; badge?: CardBadge[] }): CardChrome {
+export function drawCard(
+  ctx: SKRSContext2D,
+  dims: Dims,
+  opts: { file: string; badge?: CardBadge[] },
+  theme: CanvasTheme = THEME,
+): CardChrome {
   const base = Math.min(dims.width, dims.height);
   const pad = Math.round(base * 0.05);
   const cardX = pad;
@@ -138,15 +143,15 @@ export function drawCard(ctx: SKRSContext2D, dims: Dims, opts: { file: string; b
 
   ctx.save();
   roundRect(ctx, cardX, cardY, cardW, cardH, radius);
-  ctx.fillStyle = THEME.codeBg;
+  ctx.fillStyle = theme.codeBg;
   ctx.fill();
-  ctx.strokeStyle = THEME.cardBorder;
+  ctx.strokeStyle = theme.cardBorder;
   ctx.lineWidth = 2;
   ctx.stroke();
 
   const barH = Math.round(base * 0.055);
   roundRect(ctx, cardX, cardY, cardW, barH, radius);
-  ctx.fillStyle = THEME.codeBar;
+  ctx.fillStyle = theme.codeBar;
   ctx.fill();
 
   const dotR = barH * 0.12;
@@ -158,7 +163,7 @@ export function drawCard(ctx: SKRSContext2D, dims: Dims, opts: { file: string; b
     ctx.fill();
   });
 
-  ctx.font = `${Math.round(barH * 0.34)}px '${THEME.mono}'`;
+  ctx.font = `${Math.round(barH * 0.34)}px '${theme.mono}'`;
   ctx.textBaseline = "middle";
   if (opts.badge) {
     // right-aligned, drawn right→left so segments read left→right
@@ -172,7 +177,7 @@ export function drawCard(ctx: SKRSContext2D, dims: Dims, opts: { file: string; b
     }
   }
   ctx.textAlign = "center";
-  ctx.fillStyle = THEME.subtle;
+  ctx.fillStyle = theme.subtle;
   ctx.fillText(opts.file, cardX + cardW / 2, dotY);
 
   const codeY = cardY + barH;

@@ -1,25 +1,66 @@
 # agent-video — agent guide
 
-**What this is:** "Loom for agents" — a local, repo-aware video renderer. A coding agent authors a `spec.json` and the renderer turns it into a short narrated MP4. Being local is the moat: code/diff scenes reference the repo by `file:line`/git ref and the renderer reads the **live bytes**, so rendered code is always ground-truth.
+**What this is:** "Loom for agents" — a local, repo-aware video renderer. A coding agent authors a `spec.json` and the renderer turns it into a short narrated MP4. Being local is the moat: code/diff visuals reference the repo by `file:line`/git ref and the renderer reads the **live bytes**, so rendered code is always ground-truth.
 
-**Read first:** `.context/interview-me/agent-video-product.md` (the `## Plan`) and `.context/plan/agent-video-goal.md`. Progress + gate ledger: `.context/plan/agent-video-progress.md`.
+**Read first:** `docs/bundle-v2.md` for the bundle v2 authoring model, plus `.context/plan/agent-video-goal.md` when present. Progress + gate ledger: `.context/plan/agent-video-progress.md`.
 
 ## The contract (never violate)
 
-- The LLM authors **only** a JSON-Schema-validated `spec.json` (`meta` + ordered `scenes[]`, each with `narration`). It NEVER writes ffmpeg, frame math, or pasted source.
-- `code`/`diff` scenes carry repo **references** (`file`, `lineStart/End`, git `ref`), never pasted code.
-- Scenes use `duration: "auto"` → the renderer is **two-pass** (synthesize TTS → measure with ffprobe → lay out visuals so audio/visuals stay synced).
+- For simple videos, the LLM authors a JSON-Schema-validated `spec.json` (`meta` + ordered `scenes[]`, each with `narration`).
+- For bundle videos, the LLM may author `spec.json`, `hyperframes/*.tsx`, and declared assets. It still NEVER writes ffmpeg, frame math, pasted repo source, or `compiled-plan.json`.
+- `code`/`diff` material carries repo **references** (`file`, `lineStart/End`, git `ref`), never pasted code.
+- Narration uses `duration: "auto"` → the renderer is **two-pass** (synthesize TTS → measure with ffprobe → lay out visuals so audio/visuals stay synced).
 - Deterministic: same spec → same mp4. No `Date.now()` / unseeded `Math.random()` in render components. Content-hash cache; TTS cached per narration line.
+
+## Bundle v2 direction
+
+Bundle v2 is a **bundle**, not a giant JSON timeline:
+
+```text
+my-video.agent-video/
+  spec.json
+  hyperframes/*.tsx
+  assets/**
+  compiled-plan.json  # renderer-generated after compile
+```
+
+- `spec.json` stays the orchestration contract: metadata, narration, repo refs, assets, captions, music, scenes, optional beats/ranges, hyperframe entry points, and `visual.inputs` mappings.
+- Shared video style belongs in `meta.theme`: choose a semantic `preset` (`agent-dark`, `paper`, `neutral`), then override only needed `colors`/`typography` roles. Do not hardcode brand colors or fonts independently in every hyperframe unless the frame intentionally breaks the system; do not use Tailwind-style class strings.
+- `hyperframes/*.tsx` are agent-authored deterministic visual programs. They can be creative, but they receive only renderer-provided `ctx` data and declared refs/assets/ranges through literal `inputs` contracts.
+- `compiled-plan.json` is renderer-emitted only. Agents do not author exact frame timings or ffmpeg instructions.
+- Background music, captions, repo reads, TTS, timing, muxing, and cache/hashes remain renderer-owned.
+- Do **not** hardcode product-specific scene templates in the renderer just because one video needs them. The agent is smart: expose safe primitives, then let the agent compose custom hyperframes when a video needs richer staging.
+- Prefer reusable hyperframe components over copy-only templates. Run `bundle components` first; templates are complete examples, not the main reuse layer.
+- Use built-in visuals for simple videos. Use bundle hyperframes for great videos that need line-state visual changes, custom layouts, captions working around visuals, music ranges, or multiple repo/data inputs in one narrated chapter.
+- Keep hyperframes visually focused. Default to **one focal visual per narration line**; make pace with cuts between map/code/chart/screenshot/callout states, not by placing every declared resource on one crowded frame. Omit `beats` unless a semantic grouping is useful; the renderer creates one implicit beat per narration line.
+- Current hyperframe rendering samples one still frame per narration line. Hyperframes are trusted local code with static policy lint, not a hostile-code sandbox.
+
+Current bundle commands:
+
+- `bun packages/cli/src/index.ts bundle schema`
+- `bun packages/cli/src/index.ts bundle validate <bundle-dir>`
+- `bun packages/cli/src/index.ts bundle inspect <bundle-dir>`
+- `bun packages/cli/src/index.ts bundle components`
+- `bun packages/cli/src/index.ts bundle templates`
+- `bun packages/cli/src/index.ts bundle workshop <bundle-dir> --out .agent-video/workshop --aspect 16:9,9:16`
+- `bun packages/cli/src/index.ts bundle compile <bundle-dir>`
+- `bun packages/cli/src/index.ts bundle render <bundle-dir> --out <dir> --aspect 16:9,9:16`
 
 ## Agent-first (primary success metric)
 
 Every CLI command must be: non-interactive, all-flags, **structured JSON output**, actionable errors with a `hint` field, idempotent, and self-describing via `--help` with examples. A fresh agent given only the SKILL + `--help` must drive the whole pipeline unaided.
+
+For bundle v2, the key agent-first gate is: an agent should be able to validate
+the bundle, compile a plan, inspect scene/line/beat/range timings, and render
+without guessing hidden rules. Validation errors must point to the exact
+`spec.json` path or hyperframe module and explain the repair.
 
 ## Layout (bun workspaces)
 
 - `packages/core` — spec types + published JSON Schema + git/diff parsing + timeline assembler
 - `packages/compose` — Mode B: spec → frames (hyperframes), responsive 16:9 + 9:16
 - `packages/capture` — Mode A: ported `screen-studio` (avfoundation, macOS-only)
+- `packages/hyperframes` — typed hyperframe authoring kit + reusable starter templates
 - `packages/providers` — BYO-API model gateway (TTS: Replicate/OpenAI/ElevenLabs + local `say`)
 - `packages/render` — orchestrator: validate → resolve refs → TTS → measure → compose+capture → ffmpeg mux + watermark → mp4
 - `packages/cli` — `agent-video` binary

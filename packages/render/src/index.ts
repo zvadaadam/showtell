@@ -1,8 +1,4 @@
-/**
- * Render orchestrator. v1a stage: spec → still PNG frames per scene per aspect
- * ratio (silent). Next stages add TTS, two-pass `auto` durations, and the
- * ffmpeg mux to mp4.
- */
+/** Render orchestrator for spec scenes plus bundle entry points. */
 import { mkdirSync, writeFileSync, copyFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -16,6 +12,10 @@ import { prepareScreencapPresentation, type ScreencapPresentation } from "./scre
 
 export { probeDurationMs } from "@agent-video/providers";
 export { startPreviewServer, resolvePlayerDist, type PreviewHandle } from "./preview.ts";
+export { compileBundle, renderBundle, BundleCompileError } from "./bundle.ts";
+export type { BundleCompileResult, BundleRenderResult, CompiledBundlePlan, CompiledBundleOutput } from "./bundle.ts";
+export { renderWorkshop, renderBundleWorkshop, startWorkshopServer } from "./workshop.ts";
+export type { WorkshopRenderResult, WorkshopRenderedFrame, WorkshopHandle } from "./workshop.ts";
 
 function isComposable(kind: string): boolean {
   return (COMPOSABLE_KINDS as readonly string[]).includes(kind);
@@ -77,16 +77,19 @@ function watermarkText(spec: VideoSpec): string | false {
  * so the sha/warning logic lives in exactly one place.
  */
 function recordSceneMeta(
-  rendered: { resolved?: { file: string; text: string }; warning?: string },
+  rendered: {
+    resolvedRefs: { file: string; text: string }[];
+    warning?: string;
+  },
   sceneIdx: number,
   out: { resolvedCode: ResolvedInfo[]; warnings: { scene: number; message: string }[] },
 ): void {
-  if (rendered.resolved) {
+  for (const resolved of rendered.resolvedRefs) {
     out.resolvedCode.push({
       scene: sceneIdx,
-      file: rendered.resolved.file,
-      bytes: Buffer.byteLength(rendered.resolved.text),
-      sha256: sha256(rendered.resolved.text),
+      file: resolved.file,
+      bytes: Buffer.byteLength(resolved.text),
+      sha256: sha256(resolved.text),
     });
   }
   if (rendered.warning) out.warnings.push({ scene: sceneIdx, message: rendered.warning });

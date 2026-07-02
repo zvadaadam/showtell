@@ -3,10 +3,11 @@
  * renderer reads the LIVE bytes here so rendered code == source bytes. The LLM
  * never pastes source into the spec.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { isAbsolute, extname, normalize, resolve } from "node:path";
+import { extname, isAbsolute, normalize } from "node:path";
 import type { CodeScene, DiffScene } from "./spec.ts";
+import { SafeFileError, safeExistingFileInRoot } from "./safe-files.ts";
 
 const EXT_LANG: Record<string, string> = {
   ".ts": "typescript",
@@ -59,27 +60,41 @@ export function repoRelativeFile(file: string): string {
   return normalized;
 }
 
-function workingTreePath(repoPath: string, file: string): string {
-  const rel = repoRelativeFile(file);
-  const root = resolve(repoPath);
-  const abs = resolve(root, rel);
-  if (abs !== root && !abs.startsWith(root + "/")) {
-    throw new Error(`Repo file must stay inside the repo, got: ${file}`);
+function assertSafeGitRef(ref: string): void {
+  if (ref.startsWith("-")) throw new Error(`Git ref/range must not start with "-": ${ref}`);
+  if (/[\s\u007f:]/.test(ref)) {
+    throw new Error(`Git ref/range contains unsupported control, whitespace, or ":" characters: ${ref}`);
   }
-  return abs;
+}
+
+function safeWorkingTreeFile(repoPath: string, file: string): string {
+  const rel = repoRelativeFile(file);
+  let realRepoPath: string;
+  try {
+    realRepoPath = realpathSync(repoPath);
+  } catch (e) {
+    throw new Error(`Unsafe working-tree file "${file}": repo path is not readable: ${(e as Error).message}`);
+  }
+  try {
+    return safeExistingFileInRoot(realRepoPath, rel, { maxBytes: 64 * 1024 * 1024 }).path;
+  } catch (e) {
+    if (e instanceof SafeFileError) throw new Error(`Unsafe working-tree file "${file}": ${e.message}`);
+    throw e;
+  }
 }
 
 /** Read a file's full text, either from a git ref or the working tree. */
 export function readFileAtRef(repoPath: string, file: string, ref?: string): string {
   const rel = repoRelativeFile(file);
   if (ref) {
-    // `git show <ref>:<path>` — path must be repo-relative and posix-style.
-    return execFileSync("git", ["-C", repoPath, "show", `${ref}:${rel}`], {
+    assertSafeGitRef(ref);
+    // Requires Git 2.24+ for `--end-of-options`; path must be repo-relative and posix-style.
+    return execFileSync("git", ["-C", repoPath, "show", "--end-of-options", `${ref}:${rel}`], {
       encoding: "utf-8",
       maxBuffer: 64 * 1024 * 1024,
     });
   }
-  return readFileSync(workingTreePath(repoPath, rel), "utf-8");
+  return readFileSync(safeWorkingTreeFile(repoPath, rel), "utf-8");
 }
 
 export interface ResolvedCode {
@@ -141,10 +156,15 @@ export interface ResolvedDiff {
 /** Resolve a diff scene to the live `git diff` for its file + ref range. */
 export function resolveDiff(repoPath: string, content: DiffScene["content"]): ResolvedDiff {
   const file = repoRelativeFile(content.file);
-  const rawText = execFileSync("git", ["-C", repoPath, "diff", "--no-color", content.ref, "--", file], {
-    encoding: "utf-8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  assertSafeGitRef(content.ref);
+  const rawText = execFileSync(
+    "git",
+    ["-C", repoPath, "diff", "--no-color", "--end-of-options", content.ref, "--", file],
+    {
+      encoding: "utf-8",
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  );
 
   const lines: DiffLine[] = [];
   let added = 0;

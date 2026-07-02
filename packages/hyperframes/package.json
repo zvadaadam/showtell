@@ -1,0 +1,12 @@
+{
+  "name": "@agent-video/hyperframes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed hyperframe authoring primitives and reusable starter templates for agent-video bundle v2.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./templates/*": "./templates/*.tsx"
+  }
+}

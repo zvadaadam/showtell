@@ -1,11 +1,11 @@
 import { test, expect } from "bun:test";
 import type { Scene } from "@agent-video/core";
 import { renderSceneToPng, COMPOSABLE_KINDS } from "../src/index.ts";
-import { legendItems, parseChartData, valueScale } from "../src/scenes/chart.ts";
+import { legendItems, parseChartData, valueScale } from "../src/primitives/chart.ts";
 
 const opts = { repoPath: ".", aspectRatio: "16:9" as const };
 
-test("COMPOSABLE_KINDS includes the v1b compose kinds", () => {
+test("COMPOSABLE_KINDS includes built-in still visuals", () => {
   for (const k of ["title", "code", "diff", "talking-points", "chart"]) {
     expect(COMPOSABLE_KINDS as readonly string[]).toContain(k);
   }
@@ -81,6 +81,31 @@ test("chart legends follow the chart type", () => {
       ]),
     ).map((i) => i.label),
   ).toEqual(["a", "b"]);
+});
+
+test("chart parsing honors explicit x/y fields", () => {
+  const parsed = parseChartData(
+    [
+      { label: "wrong-a", stage: "compile", noise: 99, weight: 4 },
+      { label: "wrong-b", stage: "render", noise: 88, weight: 7 },
+    ],
+    { x: "stage", y: "weight" },
+  );
+
+  expect(parsed.labels).toEqual(["compile", "render"]);
+  expect(parsed.series).toEqual([{ name: "weight", values: [4, 7] }]);
+});
+
+test("chart parsing preserves numeric strings for explicit y fields", () => {
+  const parsed = parseChartData(
+    [
+      { stage: "compile", weight: "4" },
+      { stage: "render", weight: "7" },
+    ],
+    { x: "stage", y: "weight" },
+  );
+
+  expect(parsed.series).toEqual([{ name: "weight", values: [4, 7] }]);
 });
 
 test("bar and line charts scale negative values around a zero baseline", () => {
