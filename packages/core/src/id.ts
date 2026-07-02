@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+export const ID_PATTERN = "[A-Za-z][A-Za-z0-9_-]{0,63}";
+
 function stableJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;

@@ -23,7 +23,6 @@ interface Props {
   y: string;
   chartType?: "bar" | "line" | "pie";
   emphasis?: string[];
-  focus?: "chart";
 }
 
 const propsSchema: JsonSchema = {
@@ -39,7 +38,6 @@ const propsSchema: JsonSchema = {
     y: { type: "string" },
     chartType: { enum: ["bar", "line", "pie"] },
     emphasis: { type: "array", items: { type: "string" } },
-    focus: { enum: ["chart"] },
   },
 };
 

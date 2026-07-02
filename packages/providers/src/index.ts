@@ -5,7 +5,7 @@
  * deterministic mono 44.1k wav, and the cache — so every adapter benefits and a
  * remote provider returning mp3 can't poison the cache.
  */
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, renameSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -93,6 +93,28 @@ function cacheKey(provider: TtsProvider, req: SynthesizeRequest): string {
     .slice(0, 32);
 }
 
+function validWavDurationMs(path: string): number | undefined {
+  try {
+    if (!existsSync(path) || statSync(path).size <= 44) return undefined;
+    const durationMs = probeDurationMs(path);
+    return Number.isFinite(durationMs) && durationMs > 0 ? durationMs : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function narrationPreview(text: string): string {
+  return text.length > 40 ? `${text.slice(0, 40)}...` : text;
+}
+
+function assertValidSynthesis(path: string, provider: TtsProvider, text: string): number {
+  const durationMs = validWavDurationMs(path);
+  if (durationMs !== undefined) return durationMs;
+  throw new Error(
+    `TTS provider "${provider}" produced an invalid or empty wav for line "${narrationPreview(text)}" - nothing was cached. Check that speech synthesis works in this environment (e.g. run: say -o /tmp/test.wav "hello").`,
+  );
+}
+
 /** Synthesize narration to a wav, using the per-line cache when possible. */
 export async function synthesize(req: SynthesizeRequest, opts: SynthesizeOpts = {}): Promise<SynthesisResult> {
   const provider = opts.provider ?? "say";
@@ -107,15 +129,18 @@ export async function synthesize(req: SynthesizeRequest, opts: SynthesizeOpts = 
   const wavPath = join(cacheDir, `${provider}-${cacheKey(provider, req)}.wav`);
 
   if (existsSync(wavPath)) {
-    try {
-      return { wavPath, durationMs: probeDurationMs(wavPath), cached: true };
-    } catch {
-      rmSync(wavPath, { force: true });
-    }
+    const durationMs = validWavDurationMs(wavPath);
+    if (durationMs !== undefined) return { wavPath, durationMs, cached: true };
+    rmSync(wavPath, { force: true });
   }
   const raw = await adapter(req, configFromEnv(provider));
   normalizeToWav(raw, wavPath);
-  return { wavPath, durationMs: probeDurationMs(wavPath), cached: false };
+  try {
+    return { wavPath, durationMs: assertValidSynthesis(wavPath, provider, req.text), cached: false };
+  } catch (e) {
+    rmSync(wavPath, { force: true });
+    throw e;
+  }
 }
 
 /** Provider names that have an adapter wired (an API provider still needs its key). */

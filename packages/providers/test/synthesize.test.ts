@@ -1,5 +1,5 @@
 import { test, expect, afterAll } from "bun:test";
-import { existsSync, rmSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, rmSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,36 @@ import { synthesize, availableTtsProviders, probeDurationMs } from "../src/index
 
 const cacheDir = mkdtempSync(join(tmpdir(), "av-tts-"));
 afterAll(() => rmSync(cacheDir, { recursive: true, force: true }));
+
+function ttsCachePath(text: string, dir = cacheDir): string {
+  const key = createHash("sha256")
+    .update(JSON.stringify({ provider: "say", voice: "", model: "", text }))
+    .digest("hex")
+    .slice(0, 32);
+  return join(dir, `say-${key}.wav`);
+}
+
+function headerOnlyWav(): Buffer {
+  const buffer = Buffer.alloc(78);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36, 4);
+  buffer.write("WAVE", 8);
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(44_100, 24);
+  buffer.writeUInt32LE(88_200, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(0, 40);
+  return buffer;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
 
 test('"say" is an available provider', () => {
   expect(availableTtsProviders()).toContain("say");
@@ -36,24 +66,90 @@ test("changing the text busts the cache key", async () => {
 
 test("a corrupt final cache file is regenerated", async () => {
   const text = "regenerate corrupt cache.";
-  const key = createHash("sha256")
-    .update(JSON.stringify({ provider: "say", voice: "", model: "", text }))
-    .digest("hex")
-    .slice(0, 32);
-  const wav = join(cacheDir, `say-${key}.wav`);
+  const wav = ttsCachePath(text);
   writeFileSync(wav, "not a wav");
   const r = await synthesize({ text }, { cacheDir });
   expect(r.cached).toBe(false);
   expect(probeDurationMs(r.wavPath)).toBeGreaterThan(0);
 }, 30_000);
 
+test("an invalid header-only cache hit is discarded before reuse", async () => {
+  const text = "regenerate header-only cache.";
+  const wav = ttsCachePath(text);
+  writeFileSync(wav, headerOnlyWav());
+
+  try {
+    const r = await synthesize({ text }, { cacheDir });
+    expect(r.cached).toBe(false);
+    expect(probeDurationMs(r.wavPath)).toBeGreaterThan(0);
+    expect(statSync(r.wavPath).size).toBeGreaterThan(78);
+  } catch (e) {
+    expect((e as Error).message).toContain('produced an invalid or empty wav for line "regenerate header-only cache."');
+    expect((e as Error).message).toContain("nothing was cached");
+  }
+
+  if (existsSync(wav)) {
+    expect(statSync(wav).size).toBeGreaterThan(78);
+  }
+}, 30_000);
+
+test("invalid fresh synthesis is rejected before it reaches the cache", async () => {
+  if (process.platform !== "darwin") return;
+
+  const text = "fresh invalid synthesis.";
+  const localCacheDir = mkdtempSync(join(tmpdir(), "av-tts-invalid-"));
+  const binDir = mkdtempSync(join(tmpdir(), "av-tts-bin-"));
+  const invalidWav = join(binDir, "invalid.wav");
+  const fixturePath = join(import.meta.dir, "fixtures", "run-synthesize.ts");
+
+  try {
+    writeFileSync(invalidWav, headerOnlyWav());
+    writeFileSync(
+      join(binDir, "say"),
+      `#!/bin/sh
+out=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    shift
+    out="$1"
+  fi
+  shift
+done
+printf fake > "$out"
+`,
+    );
+    writeFileSync(
+      join(binDir, "ffmpeg"),
+      `#!/bin/sh
+out=""
+for arg in "$@"; do
+  out="$arg"
+done
+cp ${shellQuote(invalidWav)} "$out"
+`,
+    );
+    chmodSync(join(binDir, "say"), 0o755);
+    chmodSync(join(binDir, "ffmpeg"), 0o755);
+
+    const result = Bun.spawnSync(["bun", fixturePath, text, localCacheDir], {
+      env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ""}` },
+    });
+    const stderr = new TextDecoder().decode(result.stderr);
+
+    expect(result.exitCode).toBe(1);
+    expect(stderr).toContain(
+      'TTS provider "say" produced an invalid or empty wav for line "fresh invalid synthesis." - nothing was cached. Check that speech synthesis works in this environment (e.g. run: say -o /tmp/test.wav "hello").',
+    );
+    expect(existsSync(ttsCachePath(text, localCacheDir))).toBe(false);
+  } finally {
+    rmSync(localCacheDir, { recursive: true, force: true });
+    rmSync(binDir, { recursive: true, force: true });
+  }
+}, 30_000);
+
 test("stale temp cache files are ignored", async () => {
   const text = "ignore temp cache.";
-  const key = createHash("sha256")
-    .update(JSON.stringify({ provider: "say", voice: "", model: "", text }))
-    .digest("hex")
-    .slice(0, 32);
-  writeFileSync(join(cacheDir, `say-${key}.wav.tmp.wav`), "partial");
+  writeFileSync(`${ttsCachePath(text)}.tmp.wav`, "partial");
   const r = await synthesize({ text }, { cacheDir });
   expect(r.cached).toBe(false);
   expect(existsSync(r.wavPath)).toBe(true);

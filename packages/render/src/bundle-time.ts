@@ -51,7 +51,7 @@ export function resolveBundlePoint(
 
   if (parsed.kind === "range") {
     const sceneId = parsed.sceneId ?? currentScene;
-    const range = resolveBundleRange(sceneId, parsed.id, scenes, sceneSpecs, totalMs, state);
+    const range = resolveBundleRange(sceneId, parsed.id, scenes, sceneSpecs, totalMs, state, ref);
     return parsed.pos === "start" ? range.startMs : range.endMs;
   }
 
@@ -107,7 +107,7 @@ export function resolveBundleSpan(
     if (!line) throw new Error(`Unknown line span ref "${ref}".`);
     return { startMs: line.startMs, endMs: line.endMs, durationMs: line.durationMs };
   }
-  return resolveBundleRange(sceneId, parsed.id, scenes, sceneSpecs, totalMs, state);
+  return resolveBundleRange(sceneId, parsed.id, scenes, sceneSpecs, totalMs, state, ref);
 }
 
 export function resolveBundleRange(
@@ -117,6 +117,7 @@ export function resolveBundleRange(
   sceneSpecs: BundleScene[],
   totalMs: number,
   state?: BundleTimeResolveState,
+  authorRef?: string,
 ): CompiledBundleSpan {
   state = initialState(state);
   const compiled = scenes.find((scene) => scene.id === sceneId);
@@ -127,7 +128,10 @@ export function resolveBundleRange(
   if (state.ranges.has(key)) throw new Error(`Range cycle at "${key}".`);
   const spec = sceneSpecs.find((scene) => scene.id === sceneId);
   const def = spec?.ranges[rangeId];
-  if (!def) throw new Error(`Unknown range "${key}".`);
+  if (!def) {
+    const source = authorRef ? ` (from ref "${authorRef}")` : "";
+    throw new Error(`Unknown range "${key}"${source}.`);
+  }
   state.ranges.add(key);
   try {
     const resolved = resolveBundleSpan(def, sceneId, scenes, sceneSpecs, totalMs, state);

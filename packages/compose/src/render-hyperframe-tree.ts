@@ -1,7 +1,20 @@
 /** Render an executed hyperframe element tree into deterministic pixels. */
 import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
 import type { AspectRatio } from "@agent-video/core";
-import type { CaptionCue, HyperframeTheme, HyperframeChild, HyperframeElement } from "@agent-video/hyperframes";
+import {
+  CaptionDeck,
+  DecisionGrid,
+  LaneStack,
+  PhaseBanner,
+  ProofLadder,
+  SignalWall,
+  StatusRail,
+  type CaptionCue,
+  type HyperframeChild,
+  type HyperframeComponent,
+  type HyperframeElement,
+  type HyperframeTheme,
+} from "@agent-video/hyperframes";
 import { dimsFor, type Dims } from "./dims.ts";
 import { drawBackground, drawWatermark, roundRect, wrapText } from "./draw.ts";
 import { ensureFonts } from "./fonts.ts";
@@ -25,6 +38,11 @@ interface RenderEnv {
   palette: Palette;
   activeCue?: CaptionCue;
   theme?: HyperframeTheme;
+}
+
+interface ComponentRenderer {
+  estimateHeight?: (ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv) => number | undefined;
+  draw: (ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv) => DrawResult | Promise<DrawResult>;
 }
 
 export interface HyperframeTreeRenderOpts {
@@ -165,54 +183,50 @@ function drawStageBackground(ctx: SKRSContext2D, dims: Dims, tone: string | unde
   ctx.fillRect(0, 0, dims.width, dims.height);
 }
 
-function estimateHeight(ctx: SKRSContext2D, child: HyperframeElement, box: Box, env: RenderEnv): number | undefined {
+function estimateTextHeight(ctx: SKRSContext2D, child: HyperframeElement, box: Box, env: RenderEnv): number {
+  const props = propsOf(child);
+  const variant = props.variant;
+  const size = textSize(env, variant);
+  ctx.font = fontFor(env, variant === "body" ? "body" : "display", size);
+  const lines = wrapText(ctx, textContent(elementChildren(child)), box.w).slice(0, variant === "title" ? 2 : 4);
+  return Math.max(size * 1.3, lines.length * size * 1.22);
+}
+
+function estimatePanelHeight(ctx: SKRSContext2D, child: HyperframeElement, box: Box, env: RenderEnv): number {
   const base = Math.min(env.dims.width, env.dims.height);
   const props = propsOf(child);
-  if (props.grow) return undefined;
-  if (child.type === "Text") {
-    const variant = props.variant;
-    const size = textSize(env, variant);
-    ctx.font = fontFor(env, variant === "body" ? "body" : "display", size);
-    const lines = wrapText(ctx, textContent(elementChildren(child)), box.w).slice(0, variant === "title" ? 2 : 4);
-    return Math.max(size * 1.3, lines.length * size * 1.22);
-  }
-  if (child.type === "LowerThird") return Math.round(base * 0.2);
-  if (child.type === "Callout") return Math.round(base * 0.11);
-  if (child.type === "Badge") return Math.max(34, Math.round(base * 0.036));
-  if (child.type === "Divider") return Math.max(34, Math.round(base * 0.07));
-  if (child.type === "Meter") return Math.max(76, Math.round(base * 0.085));
-  if (child.type === "TimelineRail") return Math.round(base * 0.13);
-  if (child.type === "Panel") {
-    const pad = paddingPx(props.padding ?? "sm", Math.min(box.w, box.h));
-    let height = pad * 2;
-    let compactRow = false;
-    if (typeof props.title === "string") height += base * 0.04;
-    if (typeof props.subtitle === "string") height += base * 0.034;
-    const children = elementChildElements(child);
-    if (children.length > 0) {
-      const childBox = { ...box, w: Math.max(1, box.w - pad * 2), h: Math.max(1, box.h - pad * 2) };
-      const childHeights = children.map((panelChild) => estimateHeight(ctx, panelChild, childBox, env));
-      if (
-        children[0]?.type === "Badge" &&
-        children.slice(1).every((panelChild) => panelChild.type === "Text") &&
-        childHeights.every((h): h is number => typeof h === "number")
-      ) {
-        compactRow = true;
-        const textHeights = childHeights.slice(1);
-        const textHeight =
-          textHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * Math.max(0, textHeights.length - 1);
-        height += Math.max(childHeights[0]!, textHeight);
-      } else if (childHeights.every((h): h is number => typeof h === "number")) {
-        height += childHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * (children.length - 1);
-      } else {
-        height += base * 0.28;
-      }
+  const pad = paddingPx(props.padding ?? "sm", Math.min(box.w, box.h));
+  let height = pad * 2;
+  let compactRow = false;
+  if (typeof props.title === "string") height += base * 0.04;
+  if (typeof props.subtitle === "string") height += base * 0.034;
+  const children = elementChildElements(child);
+  if (children.length > 0) {
+    const childBox = { ...box, w: Math.max(1, box.w - pad * 2), h: Math.max(1, box.h - pad * 2) };
+    const childHeights = children.map((panelChild) => estimateHeight(ctx, panelChild, childBox, env));
+    if (
+      children[0]?.type === "Badge" &&
+      children.slice(1).every((panelChild) => panelChild.type === "Text") &&
+      childHeights.every((h): h is number => typeof h === "number")
+    ) {
+      compactRow = true;
+      const textHeights = childHeights.slice(1);
+      const textHeight =
+        textHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * Math.max(0, textHeights.length - 1);
+      height += Math.max(childHeights[0]!, textHeight);
+    } else if (childHeights.every((h): h is number => typeof h === "number")) {
+      height += childHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * (children.length - 1);
+    } else {
+      height += base * 0.28;
     }
-    return Math.min(box.h, Math.max(base * (compactRow ? 0.1 : 0.16), height));
   }
-  if (child.type === "KineticCaption") return 0;
-  if (child.type === "CaptionSafeArea") return undefined;
-  return undefined;
+  return Math.min(box.h, Math.max(base * (compactRow ? 0.1 : 0.16), height));
+}
+
+function estimateHeight(ctx: SKRSContext2D, child: HyperframeElement, box: Box, env: RenderEnv): number | undefined {
+  const props = propsOf(child);
+  if (props.grow) return undefined;
+  return COMPONENT_RENDERERS[child.type]?.estimateHeight?.(ctx, child, box, env);
 }
 
 function mergeResult(target: DrawResult, source: DrawResult): void {
@@ -655,6 +669,77 @@ async function renderGrid(
   return result;
 }
 
+function renderTextNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
+  drawTextNode(ctx, element, box, env);
+  return emptyResult();
+}
+
+function renderLowerThirdNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
+  drawLowerThird(ctx, element, box, env);
+  return emptyResult();
+}
+
+function renderCalloutNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
+  if (propsOf(element).when === false) return emptyResult();
+  drawCallout(ctx, element, box, env);
+  return emptyResult();
+}
+
+function renderBadgeNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
+  drawBadge(ctx, element, box, env);
+  return emptyResult();
+}
+
+function renderDividerNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
+  drawDivider(ctx, element, box, env);
+  return emptyResult();
+}
+
+function renderMeterNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
+  drawMeter(ctx, element, box, env);
+  return emptyResult();
+}
+
+function renderSystemMapNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
+  drawSystemMap(ctx, element, box, env);
+  return emptyResult();
+}
+
+function renderTimelineRailNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
+  drawTimelineRail(ctx, element, box, env);
+  return emptyResult();
+}
+
+function renderCaptionSafeAreaNode(
+  ctx: SKRSContext2D,
+  element: HyperframeElement,
+  box: Box,
+  env: RenderEnv,
+): Promise<DrawResult> {
+  const safe = Math.round(Math.min(env.dims.width, env.dims.height) * 0.15);
+  return renderStack(
+    ctx,
+    { ...element, type: "Stack", props: { direction: "vertical", gap: "md", grow: true } },
+    { ...box, h: Math.max(1, box.h - safe) },
+    env,
+  );
+}
+
+function unknownElementError(element: HyperframeElement): Error {
+  return new Error(
+    `Unknown hyperframe element "${element.type}". Import a supported component from @agent-video/hyperframes.`,
+  );
+}
+
+function renderUnsupportedNode(
+  _ctx: SKRSContext2D,
+  element: HyperframeElement,
+  _box: Box,
+  _env: RenderEnv,
+): DrawResult {
+  throw unknownElementError(element);
+}
+
 async function renderNode(
   ctx: SKRSContext2D,
   element: HyperframeElement,
@@ -662,59 +747,9 @@ async function renderNode(
   env: RenderEnv,
 ): Promise<DrawResult> {
   if (box.w <= 1 || box.h <= 1) return emptyResult();
-  if (element.type === "CaptionSafeArea") {
-    const safe = Math.round(Math.min(env.dims.width, env.dims.height) * 0.15);
-    return renderStack(
-      ctx,
-      { ...element, type: "Stack", props: { direction: "vertical", gap: "md", grow: true } },
-      { ...box, h: Math.max(1, box.h - safe) },
-      env,
-    );
-  }
-  if (element.type === "Stack") return renderStack(ctx, element, box, env);
-  if (element.type === "Grid") return renderGrid(ctx, element, box, env);
-  if (element.type === "Text") {
-    drawTextNode(ctx, element, box, env);
-    return emptyResult();
-  }
-  if (element.type === "LowerThird") {
-    drawLowerThird(ctx, element, box, env);
-    return emptyResult();
-  }
-  if (element.type === "Callout") {
-    if (propsOf(element).when === false) return emptyResult();
-    drawCallout(ctx, element, box, env);
-    return emptyResult();
-  }
-  if (element.type === "Panel") return renderPanel(ctx, element, box, env);
-  if (element.type === "Badge") {
-    drawBadge(ctx, element, box, env);
-    return emptyResult();
-  }
-  if (element.type === "Divider") {
-    drawDivider(ctx, element, box, env);
-    return emptyResult();
-  }
-  if (element.type === "Meter") {
-    drawMeter(ctx, element, box, env);
-    return emptyResult();
-  }
-  if (element.type === "CodeRef") return renderCodeRef(ctx, element, box, env);
-  if (element.type === "DiffRef") return renderDiffRef(ctx, element, box, env);
-  if (element.type === "Chart") return renderChart(ctx, element, box, env);
-  if (element.type === "ImageAsset") return renderImageAsset(ctx, element, box, env);
-  if (element.type === "SystemMap") {
-    drawSystemMap(ctx, element, box, env);
-    return emptyResult();
-  }
-  if (element.type === "TimelineRail") {
-    drawTimelineRail(ctx, element, box, env);
-    return emptyResult();
-  }
-  if (element.type === "Stage") return renderStage(ctx, element, env);
-  throw new Error(
-    `Unknown hyperframe element "${element.type}". Import a supported component from @agent-video/hyperframes.`,
-  );
+  const renderer = COMPONENT_RENDERERS[element.type];
+  if (!renderer) throw unknownElementError(element);
+  return renderer.draw(ctx, element, box, env);
 }
 
 function collectKineticCaptions(element: HyperframeElement): HyperframeElement[] {
@@ -722,6 +757,51 @@ function collectKineticCaptions(element: HyperframeElement): HyperframeElement[]
   if (element.type === "KineticCaption") found.push(element);
   for (const child of elementChildElements(element)) found.push(...collectKineticCaptions(child));
   return found;
+}
+
+function normalizeEmphasisWord(word: string): string {
+  return word.toLowerCase().replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "");
+}
+
+function emphasisSet(value: unknown): Set<string> {
+  if (!Array.isArray(value)) return new Set();
+  return new Set(
+    value
+      .filter((item): item is string => typeof item === "string")
+      .map(normalizeEmphasisWord)
+      .filter(Boolean),
+  );
+}
+
+function drawCaptionLine(
+  ctx: SKRSContext2D,
+  line: string,
+  x: number,
+  y: number,
+  defaultFill: string,
+  accentFill: string,
+  emphasized: Set<string>,
+): void {
+  if (emphasized.size === 0) {
+    ctx.fillStyle = defaultFill;
+    ctx.fillText(line, x, y);
+    return;
+  }
+
+  const tokens = line.split(/(\s+)/);
+  const width = tokens.reduce((sum, token) => sum + ctx.measureText(token).width, 0);
+  let tx = x - width / 2;
+  ctx.textAlign = "left";
+  for (const token of tokens) {
+    const tokenWidth = ctx.measureText(token).width;
+    if (tokenWidth > 0) {
+      const normalized = normalizeEmphasisWord(token);
+      ctx.fillStyle = normalized && emphasized.has(normalized) ? accentFill : defaultFill;
+      ctx.fillText(token, tx, y);
+    }
+    tx += tokenWidth;
+  }
+  ctx.textAlign = "center";
 }
 
 function drawKineticCaption(ctx: SKRSContext2D, element: HyperframeElement, env: RenderEnv): void {
@@ -759,10 +839,11 @@ function drawKineticCaption(ctx: SKRSContext2D, element: HyperframeElement, env:
   ctx.stroke();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  const defaultFill = env.theme ? env.theme.colors.captionFg : env.palette.fg;
+  const emphasized = emphasisSet(props.emphasis);
   let ty = y + padY + lineH / 2;
   for (const line of lines) {
-    ctx.fillStyle = env.theme ? env.theme.colors.captionFg : env.palette.fg;
-    ctx.fillText(line, env.dims.width / 2, ty);
+    drawCaptionLine(ctx, line, env.dims.width / 2, ty, defaultFill, env.palette.accent, emphasized);
     ty += lineH;
   }
 }
@@ -788,6 +869,99 @@ async function renderStage(ctx: SKRSContext2D, element: HyperframeElement, env: 
   for (const caption of collectKineticCaptions(element)) drawKineticCaption(ctx, caption, stageEnv);
   return result;
 }
+
+function fixedHeight(multiplier: number): ComponentRenderer["estimateHeight"] {
+  return (_ctx, _element, _box, env) => Math.round(Math.min(env.dims.width, env.dims.height) * multiplier);
+}
+
+function minHeight(px: number, multiplier: number): ComponentRenderer["estimateHeight"] {
+  return (_ctx, _element, _box, env) =>
+    Math.max(px, Math.round(Math.min(env.dims.width, env.dims.height) * multiplier));
+}
+
+function renderComposite<Props extends object>(component: HyperframeComponent<Props>): ComponentRenderer {
+  const expand = (element: HyperframeElement) =>
+    component({ ...propsOf(element), children: element.children } as Props & { children?: HyperframeChild });
+  return {
+    estimateHeight: (ctx, element, box, env) => estimateHeight(ctx, expand(element), box, env),
+    draw: (ctx, element, box, env) => renderNode(ctx, expand(element), box, env),
+  };
+}
+
+const COMPONENT_RENDERERS: Record<string, ComponentRenderer> = {
+  Stage: {
+    draw: (ctx, element, _box, env) => renderStage(ctx, element, env),
+  },
+  Stack: {
+    draw: renderStack,
+  },
+  Grid: {
+    draw: renderGrid,
+  },
+  Text: {
+    estimateHeight: estimateTextHeight,
+    draw: renderTextNode,
+  },
+  CodeRef: {
+    draw: renderCodeRef,
+  },
+  DiffRef: {
+    draw: renderDiffRef,
+  },
+  Chart: {
+    draw: renderChart,
+  },
+  ImageAsset: {
+    draw: renderImageAsset,
+  },
+  Callout: {
+    estimateHeight: fixedHeight(0.11),
+    draw: renderCalloutNode,
+  },
+  CaptionSafeArea: {
+    draw: renderCaptionSafeAreaNode,
+  },
+  KineticCaption: {
+    estimateHeight: () => 0,
+    draw: renderUnsupportedNode,
+  },
+  LowerThird: {
+    estimateHeight: fixedHeight(0.2),
+    draw: renderLowerThirdNode,
+  },
+  TimelineRail: {
+    estimateHeight: fixedHeight(0.13),
+    draw: renderTimelineRailNode,
+  },
+  SystemMap: {
+    draw: renderSystemMapNode,
+  },
+  Panel: {
+    estimateHeight: estimatePanelHeight,
+    draw: renderPanel,
+  },
+  Badge: {
+    estimateHeight: minHeight(34, 0.036),
+    draw: renderBadgeNode,
+  },
+  Divider: {
+    estimateHeight: minHeight(34, 0.07),
+    draw: renderDividerNode,
+  },
+  Meter: {
+    estimateHeight: minHeight(76, 0.085),
+    draw: renderMeterNode,
+  },
+  PhaseBanner: renderComposite(PhaseBanner),
+  SignalWall: renderComposite(SignalWall),
+  LaneStack: renderComposite(LaneStack),
+  DecisionGrid: renderComposite(DecisionGrid),
+  ProofLadder: renderComposite(ProofLadder),
+  StatusRail: renderComposite(StatusRail),
+  CaptionDeck: renderComposite(CaptionDeck),
+};
+
+export const RENDERABLE_COMPONENT_TYPES = Object.freeze(Object.keys(COMPONENT_RENDERERS)) as readonly string[];
 
 export async function renderHyperframeElementToPng(
   element: HyperframeElement,

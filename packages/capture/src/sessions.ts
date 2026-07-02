@@ -16,7 +16,7 @@ export function assertValidSessionId(id: string): void {
   }
 }
 
-export function capturesDir(root = "."): string {
+function capturesDir(root = "."): string {
   return join(root, ".agent-video", "captures");
 }
 

@@ -2,13 +2,8 @@ import { test, expect } from "bun:test";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  loadSessionEvents,
-  runCapturedCommand,
-  runCommand,
-  startExternalCaptureSession,
-  startExternalCaptureWorkflow,
-} from "../src/index.ts";
+import { loadSessionEvents, startExternalCaptureWorkflow } from "../src/index.ts";
+import { runCapturedCommand, runCommand, startExternalCaptureSession } from "../src/external.ts";
 
 test("captured command infers agent-browser element boxes without reimplementing the CLI", () => {
   const dir = mkdtempSync(join(tmpdir(), "av-external-"));

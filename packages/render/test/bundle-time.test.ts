@@ -157,11 +157,12 @@ test("resolver errors echo unknown refs", () => {
   expect(() => resolveBundleRange("missing", "r1", compiled, specs, totalMs)).toThrow('Unknown scene "missing"');
 });
 
-test.skip("unknown range refs echo the original range ref", () => {
-  // TODO: source currently throws Unknown range "sceneA/missing" instead of echoing the author ref.
+test("unknown range refs echo the original range ref", () => {
   const { compiled, specs } = fixtures();
   expect(() => resolveBundlePoint("range:missing@start", "sceneA", compiled, specs, totalMs)).toThrow(
-    "range:missing@start",
+    'Unknown range "sceneA/missing" (from ref "range:missing@start").',
   );
-  expect(() => resolveBundleSpan("range:missing", "sceneA", compiled, specs, totalMs)).toThrow("range:missing");
+  expect(() => resolveBundleSpan("range:missing", "sceneA", compiled, specs, totalMs)).toThrow(
+    'Unknown range "sceneA/missing" (from ref "range:missing").',
+  );
 });

@@ -19,7 +19,6 @@ interface Props {
   title: string;
   callout?: string;
   captionMode?: "word-pop" | "karaoke" | "stacked" | "minimal";
-  focus?: "diff";
 }
 
 const propsSchema: JsonSchema = {
@@ -31,7 +30,6 @@ const propsSchema: JsonSchema = {
     title: { type: "string" },
     callout: { type: "string" },
     captionMode: { enum: ["word-pop", "karaoke", "stacked", "minimal"] },
-    focus: { enum: ["diff"] },
   },
 };
 

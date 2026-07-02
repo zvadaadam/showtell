@@ -46,3 +46,16 @@ test("component manifest only advertises renderer-backed props", () => {
   expect(byImport.get("Text")?.commonProps).not.toContain("balance");
   expect(byImport.get("DiffRef")?.commonProps).not.toContain("mode");
 });
+
+test("starter templates do not expose vestigial focus props", () => {
+  for (const id of ["diff-review", "single-proof", "image-callout"]) {
+    const template = hyperframeTemplates.find((candidate) => candidate.id === id);
+    expect(template).toBeDefined();
+    const source = readFileSync(join(ROOT, template!.path), "utf-8");
+    const contract = loadHyperframeContractFromSource(source);
+    expect(contract.propsSchema).toHaveProperty("type", "object");
+    if (typeof contract.propsSchema === "object" && contract.propsSchema !== null) {
+      expect(contract.propsSchema.properties ?? {}).not.toHaveProperty("focus");
+    }
+  }
+});
