@@ -1,6 +1,8 @@
 # agent-video — agent guide
 
-**What this is:** "Loom for agents" — a local, repo-aware video renderer. A coding agent authors a `spec.json` and the renderer turns it into a short narrated MP4. Being local is the moat: code/diff visuals reference the repo by `file:line`/git ref and the renderer reads the **live bytes**, so rendered code is always ground-truth.
+**What this is:** "Loom for agents" — a local, repo-aware **motion render engine**. A coding agent authors intent (`spec.json` + hyperframes) and the engine renders every frame on a deterministic motion clock into a short narrated MP4 — animated visualization, not slide generation. Being local is the moat: code/diff visuals reference the repo by `file:line`/git ref and the renderer reads the **live bytes**, so rendered code is always ground-truth.
+
+**The guiding principle: everything is motion.** Layout, themes, blocks, plots, and captions all sit on top of the motion engine (`packages/compose/src/hyperframe/motion.ts` is the clock; `ctx.time`/`ctx.range()` are the authoring surface). When adding or reviewing features, ask how they move, not just how they look — stills are the degenerate case (end states), never the design target.
 
 **Read first:** `docs/bundle-v2.md` for the bundle v2 authoring model, plus `.context/plan/agent-video-goal.md` when present. Progress + gate ledger: `.context/plan/agent-video-progress.md`.
 
