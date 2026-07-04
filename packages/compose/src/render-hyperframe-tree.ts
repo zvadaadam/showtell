@@ -160,6 +160,46 @@ function panelBadgeRow(children: HyperframeElement[]): boolean {
   return children.length > 1 && children[0]?.type === "Badge" && children.slice(1).every((c) => c.type === "Text");
 }
 
+interface PanelContentMetrics {
+  badgeRow: boolean;
+  /** Natural children height; undefined when a growing child should fill the card. */
+  childrenH: number | undefined;
+  /** Height of the text column beside the badge (badge-row layout only). */
+  badgeTextH: number;
+}
+
+/**
+ * The ONE measurement of a panel's children (badge-row detection, text-column
+ * width, gap accumulation). estimatePanelHeight and renderPanel both call this
+ * so the estimate can never drift from the drawn pixels.
+ */
+function panelContentMetrics(
+  ctx: SKRSContext2D,
+  children: HyperframeElement[],
+  childBox: Box,
+  env: RenderEnv,
+): PanelContentMetrics {
+  const base = Math.min(env.dims.width, env.dims.height);
+  const badgeRow = panelBadgeRow(children);
+  const childHeights = children.map((child) => estimateHeight(ctx, child, childBox, env));
+  if (badgeRow && childHeights.every((h): h is number => typeof h === "number")) {
+    const badgeW = badgeChipWidth(ctx, env, children[0]!) + Math.round(base * 0.018);
+    const textBox = { ...childBox, w: Math.max(1, childBox.w - badgeW) };
+    const textHeights = children.slice(1).map((text) => estimateHeight(ctx, text, textBox, env) ?? 0);
+    const badgeTextH =
+      textHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * Math.max(0, textHeights.length - 1);
+    return { badgeRow, childrenH: Math.max(childHeights[0]!, badgeTextH), badgeTextH };
+  }
+  if (childHeights.every((h): h is number => typeof h === "number")) {
+    return {
+      badgeRow,
+      childrenH: childHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * (children.length - 1),
+      badgeTextH: 0,
+    };
+  }
+  return { badgeRow, childrenH: undefined, badgeTextH: 0 };
+}
+
 function estimatePanelHeight(ctx: SKRSContext2D, child: HyperframeElement, box: Box, env: RenderEnv): number {
   const base = Math.min(env.dims.width, env.dims.height);
   const metrics = panelMetrics(ctx, child, box, env);
@@ -170,20 +210,9 @@ function estimatePanelHeight(ctx: SKRSContext2D, child: HyperframeElement, box: 
   if (children.length > 0) {
     if (metrics.titleBlock.height > 0) height += metrics.contentGap;
     const childBox = { ...box, w: Math.max(1, box.w - pad * 2), h: Math.max(1, box.h - pad * 2) };
-    const childHeights = children.map((panelChild) => estimateHeight(ctx, panelChild, childBox, env));
-    if (panelBadgeRow(children) && childHeights.every((h): h is number => typeof h === "number")) {
-      compactRow = true;
-      const badgeW = badgeChipWidth(ctx, env, children[0]!) + Math.round(base * 0.018);
-      const textBox = { ...childBox, w: Math.max(1, childBox.w - badgeW) };
-      const textHeights = children.slice(1).map((text) => estimateHeight(ctx, text, textBox, env) ?? 0);
-      const textHeight =
-        textHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * Math.max(0, textHeights.length - 1);
-      height += Math.max(childHeights[0]!, textHeight);
-    } else if (childHeights.every((h): h is number => typeof h === "number")) {
-      height += childHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * (children.length - 1);
-    } else {
-      height += base * 0.28;
-    }
+    const content = panelContentMetrics(ctx, children, childBox, env);
+    compactRow = content.badgeRow && content.childrenH !== undefined;
+    height += content.childrenH ?? base * 0.28;
   }
   return Math.min(box.h, Math.max(base * (compactRow ? 0.09 : 0.14), height));
 }

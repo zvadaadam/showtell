@@ -7,6 +7,7 @@
  * only decides HOW those colors are applied. Tune the design language in one
  * place instead of hunting magic numbers through the renderers.
  */
+import { resolveBundleTheme } from "@agent-video/core";
 import type { CaptionCue, HyperframeTheme } from "@agent-video/hyperframes";
 import type { Dims } from "../dims.ts";
 
@@ -88,28 +89,10 @@ export interface RenderEnv {
   motion?: import("./motion.ts").MotionClock;
 }
 
-/** Fallbacks mirror the "ink" and "paper" presets for theme-less rendering. */
-const FALLBACK_DARK = {
-  bg: "#0b0c14",
-  fg: "#f2f3f7",
-  subtle: "#a0a6b8",
-  accent: "#a78bfa",
-  accent2: "#e879f9",
-  success: "#4ade80",
-  warning: "#fbbf24",
-  surface: "#14161f",
-} as const;
-
-const FALLBACK_PAPER = {
-  bg: "#f7f4ec",
-  fg: "#191b29",
-  subtle: "#5d6275",
-  accent: "#2563eb",
-  accent2: "#7c3aed",
-  success: "#2ea043",
-  warning: "#b7791f",
-  surface: "#ffffff",
-} as const;
+/** Theme-less rendering falls back to the real presets (ink / paper) so the
+ * defaults can never drift from `bundle-theme.ts`. */
+const FALLBACK_DARK = resolveBundleTheme().colors;
+const FALLBACK_PAPER = resolveBundleTheme({ preset: "paper", colors: {}, typography: {} }).colors;
 
 export function rgba(hex: string, opacity: number): string {
   const normalized = hex.replace("#", "");
