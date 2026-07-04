@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# One run per branch/PR: pushing new commits cancels the superseded run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     # capture is macOS-only (avfoundation) + ffmpeg is needed for render tests
@@ -21,7 +26,7 @@ jobs:
       - run: bun run format:check
       - run: bun run typecheck
       - run: bun test
-      - run: bun run gen:schema && git diff --exit-code packages/core/schema.json packages/core/bundle.schema.json packages/core/manifest.schema.json
+      - run: bun run gen:schema && git diff --exit-code packages/core/schema.json packages/core/bundle.schema.json packages/core/manifest.schema.json packages/render/src/hyperframes-sdk.source.txt
       - name: Build the standalone binary + smoke test
         run: |
           bun run build:cli

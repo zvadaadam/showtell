@@ -9,6 +9,65 @@ import {
   FASTSTART_ARGS,
 } from "@agent-video/capture";
 
+/**
+ * A stream of raw RGBA frames + a narration wav → a fixed-duration mp4 clip.
+ * Frames are pulled one at a time so a long line never buffers gigabytes.
+ */
+export async function framesAudioToClip(o: {
+  width: number;
+  height: number;
+  fps: number;
+  frameCount: number;
+  durationSec: number;
+  audio: string;
+  outPath: string;
+  frame(index: number): Promise<Buffer>;
+}): Promise<void> {
+  const proc = Bun.spawn(
+    [
+      "ffmpeg",
+      "-y",
+      "-loglevel",
+      "error",
+      "-f",
+      "rawvideo",
+      "-pixel_format",
+      "rgba",
+      "-video_size",
+      `${o.width}x${o.height}`,
+      "-framerate",
+      String(o.fps),
+      "-i",
+      "pipe:0",
+      "-i",
+      o.audio,
+      "-t",
+      o.durationSec.toFixed(3),
+      ...DETERMINISTIC_VIDEO_ARGS,
+      ...DETERMINISTIC_AUDIO_ARGS,
+      ...FASTSTART_ARGS,
+      ...DETERMINISTIC_CONTAINER_ARGS,
+      o.outPath,
+    ],
+    { stdin: "pipe", stderr: "pipe" },
+  );
+  try {
+    for (let i = 0; i < o.frameCount; i++) {
+      proc.stdin.write(await o.frame(i));
+      await proc.stdin.flush();
+    }
+    await proc.stdin.end();
+  } catch (e) {
+    proc.kill();
+    throw e;
+  }
+  const code = await proc.exited;
+  if (code !== 0) {
+    const stderr = await new Response(proc.stderr).text();
+    throw new Error(`ffmpeg frame-stream encode failed (exit ${code}): ${stderr.slice(0, 500)}`);
+  }
+}
+
 /** A still image + a narration wav → a fixed-duration mp4 clip. */
 export function imageAudioToClip(o: {
   image: string;

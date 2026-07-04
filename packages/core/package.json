@@ -1,6 +1,6 @@
 {
   "name": "@agent-video/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "agent-video spec types, JSON Schema, git/diff parsing, and timeline assembler.",
   "license": "MIT",

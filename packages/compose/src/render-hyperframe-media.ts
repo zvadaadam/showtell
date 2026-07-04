@@ -13,6 +13,7 @@ import { tokenize } from "./highlight.ts";
 import { drawChart } from "./primitives/chart.ts";
 import { drawCode } from "./primitives/code.ts";
 import { drawDiff } from "./primitives/diff.ts";
+import { clamp01, easeOutCubic, type MotionClock } from "./hyperframe/motion.ts";
 import { emptyResult, panelRadius, propsOf, type Box, type DrawResult } from "./render-hyperframe-shared.ts";
 import { canvasTheme } from "./theme.ts";
 
@@ -23,6 +24,20 @@ interface MediaRenderEnv {
     border: string;
   };
   theme?: HyperframeTheme;
+  /** Present for animated frames; media defaults its reveals from this clock. */
+  motion?: MotionClock;
+}
+
+/** Author-set reveal wins; otherwise animated frames sweep content in on scene entry. */
+function mediaReveal(
+  props: Record<string, unknown>,
+  env: MediaRenderEnv,
+  delayMs: number,
+  durationMs: number,
+): number | undefined {
+  if (typeof props.reveal === "number") return props.reveal;
+  if (!env.motion) return undefined;
+  return easeOutCubic(clamp01((env.motion.sceneMs - delayMs) / durationMs));
 }
 
 interface PngCanvas {
@@ -84,7 +99,7 @@ export async function renderCodeRef(
   const tokens = await tokenize(resolved.text, resolved.language, theme.shikiTheme);
   drawCode(c, scene, resolved, tokens, dims, {
     maxLines: typeof props.maxLines === "number" ? props.maxLines : undefined,
-    reveal: typeof props.reveal === "number" ? props.reveal : undefined,
+    reveal: mediaReveal(props, env, 250, 1300),
     theme,
   });
   await drawCanvasInto(ctx, canvas, box);
@@ -122,7 +137,7 @@ export async function renderDiffRef(
     props.focus === "file" || props.focus === "changed" || Array.isArray(props.focus) ? props.focus : undefined;
   drawDiff(c, scene, diff, dims, {
     focus,
-    reveal: typeof props.reveal === "number" ? props.reveal : undefined,
+    reveal: mediaReveal(props, env, 250, 1300),
     theme,
   });
   await drawCanvasInto(ctx, canvas, box);
@@ -173,7 +188,13 @@ export async function renderChart(
     narration: "",
     duration: "auto",
   };
-  const hasData = drawChart(c, scene, dims, canvasTheme(env.theme));
+  const hasData = drawChart(
+    c,
+    scene,
+    dims,
+    canvasTheme(env.theme),
+    env.motion ? { sceneMs: env.motion.sceneMs } : undefined,
+  );
   await drawCanvasInto(ctx, canvas, box);
   return { resolvedRefs: [], warning: hasData ? undefined : "chart scene has no numeric data to plot." };
 }

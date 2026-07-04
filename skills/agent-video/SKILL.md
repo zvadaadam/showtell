@@ -59,14 +59,28 @@ hardcode a new renderer scene template when a smart agent can compose a one-off
 hyperframe from safe primitives. See `docs/bundle-v2.md`.
 
 Put shared video style in `meta.theme`, not scattered through component code.
-Use a preset plus small semantic overrides:
-`{ "preset": "agent-dark" | "paper" | "neutral", "colors": { "accent": "#2563eb" } }`.
-Semantic `colors` define foreground/background/surface/accent/status/caption
-tokens, and `typography` defines `display`, `body`, and `mono` roles. Hyperframe
-components receive a fully resolved `ctx.theme` and the renderer uses it for
-built-in component drawing. Do not use Tailwind-style `className` strings or CSS
-font stacks in hyperframes. `Stage tone` is a local treatment hint, not the video
-palette selector; use `meta.theme.preset` for light/dark/neutral.
+Run `agent-video bundle themes` to list the designed presets with their full
+color tokens, then pick ONE by mood — this is the main design decision and a
+single word restyles every frame, glow, chip, and chart:
+
+- `ink` (default): near-black slate, iris accent, magenta glow — technical, premium
+- `aurora`: deep sea green + teal — calm systems energy
+- `ember`: warm charcoal + amber — launch-video warmth
+- `orchid`: plum black + magenta — bold creator energy
+- `graphite`: pure monochrome — austere, editorial
+- `paper`: light warm paper + cobalt — daylight, docs-like
+- `neutral`: quiet gray-blue dark — product walkthroughs
+
+Prefer `{ "preset": "<id>" }` alone. Add small semantic overrides only when the
+user has a brand color: `{ "preset": "ink", "colors": { "accent": "#ff5d5d" } }`.
+Semantic `colors` define fg/bg/surface/accent/accent2/status/caption tokens
+(`accent2` drives the background glow), and `typography` defines `display`,
+`body`, and `mono` roles. Presets already pass the contrast gates; overrides are
+re-validated at `bundle validate`. Hyperframe components receive a fully
+resolved `ctx.theme` and the renderer uses it for built-in component drawing.
+Do not use Tailwind-style `className` strings or CSS font stacks in hyperframes.
+`Stage tone` is a local treatment hint, not the video palette selector; use
+`meta.theme.preset` for light/dark/neutral.
 
 For hyperframes, declare resource ports once in the hyperframe module's literal
 `inputs` object. In `spec.json`, use `visual.inputs` only to map those ports to
@@ -78,10 +92,28 @@ Reusable components live in `@agent-video/hyperframes`. Run
 three layers:
 
 - host primitives: `Stage`, `Stack`, `Grid`, `Text`, `Panel`, `Badge`, `Meter`,
-  `Callout`, `TimelineRail`, `SystemMap`, captions
+  `Callout`, `BigStat`, `Checklist`, `Quote`, `FunctionPlot`, `Formula`,
+  `TravelPath`, `TimelineRail`, `SystemMap`, captions
 - media primitives: `CodeRef`, `DiffRef`, `Chart`, `ImageAsset`
 - story components: `DecisionGrid`, `SignalWall`, `LaneStack`, `ProofLadder`,
-  `StatusRail`, `PhaseBanner`, `CaptionDeck`
+  `StatusRail`, `PhaseBanner`, `CaptionDeck`, `StatRow`, `CompareSplit`
+
+Reach for the showcase blocks before hand-building equivalents: `BigStat` /
+`StatRow` for metric moments ("183 tests"), `Checklist` for shipped/todo lists
+with drawn state circles, `CompareSplit` for before/after stories, `Quote`
+for pull-quotes, `TravelPath` for animated journeys (a plane arcing
+Prague → SF), and for education/math videos `FunctionPlot` (numeric y = f(x)
+curves with a descent path, tangent, and marker ball) plus `Formula`
+(θ ← θ − α · ∇J(θ) with accent-highlighted terms — full math glyph coverage). They are theme-aware and read like
+designed slides with zero styling effort.
+
+This is video, not a slideshow: hyperframe scenes render every frame with a
+deterministic motion clock. `ctx.scene.progress` and `ctx.range(...)` advance
+continuously — map motion to narration with range inputs
+(`inputs: { flight: "line:l1" }` then `progress={ctx.range("flight").progress}`).
+The renderer adds automatic entrances, chart growth, count-ups, and word-pop
+captions on top; stills (workshop, thumbnails) always show end states, so
+compose for the finished frame and let timing bring it alive.
 
 The command returns structured JSON with import names, layers, prop hints, and
 JSX examples. Use those examples as the default starting point for custom
@@ -102,12 +134,20 @@ because every possible evidence object is visible at once. If a frame has more
 than one primary panel, split it into another narration line, optional beat, or
 scene.
 
-Current hyperframe rendering samples one still frame per narration line. Use
-`ctx.scene.lineIndex`, `ctx.scene.lineId`, `ctx.range()`, `ctx.scene.progress`,
-and `ctx.viewport` to choose the right line-state visual; do not rely on
-per-frame animation yet. Hyperframes are trusted local code with static policy
-lint, not a hostile-code sandbox: import only `@agent-video/hyperframes` and
-declare all repo/assets/ranges in `spec.json`.
+**Titles are chapter openers, not scene furniture.** This is video, not a
+slide deck: narration already carries the words, so most scenes should let the
+focal visual own the whole frame. Use `PhaseBanner`/`LowerThird` on the opening
+scene (and at a real chapter turn); after that, prefer a bare `FunctionPlot`,
+`Formula`, `DiffRef`, or chart full-bleed. If every scene in your spec starts
+with an eyebrow + title, you are making a presentation — delete the headers.
+
+Hyperframe scenes render every frame at the spec fps: `ctx.scene.lineIndex`
+and `ctx.scene.lineId` pick the line-state visual, while `ctx.scene.progress`,
+`ctx.time`, and `ctx.range()` advance continuously for smooth motion.
+`bundle render --stills` holds one frame per line when you need a fast draft.
+Hyperframes are trusted local code with static policy lint, not a hostile-code
+sandbox: import only `@agent-video/hyperframes` and declare all
+repo/assets/ranges in `spec.json`.
 
 Bundle commands:
 

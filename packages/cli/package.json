@@ -1,8 +1,8 @@
 {
   "name": "@agent-video/cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
-  "description": "The agent-video CLI — author, validate, and render agent videos.",
+  "description": "Loom for agents — a local, repo-aware video renderer CLI. Agents author spec.json + hyperframes; the renderer produces narrated MP4s.",
   "license": "MIT",
   "bin": {
     "agent-video": "./src/index.ts"
@@ -12,5 +12,28 @@
     "@agent-video/core": "workspace:*",
     "@agent-video/hyperframes": "workspace:*",
     "@agent-video/render": "workspace:*"
-  }
+  },
+  "homepage": "https://agent-video.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zvadaadam/agent-video.git",
+    "directory": "packages/cli"
+  },
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "os": [
+    "darwin"
+  ],
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "agent",
+    "video",
+    "renderer",
+    "cli",
+    "ai",
+    "loom"
+  ]
 }

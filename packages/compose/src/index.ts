@@ -1,8 +1,9 @@
 export { renderSceneToPng, renderWatermarkPng, COMPOSABLE_KINDS } from "./render-scene.ts";
 export type { RenderSceneOpts, RenderedScene } from "./render-scene.ts";
-export { renderHyperframeElementToPng } from "./render-hyperframe-tree.ts";
-export type { HyperframeTreeRenderOpts } from "./render-hyperframe-tree.ts";
-export { renderCaptionedFrame } from "./render-caption.ts";
+export { renderHyperframeElementToPng, renderHyperframeElementToRgba } from "./render-hyperframe-tree.ts";
+export type { HyperframeTreeRenderOpts, RenderedHyperframeFrame } from "./render-hyperframe-tree.ts";
+export type { MotionClock } from "./hyperframe/motion.ts";
+export { renderCaptionedFrame, drawCaptionOverlay } from "./render-caption.ts";
 export { dimsFor, type Dims } from "./dims.ts";
 export { probeImageInfo } from "./image-info.ts";
 export type { ImageInfo } from "./image-info.ts";

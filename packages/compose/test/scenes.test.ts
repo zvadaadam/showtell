@@ -125,6 +125,8 @@ test("chart legends follow the chart type", () => {
       ]),
     ),
   ).toEqual([]);
+  // Single-series bars render in one accent hue, so a per-label legend would
+  // be redundant with the x-axis labels.
   expect(
     legendItems(
       "bar",
@@ -132,8 +134,17 @@ test("chart legends follow the chart type", () => {
         { label: "a", value: 1 },
         { label: "b", value: 2 },
       ]),
+    ),
+  ).toEqual([]);
+  expect(
+    legendItems(
+      "bar",
+      parseChartData([
+        { label: "a", current: 1, previous: 2 },
+        { label: "b", current: 3, previous: 4 },
+      ]),
     ).map((i) => i.label),
-  ).toEqual(["a", "b"]);
+  ).toEqual(["current", "previous"]);
 });
 
 test("chart parsing honors explicit x/y fields", () => {

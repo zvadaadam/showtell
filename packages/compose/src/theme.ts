@@ -5,6 +5,8 @@ export interface SemanticTheme {
     bg: string;
     subtle: string;
     accent: string;
+    /** Secondary hue for background glows; falls back to accent. */
+    accent2?: string;
     success: string;
     warning: string;
     surface: string;
@@ -17,6 +19,8 @@ export interface SemanticTheme {
     body: string;
     mono: string;
   };
+  /** Categorical palette for multi-series charts and pies, in series order. */
+  chart?: string[];
 }
 
 export interface CanvasTheme {
@@ -38,28 +42,31 @@ export interface CanvasTheme {
   watermarkFg: string;
   captionBg: string;
   captionFg: string;
+  /** Categorical palette for multi-series charts and pies, in series order. */
+  series: string[];
 }
 
-/** The single default theme. Pinned for determinism (same spec → same pixels). */
+/** The single default theme (matches the "ink" preset). Pinned for determinism (same spec → same pixels). */
 export const THEME: CanvasTheme = {
-  bg: ["#0f0f23", "#1a1a3e"] as [string, string],
-  fg: "#e8e8f2",
-  subtle: "#9aa0b4",
-  codeBg: "#11111b",
-  codeBar: "#181826",
+  bg: ["#0b0c14", "#181228"] as [string, string],
+  fg: "#f2f3f7",
+  subtle: "#a0a6b8",
+  codeBg: "#10111a",
+  codeBar: "#171923",
   cardBorder: "rgba(255,255,255,0.08)",
-  focus: "rgba(124,140,255,0.16)",
-  accent: "#7c8cff",
-  success: "#7ee787",
-  warning: "#ffb86c",
-  gutter: "#5b6072",
+  focus: "rgba(167,139,250,0.15)",
+  accent: "#a78bfa",
+  success: "#4ade80",
+  warning: "#fbbf24",
+  gutter: "#5d6274",
   sans: "Inter",
   sansBold: "Inter Bold",
   mono: "JetBrains Mono",
   shikiTheme: "github-dark",
   watermarkFg: "rgba(255,255,255,0.5)",
-  captionBg: "rgba(7,10,18,0.78)",
-  captionFg: "#e8e8f2",
+  captionBg: "rgba(5,6,11,0.8)",
+  captionFg: "#f2f3f7",
+  series: ["#a78bfa", "#e879f9", "#38bdf8", "#4ade80", "#fbbf24"],
 } as const;
 
 function rgba(hex: string, opacity: number): string {
@@ -91,5 +98,19 @@ export function canvasTheme(theme?: SemanticTheme): CanvasTheme {
     watermarkFg: rgba(theme.colors.fg, 0.5),
     captionBg: rgba(theme.colors.captionBg ?? theme.colors.bg, 0.88),
     captionFg: theme.colors.captionFg ?? theme.colors.fg,
+    // Themes without an explicit chart palette get one anchored on their own hues.
+    series:
+      theme.chart ??
+      dedupe([
+        theme.colors.accent,
+        theme.colors.accent2,
+        theme.colors.success,
+        theme.colors.warning,
+        theme.colors.subtle,
+      ]),
   };
+}
+
+function dedupe(colors: (string | undefined)[]): string[] {
+  return [...new Set(colors.filter((color): color is string => Boolean(color)))];
 }

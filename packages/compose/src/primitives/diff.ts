@@ -64,8 +64,10 @@ export function drawDiff(
     lineCount: view.length,
     areaW: codeW - innerPad * 2,
     areaH,
-    maxFont: Math.round(base * 0.028),
-    minFont: Math.round(base * 0.02),
+    // Absolute floors keep diffs legible when the card renders into a small
+    // grid cell (sub-canvas base can be a few hundred px).
+    maxFont: Math.max(15, Math.round(base * 0.028)),
+    minFont: Math.max(12, Math.round(base * 0.02)),
     lineHeightRatio: 1.5,
     family: theme.mono,
   });

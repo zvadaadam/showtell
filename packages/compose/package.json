@@ -1,6 +1,6 @@
 {
   "name": "@agent-video/compose",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Deterministic canvas renderer for built-in visuals and hyperframe primitive trees.",
@@ -13,6 +13,7 @@
     "@agent-video/hyperframes": "workspace:*",
     "@fontsource/inter": "5.2.8",
     "@fontsource/jetbrains-mono": "5.2.8",
+    "@fontsource/noto-sans-math": "^5.2.9",
     "@napi-rs/canvas": "0.1.100",
     "shiki": "1.29.2"
   }

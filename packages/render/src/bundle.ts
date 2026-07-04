@@ -26,7 +26,10 @@ import {
 import {
   probeImageInfo,
   canvasTheme,
+  dimsFor,
+  drawCaptionOverlay,
   renderCaptionedFrame,
+  renderHyperframeElementToRgba,
   renderHyperframeElementToPng,
   renderSceneToPng,
   type RenderedScene,
@@ -38,6 +41,7 @@ import {
   mixMusicTracks,
   normalizeVideoDuration,
   silentAudio,
+  framesAudioToClip,
   type MusicMixTrack,
 } from "./ffmpeg.ts";
 import { resolveBundlePoint, resolveBundleRange, resolveBundleSpan } from "./bundle-time.ts";
@@ -186,6 +190,8 @@ export interface BundleVisualMoment {
   lineCount: number;
   lineId: string;
   progress: number;
+  /** Exact frame time (absolute ms) for animated renders; stills omit it. */
+  timeMs?: number;
 }
 
 export interface BundleCompileResult extends BundleCompileRuntime {
@@ -788,8 +794,9 @@ function renderWarning(sceneIndex: number, lineIndex: number, message: string): 
 
 export async function renderBundle(
   bundleDirInput: string,
-  opts: { outDir?: string; aspectRatios?: AspectRatio[]; cacheDir?: string } = {},
+  opts: { outDir?: string; aspectRatios?: AspectRatio[]; cacheDir?: string; motion?: boolean } = {},
 ): Promise<BundleRenderResult> {
+  const motionEnabled = opts.motion !== false;
   const compiled = await compileBundle(bundleDirInput, { cacheDir: opts.cacheDir });
   const outDir = opts.outDir ? resolve(opts.outDir) : join(compiled.bundleDir, "out");
   const ratios = opts.aspectRatios ?? compiled.spec.meta.aspectRatios;
@@ -846,35 +853,122 @@ export async function renderBundle(
             writeFileSync(join(outDir, `thumb-${String(planScene.index).padStart(3, "0")}.png`), rendered.png);
           }
 
-          const visualPng = burnInCaptions ? join(workDir, `${tag}-${line.id}-caption.png`) : png;
-          if (burnInCaptions) {
-            writeFileSync(visualPng, await renderCaptionedFrame(rendered.png, aspectRatio, line.text, captionTheme));
-          }
           const lineClip = join(workDir, `${tag}-${line.id}.mp4`);
-          imageAudioToClip({
-            image: visualPng,
-            audio: compiled.lineAudio.get(lineKey(scene.id, line.id))!,
-            durationSec: line.durationMs / 1000,
-            fps: compiled.spec.meta.fps,
-            outPath: lineClip,
-          });
+          if (scene.visual.kind === "hyperframe" && motionEnabled) {
+            // Animated path: render every frame of the line so hyperframes move.
+            const fps = compiled.spec.meta.fps;
+            const dims = dimsFor(aspectRatio);
+            const frameCount = Math.max(1, Math.round((line.durationMs / 1000) * fps));
+            const theme = hyperframeThemeFromSpec(compiled.spec);
+            await framesAudioToClip({
+              width: dims.width,
+              height: dims.height,
+              fps,
+              frameCount,
+              durationSec: line.durationMs / 1000,
+              audio: compiled.lineAudio.get(lineKey(scene.id, line.id))!,
+              outPath: lineClip,
+              frame: async (frameIndex) => {
+                const timeMs = line.startMs + ((frameIndex + 0.5) / fps) * 1000;
+                const executed = await executeHyperframe({
+                  scene,
+                  compiledScene: planScene,
+                  runtime: compiled,
+                  aspectRatio,
+                  moment: { ...moment, timeMs },
+                });
+                const frame = await renderHyperframeElementToRgba(executed.element, {
+                  aspectRatio,
+                  activeCue: executed.activeCue,
+                  theme,
+                  watermark: "agent-video.dev",
+                  motion: {
+                    absoluteMs: timeMs,
+                    sceneMs: timeMs - planScene.startMs,
+                    lineMs: timeMs - line.startMs,
+                    fps,
+                  },
+                  drawOverlay: burnInCaptions
+                    ? (frameCtx, frameDims) => drawCaptionOverlay(frameCtx, frameDims, line.text, captionTheme)
+                    : undefined,
+                });
+                return frame.rgba;
+              },
+            });
+          } else {
+            const visualPng = burnInCaptions ? join(workDir, `${tag}-${line.id}-caption.png`) : png;
+            if (burnInCaptions) {
+              writeFileSync(visualPng, await renderCaptionedFrame(rendered.png, aspectRatio, line.text, captionTheme));
+            }
+            imageAudioToClip({
+              image: visualPng,
+              audio: compiled.lineAudio.get(lineKey(scene.id, line.id))!,
+              durationSec: line.durationMs / 1000,
+              fps: compiled.spec.meta.fps,
+              outPath: lineClip,
+            });
+          }
           clips.push(lineClip);
         }
 
         const lastLine = planScene.narration.lines[planScene.narration.lines.length - 1]!;
         const tailMs = Math.max(0, planScene.endMs - lastLine.endMs);
-        if (tailMs > 0 && tailPng) {
+        if (tailMs > 0) {
           const tailAudio = join(workDir, `${tag}-tail.wav`);
           const tailClip = join(workDir, `${tag}-tail.mp4`);
           silentAudio(tailAudio, tailMs / 1000);
-          imageAudioToClip({
-            image: tailPng,
-            audio: tailAudio,
-            durationSec: tailMs / 1000,
-            fps: compiled.spec.meta.fps,
-            outPath: tailClip,
-          });
-          clips.push(tailClip);
+          if (scene.visual.kind === "hyperframe" && motionEnabled) {
+            // Animated tail: keep the motion clock running past the last line so
+            // the scene HOLDS its true end state (no snap back to a mid-line still).
+            const fps = compiled.spec.meta.fps;
+            const dims = dimsFor(aspectRatio);
+            const frameCount = Math.max(1, Math.round((tailMs / 1000) * fps));
+            const theme = hyperframeThemeFromSpec(compiled.spec);
+            const moment = lineMoment(planScene, planScene.narration.lines.length - 1);
+            await framesAudioToClip({
+              width: dims.width,
+              height: dims.height,
+              fps,
+              frameCount,
+              durationSec: tailMs / 1000,
+              audio: tailAudio,
+              outPath: tailClip,
+              frame: async (frameIndex) => {
+                const timeMs = lastLine.endMs + ((frameIndex + 0.5) / fps) * 1000;
+                const executed = await executeHyperframe({
+                  scene,
+                  compiledScene: planScene,
+                  runtime: compiled,
+                  aspectRatio,
+                  moment: { ...moment, timeMs },
+                });
+                const frame = await renderHyperframeElementToRgba(executed.element, {
+                  aspectRatio,
+                  // Narration is over: kinetic captions clear during the hold.
+                  activeCue: undefined,
+                  theme,
+                  watermark: "agent-video.dev",
+                  motion: {
+                    absoluteMs: timeMs,
+                    sceneMs: timeMs - planScene.startMs,
+                    lineMs: timeMs - lastLine.startMs,
+                    fps,
+                  },
+                });
+                return frame.rgba;
+              },
+            });
+            clips.push(tailClip);
+          } else if (tailPng) {
+            imageAudioToClip({
+              image: tailPng,
+              audio: tailAudio,
+              durationSec: tailMs / 1000,
+              fps: compiled.spec.meta.fps,
+              outPath: tailClip,
+            });
+            clips.push(tailClip);
+          }
         }
       }
 

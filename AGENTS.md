@@ -25,7 +25,7 @@ my-video.agent-video/
 ```
 
 - `spec.json` stays the orchestration contract: metadata, narration, repo refs, assets, captions, music, scenes, optional beats/ranges, hyperframe entry points, and `visual.inputs` mappings.
-- Shared video style belongs in `meta.theme`: choose a semantic `preset` (`agent-dark`, `paper`, `neutral`), then override only needed `colors`/`typography` roles. Do not hardcode brand colors or fonts independently in every hyperframe unless the frame intentionally breaks the system; do not use Tailwind-style class strings.
+- Shared video style belongs in `meta.theme`: choose a semantic `preset` by mood (`ink` is the default; run `bundle themes` for all eight), then override only needed `colors`/`typography`/`chart` tokens. Do not hardcode brand colors or fonts independently in every hyperframe unless the frame intentionally breaks the system; do not use Tailwind-style class strings.
 - `hyperframes/*.tsx` are agent-authored deterministic visual programs. They can be creative, but they receive only renderer-provided `ctx` data and declared refs/assets/ranges through literal `inputs` contracts.
 - `compiled-plan.json` is renderer-emitted only. Agents do not author exact frame timings or ffmpeg instructions.
 - Background music, captions, repo reads, TTS, timing, muxing, and cache/hashes remain renderer-owned.
@@ -33,7 +33,9 @@ my-video.agent-video/
 - Prefer reusable hyperframe components over copy-only templates. Run `bundle components` first; templates are complete examples, not the main reuse layer.
 - Use built-in visuals for simple videos. Use bundle hyperframes for great videos that need line-state visual changes, custom layouts, captions working around visuals, music ranges, or multiple repo/data inputs in one narrated chapter.
 - Keep hyperframes visually focused. Default to **one focal visual per narration line**; make pace with cuts between map/code/chart/screenshot/callout states, not by placing every declared resource on one crowded frame. Omit `beats` unless a semantic grouping is useful; the renderer creates one implicit beat per narration line.
-- Current hyperframe rendering samples one still frame per narration line. Hyperframes are trusted local code with static policy lint, not a hostile-code sandbox.
+- **Titles are chapter openers, not scene furniture.** Narration carries the words; most scenes should give the focal visual the whole frame. Use a banner/lower-third on the opener or a real chapter turn — a spec whose every scene starts with an eyebrow + title is a slide deck, not a video.
+- **This is video, not a slideshow.** Hyperframe scenes render EVERY frame at the spec fps with a deterministic motion clock: `ctx.scene.progress`, `ctx.time`, and `ctx.range(...)` advance continuously, so range-driven props animate smoothly (a `TravelPath` plane flying Prague→SF, reveals sweeping code, meters filling). The renderer also owns tasteful automatic motion — staggered entrances, chart growth, stat count-ups, checklist pops, word-pop captions, background glow drift — and every animation renders at its END state in stills (workshop, thumbs). Design scenes as moments in time, not static posters: map narration-synced motion to ranges (`inputs: { flight: "line:l1" }` → `ctx.range("flight").progress`). `bundle render --stills` falls back to one held frame per line.
+- Hyperframes are trusted local code with static policy lint, not a hostile-code sandbox.
 
 Current bundle commands:
 
@@ -42,6 +44,7 @@ Current bundle commands:
 - `bun packages/cli/src/index.ts bundle inspect <bundle-dir>`
 - `bun packages/cli/src/index.ts bundle components`
 - `bun packages/cli/src/index.ts bundle templates`
+- `bun packages/cli/src/index.ts bundle themes`
 - `bun packages/cli/src/index.ts bundle workshop <bundle-dir> --out .agent-video/workshop --aspect 16:9,9:16`
 - `bun packages/cli/src/index.ts bundle compile <bundle-dir>`
 - `bun packages/cli/src/index.ts bundle render <bundle-dir> --out <dir> --aspect 16:9,9:16`
