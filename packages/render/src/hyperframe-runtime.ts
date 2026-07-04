@@ -130,8 +130,18 @@ function rangeFromSpan(span: { startMs: number; endMs: number; durationMs: numbe
 
 const moduleCache = new Map<string, RuntimeModule>();
 
-async function loadHyperframeModule(bundleDir: string, scene: BundleScene): Promise<RuntimeModule> {
+async function loadHyperframeModule(
+  bundleDir: string,
+  scene: BundleScene,
+  knownSourceHash?: string,
+): Promise<RuntimeModule> {
   if (scene.visual.kind !== "hyperframe") throw new Error("Scene visual is not a hyperframe.");
+  // Per-frame hot path: the compiled scene already carries the source hash, so
+  // cache hits skip the disk read + re-hash entirely.
+  if (knownSourceHash) {
+    const known = moduleCache.get(knownSourceHash);
+    if (known) return known;
+  }
   const hyperframePath = bundleHyperframeFile(bundleDir, scene.visual.src).path;
   const source = readFileSync(hyperframePath, "utf-8");
   const sourceHash = sha256(source);
@@ -314,7 +324,11 @@ function buildContext(opts: ExecuteHyperframeOpts): HyperframeContext<Record<str
 }
 
 export async function executeHyperframe(opts: ExecuteHyperframeOpts): Promise<ExecutedHyperframe> {
-  const module = await loadHyperframeModule(opts.runtime.bundleDir, opts.scene);
+  const module = await loadHyperframeModule(
+    opts.runtime.bundleDir,
+    opts.scene,
+    opts.compiledScene.hyperframe?.sourceSha256,
+  );
   const ctx = buildContext(opts);
   const element = module.render(ctx);
   if (!element || typeof element !== "object" || typeof element.type !== "string") {

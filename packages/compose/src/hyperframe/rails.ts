@@ -96,14 +96,17 @@ export function drawSystemMap(ctx: SKRSContext2D, element: HyperframeElement, bo
   const requested = props.orientation;
   const horizontal = requested === "horizontal" ? true : requested === "vertical" ? false : box.w > box.h * 1.2;
   const count = labels.length;
-  const arrow = Math.round(base * 0.036);
+  // Shrink connectors before letting nodes collapse when many steps compete
+  // for a small box; geometry stays positive for any steps.length.
+  const span = horizontal ? box.w : box.h;
+  const arrow = Math.max(2, Math.min(Math.round(base * 0.036), Math.floor(span / Math.max(1, count * 3))));
   const labelSize = Math.max(15, Math.round(base * 0.021));
   const chipR = Math.round(base * 0.016);
 
-  const nodeW = horizontal ? (box.w - arrow * (count - 1)) / count : Math.min(box.w, base * 0.62);
+  const nodeW = horizontal ? Math.max(1, (box.w - arrow * (count - 1)) / count) : Math.min(box.w, base * 0.62);
   const nodeH = horizontal
     ? Math.min(box.h, Math.max(base * 0.13, Math.min(base * 0.2, box.h * 0.52)))
-    : (box.h - arrow * (count - 1)) / count;
+    : Math.max(1, (box.h - arrow * (count - 1)) / count);
   const startY = horizontal ? box.y + (box.h - nodeH) / 2 : box.y;
   const startX = horizontal ? box.x : box.x + (box.w - nodeW) / 2;
 

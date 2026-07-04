@@ -70,6 +70,7 @@ single word restyles every frame, glow, chip, and chart:
 - `graphite`: pure monochrome — austere, editorial
 - `paper`: light warm paper + cobalt — daylight, docs-like
 - `neutral`: quiet gray-blue dark — product walkthroughs
+- `agent-dark`: legacy navy-and-periwinkle default, kept for existing bundles
 
 Prefer `{ "preset": "<id>" }` alone. Add small semantic overrides only when the
 user has a brand color: `{ "preset": "ink", "colors": { "accent": "#ff5d5d" } }`.

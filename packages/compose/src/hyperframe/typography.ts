@@ -93,7 +93,12 @@ export function layoutText(
   const content = spec.uppercase ? text.toUpperCase() : text;
   ctx.font = fontFor(env, spec.face, size);
   setTracking(ctx, size * spec.tracking);
-  const lines = wrapText(ctx, content, Math.max(1, maxWidth)).slice(0, spec.maxLines);
+  const wrapped = wrapText(ctx, content, Math.max(1, maxWidth));
+  const lines = wrapped.slice(0, spec.maxLines);
+  // Dropped lines get a visible ellipsis instead of a silent cut.
+  if (wrapped.length > lines.length && lines.length > 0) {
+    lines[lines.length - 1] = truncateToWidth(ctx, `${lines[lines.length - 1]} …`, Math.max(1, maxWidth));
+  }
   setTracking(ctx, 0);
   const lineH = size * spec.lineHeight;
   return { lines, size, lineH, spec, height: lines.length * lineH };

@@ -57,7 +57,7 @@ import {
 import cliManifest from "../package.json" with { type: "json" };
 
 const VERSION: string = cliManifest.version;
-const BOOLEAN_FLAGS = new Set(["frames-only", "no-import", "help"]);
+const BOOLEAN_FLAGS = new Set(["frames-only", "no-import", "help", "stills"]);
 
 // ---------------------------------------------------------------------------
 // Output helpers — everything an agent consumes is JSON.

@@ -26,7 +26,7 @@ brew install ffmpeg   # required for rendering
 agent-video version   # verify
 ```
 
-The installer downloads the signed release binary (checksum-verified), installs
+The installer downloads the release binary (checksum-verified), installs
 it to `~/.local/bin`, and drops the **agent-video skill** into
 `~/.claude/skills/` so Claude Code can make videos immediately. macOS is the
 supported platform for v0.x: narration uses the local `say` engine by default

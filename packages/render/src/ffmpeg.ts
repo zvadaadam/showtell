@@ -49,7 +49,9 @@ export async function framesAudioToClip(o: {
       ...DETERMINISTIC_CONTAINER_ARGS,
       o.outPath,
     ],
-    { stdin: "pipe", stderr: "pipe" },
+    // Watchdog: generous (10× realtime + 1min) — frames are produced inside
+    // this window too, so slow renders fail loudly instead of hanging forever.
+    { stdin: "pipe", stderr: "pipe", timeout: Math.round(o.durationSec * 10_000) + 60_000, killSignal: "SIGKILL" },
   );
   try {
     for (let i = 0; i < o.frameCount; i++) {

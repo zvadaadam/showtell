@@ -82,6 +82,7 @@ function seriesColor(index: number, single: boolean, theme: CanvasTheme): string
 }
 
 function withAlpha(color: string, alpha: number): string {
+  if (!/^#[0-9a-fA-F]{6}$/.test(color)) return color; // non-hex: skip blending rather than emit rgba(NaN…)
   const normalized = color.replace("#", "");
   const r = parseInt(normalized.slice(0, 2), 16);
   const g = parseInt(normalized.slice(2, 4), 16);
