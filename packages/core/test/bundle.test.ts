@@ -798,3 +798,66 @@ test("hyperframe policy lint ignores banned-looking strings and comments", () =>
     expect(result.warnings).toHaveLength(0);
   }
 });
+
+function presenterSpec(presenter: Record<string, unknown>): string {
+  const dir = mkdtempSync(join(tmpdir(), "av-bundle-presenter-"));
+  writeFileSync(
+    join(dir, "spec.json"),
+    JSON.stringify({
+      version: 2,
+      meta: { title: "Presenter", presenter, repo: { path: ROOT } },
+      scenes: [
+        {
+          id: "intro",
+          narration: { lines: [{ id: "l1", text: "Hello." }] },
+          visual: { kind: "builtin", name: "title", props: { title: "Hi" } },
+        },
+      ],
+    }),
+  );
+  return dir;
+}
+
+test("presenter defaults to enabled with auto position and md size", () => {
+  const dir = presenterSpec({ image: "assets/avatar.png", model: "Claude" });
+  mkdirSync(join(dir, "assets"), { recursive: true });
+  writeFileSync(join(dir, "assets", "avatar.png"), "png-bytes");
+
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.spec.meta.presenter).toMatchObject({
+      enabled: true,
+      image: "assets/avatar.png",
+      model: "Claude",
+      position: "auto",
+      size: "md",
+    });
+  }
+});
+
+test("presenter validation reports missing image files with a repair hint", () => {
+  const dir = presenterSpec({ image: "assets/avatar.png", logo: "assets/logo.png" });
+  mkdirSync(join(dir, "assets"), { recursive: true });
+  writeFileSync(join(dir, "assets", "logo.png"), "png-bytes");
+
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    const error = result.errors.find((item) => item.code === "MISSING_PRESENTER_IMAGE");
+    expect(error?.path).toBe("meta.presenter.image");
+    expect(error?.hint).toContain("meta.presenter.enabled");
+  }
+});
+
+test("disabled presenter skips image checks; escaping paths are rejected", () => {
+  const disabled = presenterSpec({ enabled: false, image: "assets/missing.png" });
+  expect(validateBundle(disabled).ok).toBe(true);
+
+  const escaping = presenterSpec({ image: "../outside.png" });
+  const result = validateBundle(escaping);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors.some((item) => item.code === "BAD_PRESENTER_IMAGE_PATH")).toBe(true);
+  }
+});

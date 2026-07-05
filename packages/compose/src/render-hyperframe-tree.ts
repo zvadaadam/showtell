@@ -54,6 +54,7 @@ import {
 import { elementChildElements, elementChildren, isElement } from "./hyperframe/element.ts";
 import { easeOutCubic, enter01, type MotionClock } from "./hyperframe/motion.ts";
 import { collectKineticCaptions, drawKineticCaption, drawStageBackground } from "./hyperframe/overlay.ts";
+import { drawPresenterOverlay, type PresenterOverlayState } from "./hyperframe/presenter.ts";
 import { drawSystemMap, drawTimelineRail } from "./hyperframe/rails.ts";
 import { gapPx, paddingPx, paletteFor, rgba, toneColor, TOKENS, type RenderEnv } from "./hyperframe/tokens.ts";
 import { layoutText, drawLaidOutText, type LaidOutText } from "./hyperframe/typography.ts";
@@ -74,6 +75,8 @@ export interface HyperframeTreeRenderOpts {
   watermark?: string | false;
   /** Present when rendering an animated video frame; stills render end states. */
   motion?: MotionClock;
+  /** Renderer-owned presenter bubble, drawn on top of the tree every frame. */
+  presenter?: PresenterOverlayState;
 }
 
 /* ------------------------------------------------------------------ */
@@ -716,6 +719,7 @@ async function renderHyperframeElementToCanvas(element: HyperframeElement, opts:
       : await renderNode(ctx, element, { x: 0, y: 0, w: dims.width, h: dims.height }, env);
 
   if (opts.watermark !== false) drawWatermark(ctx, dims, opts.watermark ?? "agent-video.dev", canvasTheme(opts.theme));
+  if (opts.presenter) drawPresenterOverlay(ctx, env, opts.presenter);
   return { canvas, ctx, dims, result };
 }
 

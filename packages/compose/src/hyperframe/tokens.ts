@@ -49,6 +49,23 @@ export const TOKENS = {
   /** Spacing scale, as fractions of the short frame edge. */
   gap: { xs: 0.012, sm: 0.02, md: 0.032, lg: 0.045, xl: 0.065 },
   padding: { xs: 0.025, sm: 0.04, md: 0.055, lg: 0.07, xl: 0.085 },
+  /** Presenter bubble geometry, as fractions of the short frame edge / avatar size. */
+  presenter: {
+    diameter: { sm: 0.105, md: 0.135, lg: 0.175 },
+    margin: 0.04,
+    /** Pulse ring: rest radius factor + how far amplitude pushes it out. */
+    ringRest: 1.06,
+    ringAmplitude: 0.1,
+    ringWidth: 0.045,
+    /** Amplitude halo: soft accent glow radius growth beyond the avatar. */
+    haloRest: 1.1,
+    haloAmplitude: 0.38,
+    /** Badge diameter as a fraction of the avatar diameter. */
+    badgeScale: 0.38,
+    /** Badge center offset from the avatar center, as a fraction of its radius. */
+    badgeOffset: 0.74,
+    enterMs: 520,
+  },
   /** Motion timing (ms) and amplitudes. Stills render every animation at its end state. */
   motion: {
     enterMs: 620,

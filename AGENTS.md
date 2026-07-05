@@ -30,7 +30,7 @@ my-video.agent-video/
 - Shared video style belongs in `meta.theme`: choose a semantic `preset` by mood (`ink` is the default; run `bundle themes` for all eight), then override only needed `colors`/`typography`/`chart` tokens. Do not hardcode brand colors or fonts independently in every hyperframe unless the frame intentionally breaks the system; do not use Tailwind-style class strings.
 - `hyperframes/*.tsx` are agent-authored deterministic visual programs. They can be creative, but they receive only renderer-provided `ctx` data and declared refs/assets/ranges through literal `inputs` contracts.
 - `compiled-plan.json` is renderer-emitted only. Agents do not author exact frame timings or ffmpeg instructions.
-- Background music, captions, repo reads, TTS, timing, muxing, and cache/hashes remain renderer-owned.
+- Background music, captions, the presenter bubble (`meta.presenter`: avatar + model badge pulsing with measured narration loudness), repo reads, TTS, timing, muxing, and cache/hashes remain renderer-owned.
 - Do **not** hardcode product-specific scene templates in the renderer just because one video needs them. The agent is smart: expose safe primitives, then let the agent compose custom hyperframes when a video needs richer staging.
 - Prefer reusable hyperframe components over copy-only templates. Run `bundle components` first; templates are complete examples, not the main reuse layer.
 - Use built-in visuals for simple videos. Use bundle hyperframes for great videos that need line-state visual changes, custom layouts, captions working around visuals, music ranges, or multiple repo/data inputs in one narrated chapter.
