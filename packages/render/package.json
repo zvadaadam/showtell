@@ -1,6 +1,6 @@
 {
   "name": "@agent-video/render",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Render orchestrator: validate → resolve refs → (TTS → measure) → compose+capture → ffmpeg mux + watermark → mp4.",

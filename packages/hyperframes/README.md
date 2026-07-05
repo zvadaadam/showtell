@@ -17,10 +17,10 @@ agent-video bundle templates
 Use components first:
 
 - host primitives: `Stage`, `Stack`, `Grid`, `Text`, `Panel`, `Badge`, `Meter`,
-  `Callout`
+  `Callout`, `BigStat`, `Checklist`, `Quote`, `FunctionPlot`, `Formula`, `TravelPath`
 - media primitives: `CodeRef`, `DiffRef`, `Chart`, `ImageAsset`
 - story components: `DecisionGrid`, `SignalWall`, `LaneStack`, `ProofLadder`,
-  `StatusRail`, `PhaseBanner`, `CaptionDeck`
+  `StatusRail`, `PhaseBanner`, `CaptionDeck`, `StatRow`, `CompareSplit`
 
 `agent-video bundle components` returns the same vocabulary as structured JSON
 with import names, layers, prop hints, and JSX examples.

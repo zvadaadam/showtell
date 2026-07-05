@@ -18,7 +18,26 @@ agent-authored `hyperframes/*.tsx`, declared assets, and a renderer-emitted
 `spec.json` with built-in visuals. See
 [docs/bundle-v2.md](docs/bundle-v2.md) and [examples/bundle-v2](examples/bundle-v2).
 
-## Quickstart
+## Install (macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zvadaadam/agent-video/main/scripts/install.sh | sh
+brew install ffmpeg   # required for rendering
+agent-video version   # verify
+```
+
+The installer downloads the release binary (checksum-verified), installs
+it to `~/.local/bin`, and drops the **agent-video skill** into
+`~/.claude/skills/` so Claude Code can make videos immediately. macOS is the
+supported platform for v0.x: narration uses the local `say` engine by default
+(no API key needed); set `audio.tts.provider` to `"openai"`/`"elevenlabs"` for
+premium voices. Releases and checksums: [GitHub Releases](https://github.com/zvadaadam/agent-video/releases).
+Maintainers cut a release by bumping the version and pushing a `v*` tag
+(`bun scripts/build-release.ts` builds the same artifacts locally). An npm
+package (`bunx agent-video`) is planned once the package name is settled — the
+CLI manifest is already publish-shaped.
+
+## Development quickstart
 
 Prereqs: [bun](https://bun.sh), [ffmpeg](https://ffmpeg.org) (`brew install ffmpeg`), and Git 2.24+.
 

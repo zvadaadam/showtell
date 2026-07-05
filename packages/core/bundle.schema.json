@@ -45,6 +45,11 @@
                 "preset": {
                   "type": "string",
                   "enum": [
+                    "ink",
+                    "aurora",
+                    "ember",
+                    "orchid",
+                    "graphite",
                     "agent-dark",
                     "paper",
                     "neutral"
@@ -74,6 +79,10 @@
                       "pattern": "^#[0-9a-fA-F]{6}$"
                     },
                     "accent": {
+                      "type": "string",
+                      "pattern": "^#[0-9a-fA-F]{6}$"
+                    },
+                    "accent2": {
                       "type": "string",
                       "pattern": "^#[0-9a-fA-F]{6}$"
                     },
@@ -129,6 +138,15 @@
                   },
                   "additionalProperties": false,
                   "default": {}
+                },
+                "chart": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
+                  "minItems": 2,
+                  "maxItems": 10
                 }
               },
               "additionalProperties": false

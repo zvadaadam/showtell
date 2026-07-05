@@ -21,7 +21,7 @@ const Id = z
 
 const Duration = z.literal("auto");
 export type { BundleTheme, BundleThemeMode, BundleThemePreset, ResolvedBundleTheme } from "./bundle-theme.ts";
-export { resolveBundleTheme } from "./bundle-theme.ts";
+export { resolveBundleTheme, themePresetManifest, THEME_PRESET_GUIDE } from "./bundle-theme.ts";
 
 const Asset = z.discriminatedUnion("type", [
   z.object({ type: z.literal("audio"), src: z.string().min(1) }).strict(),

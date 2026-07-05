@@ -1,13 +1,22 @@
-/** Render an executed hyperframe element tree into deterministic pixels. */
+/**
+ * Render an executed hyperframe element tree into deterministic pixels.
+ *
+ * This module owns layout (stack/grid/panel measurement, overflow handling,
+ * surplus centering) and the component registry. The design language lives in
+ * ./hyperframe/: tokens (palette + treatments), typography (type scale),
+ * atoms, rails, and overlay (background + captions).
+ */
 import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
 import type { AspectRatio } from "@agent-video/core";
 import {
   CaptionDeck,
+  CompareSplit,
   DecisionGrid,
   LaneStack,
   PhaseBanner,
   ProofLadder,
   SignalWall,
+  StatRow,
   StatusRail,
   type CaptionCue,
   type HyperframeChild,
@@ -16,29 +25,42 @@ import {
   type HyperframeTheme,
 } from "@agent-video/hyperframes";
 import { dimsFor, type Dims } from "./dims.ts";
-import { drawBackground, drawWatermark, roundRect, wrapText } from "./draw.ts";
+import { drawWatermark, roundRect } from "./draw.ts";
 import { ensureFonts } from "./fonts.ts";
+import {
+  badgeChipSpec,
+  badgeChipWidth,
+  drawBadge,
+  drawCallout,
+  drawDivider,
+  drawLowerThird,
+  drawMeter,
+  drawTextNode,
+  estimateCalloutHeight,
+  estimateLowerThirdHeight,
+  estimateMeterHeight,
+  estimateTextHeight,
+} from "./hyperframe/atoms.ts";
+import { drawFormula, drawFunctionPlot, estimateFormulaHeight } from "./hyperframe/plot.ts";
+import {
+  drawBigStat,
+  drawChecklist,
+  drawQuote,
+  drawTravelPath,
+  estimateBigStatHeight,
+  estimateChecklistHeight,
+  estimateQuoteHeight,
+} from "./hyperframe/blocks.ts";
+import { elementChildElements, elementChildren, isElement } from "./hyperframe/element.ts";
+import { easeOutCubic, enter01, type MotionClock } from "./hyperframe/motion.ts";
+import { collectKineticCaptions, drawKineticCaption, drawStageBackground } from "./hyperframe/overlay.ts";
+import { drawSystemMap, drawTimelineRail } from "./hyperframe/rails.ts";
+import { gapPx, paddingPx, paletteFor, rgba, toneColor, TOKENS, type RenderEnv } from "./hyperframe/tokens.ts";
+import { layoutText, drawLaidOutText, type LaidOutText } from "./hyperframe/typography.ts";
 import { renderChart, renderCodeRef, renderDiffRef, renderImageAsset } from "./render-hyperframe-media.ts";
 import { emptyResult, panelRadius, propsOf, type Box, type DrawResult } from "./render-hyperframe-shared.ts";
 import type { RenderedScene } from "./render-scene.ts";
-import { canvasTheme, THEME } from "./theme.ts";
-
-interface Palette {
-  fg: string;
-  subtle: string;
-  accent: string;
-  success: string;
-  warning: string;
-  panel: string;
-  border: string;
-}
-
-interface RenderEnv {
-  dims: Dims;
-  palette: Palette;
-  activeCue?: CaptionCue;
-  theme?: HyperframeTheme;
-}
+import { canvasTheme } from "./theme.ts";
 
 interface ComponentRenderer {
   estimateHeight?: (ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv) => number | undefined;
@@ -50,177 +72,149 @@ export interface HyperframeTreeRenderOpts {
   activeCue?: CaptionCue;
   theme?: HyperframeTheme;
   watermark?: string | false;
+  /** Present when rendering an animated video frame; stills render end states. */
+  motion?: MotionClock;
 }
 
-function paletteFor(tone: string | undefined, theme?: HyperframeTheme): Palette {
-  if (theme) {
-    const colors = theme.colors;
-    return {
-      fg: colors.fg,
-      subtle: colors.subtle,
-      accent: colors.accent,
-      success: colors.success,
-      warning: colors.warning,
-      panel: rgba(colors.surface, tone === "paper" ? 0.82 : 0.34),
-      border: rgba(colors.border, 0.72),
-    };
-  }
-  if (tone === "paper") {
-    return {
-      fg: "#191b29",
-      subtle: "#5d6275",
-      accent: THEME.accent,
-      success: "#2ea043",
-      warning: "#b7791f",
-      panel: "rgba(255, 255, 255, 0.64)",
-      border: "rgba(25, 27, 41, 0.14)",
-    };
-  }
-  return {
-    fg: THEME.fg,
-    subtle: THEME.subtle,
-    accent: THEME.accent,
-    success: "#7ee787",
-    warning: "#ffb86c",
-    panel: "rgba(8, 12, 22, 0.36)",
-    border: "rgba(255, 255, 255, 0.12)",
-  };
-}
+/* ------------------------------------------------------------------ */
+/* Estimation                                                          */
+/* ------------------------------------------------------------------ */
 
-function rgba(hex: string, opacity: number): string {
-  const normalized = hex.replace("#", "");
-  const r = parseInt(normalized.slice(0, 2), 16);
-  const g = parseInt(normalized.slice(2, 4), 16);
-  const b = parseInt(normalized.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-}
-
-function typography(env: RenderEnv): { display: string; body: string; mono: string } {
-  return env.theme?.typography ?? { display: THEME.sansBold, body: THEME.sans, mono: THEME.mono };
-}
-
-function fontFor(env: RenderEnv, role: "display" | "body" | "mono", size: number): string {
-  return `${size}px '${typography(env)[role]}'`;
-}
-
-function textSize(env: RenderEnv, variant: unknown): number {
+function estimateStackHeight(
+  ctx: SKRSContext2D,
+  element: HyperframeElement,
+  box: Box,
+  env: RenderEnv,
+): number | undefined {
+  const props = propsOf(element);
+  const children = elementChildElements(element).filter((child) => child.type !== "KineticCaption");
+  if (children.length === 0) return 0;
   const base = Math.min(env.dims.width, env.dims.height);
-  if (variant === "title") return Math.round(base * 0.052);
-  if (variant === "eyebrow" || variant === "caption") return Math.round(base * 0.022);
-  if (variant === "section") return Math.round(base * 0.034);
-  return Math.round(base * 0.028);
-}
-
-function gapPx(gap: unknown, base: number): number {
-  if (gap === "xs") return Math.round(base * 0.012);
-  if (gap === "sm") return Math.round(base * 0.02);
-  if (gap === "lg") return Math.round(base * 0.045);
-  if (gap === "xl") return Math.round(base * 0.065);
-  return Math.round(base * 0.032);
-}
-
-function paddingPx(padding: unknown, base: number): number {
-  if (padding === "xs") return Math.round(base * 0.025);
-  if (padding === "sm") return Math.round(base * 0.04);
-  if (padding === "md") return Math.round(base * 0.055);
-  if (padding === "xl") return Math.round(base * 0.085);
-  return Math.round(base * 0.07);
-}
-
-function isElement(value: HyperframeChild): value is HyperframeElement {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value) && "type" in value && "props" in value);
-}
-
-function flattenChildren(children: HyperframeChild[]): HyperframeChild[] {
-  const out: HyperframeChild[] = [];
+  const gap = gapPx(props.gap, base);
+  if (props.direction === "horizontal") {
+    const childW = Math.max(1, (box.w - gap * (children.length - 1)) / children.length);
+    let max = 0;
+    for (const child of children) {
+      const h = estimateHeight(ctx, child, { ...box, w: childW }, env);
+      if (h === undefined) return undefined;
+      max = Math.max(max, h);
+    }
+    return max;
+  }
+  let total = gap * (children.length - 1);
   for (const child of children) {
-    if (Array.isArray(child)) out.push(...flattenChildren(child));
-    else if (child !== null && child !== undefined && child !== false) out.push(child);
+    const h = estimateHeight(ctx, child, box, env);
+    if (h === undefined) return undefined;
+    total += h;
   }
-  return out;
+  return total;
 }
 
-function elementChildren(element: HyperframeElement): HyperframeChild[] {
-  return flattenChildren(element.children);
-}
-
-function elementChildElements(element: HyperframeElement): HyperframeElement[] {
-  return elementChildren(element).filter(isElement);
-}
-
-function textContent(children: HyperframeChild[]): string {
-  return flattenChildren(children)
-    .map((child) => {
-      if (typeof child === "string" || typeof child === "number") return String(child);
-      if (isElement(child)) return textContent(elementChildren(child));
-      return "";
-    })
-    .filter(Boolean)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function drawStageBackground(ctx: SKRSContext2D, dims: Dims, tone: string | undefined, theme?: HyperframeTheme): void {
-  if (theme) {
-    ctx.fillStyle = theme.colors.bg;
-    ctx.fillRect(0, 0, dims.width, dims.height);
-    const g = ctx.createLinearGradient(0, 0, dims.width, dims.height);
-    g.addColorStop(0, rgba(theme.colors.surface, 0));
-    g.addColorStop(1, rgba(theme.colors.surface, 0.22));
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, dims.width, dims.height);
-    return;
+function estimateGridHeight(
+  ctx: SKRSContext2D,
+  element: HyperframeElement,
+  box: Box,
+  env: RenderEnv,
+): number | undefined {
+  const children = elementChildElements(element);
+  if (children.length === 0) return 0;
+  const props = propsOf(element);
+  const columns = typeof props.columns === "number" && props.columns > 0 ? props.columns : 2;
+  const base = Math.min(env.dims.width, env.dims.height);
+  const gap = gapPx(props.gap, base);
+  const rows = Math.ceil(children.length / columns);
+  const cellW = Math.max(1, (box.w - gap * (columns - 1)) / columns);
+  const rowHeights = Array.from({ length: rows }, () => 0);
+  for (let i = 0; i < children.length; i++) {
+    const h = estimateHeight(ctx, children[i]!, { ...box, w: cellW }, env);
+    if (h === undefined) return undefined;
+    const row = Math.floor(i / columns);
+    rowHeights[row] = Math.max(rowHeights[row]!, h);
   }
-  if (tone !== "paper") {
-    drawBackground(ctx, dims);
-    return;
-  }
-  const g = ctx.createLinearGradient(0, 0, dims.width, dims.height);
-  g.addColorStop(0, "#f7f4ec");
-  g.addColorStop(1, "#dfe8f4");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, dims.width, dims.height);
+  return rowHeights.reduce((sum, h) => sum + h, 0) + gap * (rows - 1);
 }
 
-function estimateTextHeight(ctx: SKRSContext2D, child: HyperframeElement, box: Box, env: RenderEnv): number {
-  const props = propsOf(child);
-  const variant = props.variant;
-  const size = textSize(env, variant);
-  ctx.font = fontFor(env, variant === "body" ? "body" : "display", size);
-  const lines = wrapText(ctx, textContent(elementChildren(child)), box.w).slice(0, variant === "title" ? 2 : 4);
-  return Math.max(size * 1.3, lines.length * size * 1.22);
+interface PanelMetrics {
+  pad: number;
+  titleBlock: { title?: LaidOutText; subtitle?: LaidOutText; height: number };
+  contentGap: number;
+}
+
+function panelMetrics(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): PanelMetrics {
+  const props = propsOf(element);
+  const base = Math.min(env.dims.width, env.dims.height);
+  const pad = paddingPx(props.padding ?? "sm", Math.min(box.w, box.h));
+  const innerW = Math.max(1, box.w - pad * 2);
+  const title = typeof props.title === "string" ? layoutText(ctx, env, "section", props.title, innerW) : undefined;
+  const subtitle =
+    typeof props.subtitle === "string" ? layoutText(ctx, env, "caption", props.subtitle, innerW) : undefined;
+  const spacing = Math.round(base * 0.008);
+  let height = 0;
+  if (title) height += title.height;
+  if (title && subtitle) height += spacing;
+  if (subtitle) height += subtitle.height;
+  return { pad, titleBlock: { title, subtitle, height }, contentGap: Math.round(base * 0.018) };
+}
+
+function panelBadgeRow(children: HyperframeElement[]): boolean {
+  return children.length > 1 && children[0]?.type === "Badge" && children.slice(1).every((c) => c.type === "Text");
+}
+
+interface PanelContentMetrics {
+  badgeRow: boolean;
+  /** Natural children height; undefined when a growing child should fill the card. */
+  childrenH: number | undefined;
+  /** Height of the text column beside the badge (badge-row layout only). */
+  badgeTextH: number;
+}
+
+/**
+ * The ONE measurement of a panel's children (badge-row detection, text-column
+ * width, gap accumulation). estimatePanelHeight and renderPanel both call this
+ * so the estimate can never drift from the drawn pixels.
+ */
+function panelContentMetrics(
+  ctx: SKRSContext2D,
+  children: HyperframeElement[],
+  childBox: Box,
+  env: RenderEnv,
+): PanelContentMetrics {
+  const base = Math.min(env.dims.width, env.dims.height);
+  const badgeRow = panelBadgeRow(children);
+  const childHeights = children.map((child) => estimateHeight(ctx, child, childBox, env));
+  if (badgeRow && childHeights.every((h): h is number => typeof h === "number")) {
+    const badgeW = badgeChipWidth(ctx, env, children[0]!) + Math.round(base * 0.018);
+    const textBox = { ...childBox, w: Math.max(1, childBox.w - badgeW) };
+    const textHeights = children.slice(1).map((text) => estimateHeight(ctx, text, textBox, env) ?? 0);
+    const badgeTextH =
+      textHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * Math.max(0, textHeights.length - 1);
+    return { badgeRow, childrenH: Math.max(childHeights[0]!, badgeTextH), badgeTextH };
+  }
+  if (childHeights.every((h): h is number => typeof h === "number")) {
+    return {
+      badgeRow,
+      childrenH: childHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * (children.length - 1),
+      badgeTextH: 0,
+    };
+  }
+  return { badgeRow, childrenH: undefined, badgeTextH: 0 };
 }
 
 function estimatePanelHeight(ctx: SKRSContext2D, child: HyperframeElement, box: Box, env: RenderEnv): number {
   const base = Math.min(env.dims.width, env.dims.height);
-  const props = propsOf(child);
-  const pad = paddingPx(props.padding ?? "sm", Math.min(box.w, box.h));
-  let height = pad * 2;
-  let compactRow = false;
-  if (typeof props.title === "string") height += base * 0.04;
-  if (typeof props.subtitle === "string") height += base * 0.034;
+  const metrics = panelMetrics(ctx, child, box, env);
+  const pad = metrics.pad;
+  let height = pad * 2 + metrics.titleBlock.height;
   const children = elementChildElements(child);
+  let compactRow = false;
   if (children.length > 0) {
+    if (metrics.titleBlock.height > 0) height += metrics.contentGap;
     const childBox = { ...box, w: Math.max(1, box.w - pad * 2), h: Math.max(1, box.h - pad * 2) };
-    const childHeights = children.map((panelChild) => estimateHeight(ctx, panelChild, childBox, env));
-    if (
-      children[0]?.type === "Badge" &&
-      children.slice(1).every((panelChild) => panelChild.type === "Text") &&
-      childHeights.every((h): h is number => typeof h === "number")
-    ) {
-      compactRow = true;
-      const textHeights = childHeights.slice(1);
-      const textHeight =
-        textHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * Math.max(0, textHeights.length - 1);
-      height += Math.max(childHeights[0]!, textHeight);
-    } else if (childHeights.every((h): h is number => typeof h === "number")) {
-      height += childHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * (children.length - 1);
-    } else {
-      height += base * 0.28;
-    }
+    const content = panelContentMetrics(ctx, children, childBox, env);
+    compactRow = content.badgeRow && content.childrenH !== undefined;
+    height += content.childrenH ?? base * 0.28;
   }
-  return Math.min(box.h, Math.max(base * (compactRow ? 0.1 : 0.16), height));
+  return Math.min(box.h, Math.max(base * (compactRow ? 0.09 : 0.14), height));
 }
 
 function estimateHeight(ctx: SKRSContext2D, child: HyperframeElement, box: Box, env: RenderEnv): number | undefined {
@@ -234,90 +228,9 @@ function mergeResult(target: DrawResult, source: DrawResult): void {
   target.warning = target.warning ?? source.warning;
 }
 
-function drawPanel(ctx: SKRSContext2D, box: Box, env: RenderEnv): void {
-  const r = panelRadius(box);
-  roundRect(ctx, box.x, box.y, box.w, box.h, r);
-  ctx.fillStyle = env.palette.panel;
-  ctx.fill();
-  ctx.strokeStyle = env.palette.border;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-}
-
-function drawTextNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): void {
-  const props = propsOf(element);
-  const variant = props.variant;
-  const size = textSize(env, variant);
-  ctx.font = fontFor(env, variant === "body" ? "body" : "display", size);
-  ctx.fillStyle = variant === "eyebrow" ? env.palette.accent : variant === "body" ? env.palette.subtle : env.palette.fg;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  const lines = wrapText(ctx, textContent(elementChildren(element)), box.w).slice(0, variant === "title" ? 2 : 4);
-  let y = box.y;
-  for (const line of lines) {
-    ctx.fillText(line, box.x, y);
-    y += size * 1.22;
-  }
-}
-
-function drawLowerThird(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): void {
-  const props = propsOf(element);
-  const base = Math.min(env.dims.width, env.dims.height);
-  const eyebrow = typeof props.eyebrow === "string" ? props.eyebrow : undefined;
-  const title = typeof props.title === "string" ? props.title : "";
-  const subtitle = typeof props.subtitle === "string" ? props.subtitle : undefined;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  let y = box.y;
-  if (eyebrow) {
-    ctx.font = fontFor(env, "display", Math.round(base * 0.022));
-    ctx.fillStyle = env.palette.accent;
-    ctx.fillText(eyebrow, box.x, y);
-    y += base * 0.038;
-  }
-  ctx.font = fontFor(env, "display", Math.round(base * 0.052));
-  ctx.fillStyle = env.palette.fg;
-  for (const line of wrapText(ctx, title, box.w).slice(0, 2)) {
-    ctx.fillText(line, box.x, y);
-    y += base * 0.062;
-  }
-  if (subtitle) {
-    ctx.font = fontFor(env, "body", Math.round(base * 0.026));
-    ctx.fillStyle = env.palette.subtle;
-    for (const line of wrapText(ctx, subtitle, box.w).slice(0, 2)) {
-      ctx.fillText(line, box.x, y);
-      y += base * 0.035;
-    }
-  }
-}
-
-function drawCallout(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): void {
-  const props = propsOf(element);
-  const text = typeof props.text === "string" ? props.text : "";
-  const base = Math.min(env.dims.width, env.dims.height);
-  const radius = Math.min(18, Math.round(base * 0.018));
-  roundRect(ctx, box.x, box.y, box.w, box.h, radius);
-  ctx.fillStyle = props.tone === "success" ? rgba(env.palette.success, 0.18) : rgba(env.palette.accent, 0.18);
-  ctx.fill();
-  ctx.strokeStyle = props.tone === "success" ? rgba(env.palette.success, 0.52) : rgba(env.palette.accent, 0.52);
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.font = fontFor(env, "display", Math.round(base * 0.024));
-  ctx.fillStyle = env.palette.fg;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  ctx.fillText(wrapText(ctx, text, box.w - base * 0.045)[0] ?? text, box.x + base * 0.022, box.y + box.h / 2);
-}
-
-function toneColor(tone: unknown, env: RenderEnv): { fill: string; stroke: string; fg: string } {
-  if (tone === "success")
-    return { fill: rgba(env.palette.success, 0.18), stroke: rgba(env.palette.success, 0.55), fg: env.palette.success };
-  if (tone === "warning")
-    return { fill: rgba(env.palette.warning, 0.18), stroke: rgba(env.palette.warning, 0.52), fg: env.palette.warning };
-  if (tone === "accent" || tone === "info")
-    return { fill: rgba(env.palette.accent, 0.18), stroke: rgba(env.palette.accent, 0.55), fg: env.palette.accent };
-  return { fill: env.palette.panel, stroke: env.palette.border, fg: env.palette.subtle };
-}
+/* ------------------------------------------------------------------ */
+/* Containers                                                          */
+/* ------------------------------------------------------------------ */
 
 async function renderPanel(
   ctx: SKRSContext2D,
@@ -328,247 +241,125 @@ async function renderPanel(
   const result = emptyResult();
   const props = propsOf(element);
   const base = Math.min(env.dims.width, env.dims.height);
+  const tone = typeof props.tone === "string" && props.tone !== "default" ? props.tone : undefined;
   const colors = toneColor(props.tone, env);
-  roundRect(ctx, box.x, box.y, box.w, box.h, panelRadius(box));
-  ctx.fillStyle = colors.fill;
+  const radius = panelRadius(box);
+  const panelTokens = TOKENS.panel;
+
+  roundRect(ctx, box.x, box.y, box.w, box.h, radius);
+  const fill = ctx.createLinearGradient(box.x, box.y, box.x, box.y + box.h);
+  if (env.palette.isLight) {
+    fill.addColorStop(0, rgba(env.palette.surface, panelTokens.fillTopLight));
+    fill.addColorStop(1, rgba(env.palette.surface, panelTokens.fillBottomLight));
+  } else {
+    fill.addColorStop(0, rgba(env.palette.surface, panelTokens.fillTopDark));
+    fill.addColorStop(1, rgba(env.palette.surface, panelTokens.fillBottomDark));
+  }
+  ctx.fillStyle = fill;
   ctx.fill();
-  ctx.strokeStyle = colors.stroke;
-  ctx.lineWidth = props.tone && props.tone !== "default" ? 3 : 2;
-  ctx.stroke();
-
-  const pad = paddingPx(props.padding ?? "sm", Math.min(box.w, box.h));
-  let y = box.y + pad;
-  const title = typeof props.title === "string" ? props.title : undefined;
-  const subtitle = typeof props.subtitle === "string" ? props.subtitle : undefined;
-  if (title) {
-    ctx.font = fontFor(env, "display", Math.round(base * 0.028));
-    ctx.fillStyle = env.palette.fg;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText(wrapText(ctx, title, box.w - pad * 2)[0] ?? title, box.x + pad, y);
-    y += base * 0.04;
-  }
-  if (subtitle) {
-    ctx.font = fontFor(env, "body", Math.round(base * 0.021));
-    ctx.fillStyle = env.palette.subtle;
-    ctx.fillText(wrapText(ctx, subtitle, box.w - pad * 2)[0] ?? subtitle, box.x + pad, y);
-    y += base * 0.034;
-  }
-  const children = elementChildElements(element);
-  if (children.length === 0) return result;
-  const contentBox = { x: box.x + pad, y, w: Math.max(1, box.w - pad * 2), h: Math.max(1, box.y + box.h - pad - y) };
-  if (children[0]?.type === "Badge" && children.slice(1).every((child) => child.type === "Text")) {
-    const badgeProps = propsOf(children[0]);
-    const badgeText = typeof badgeProps.text === "string" ? badgeProps.text : textContent(elementChildren(children[0]));
-    const badgeFontSize = Math.round(base * 0.02);
-    ctx.font = fontFor(env, "display", badgeFontSize);
-    const badgeW = Math.min(
-      contentBox.w * 0.32,
-      Math.max(Math.round(base * 0.065), ctx.measureText(badgeText).width + badgeFontSize * 2.1),
-    );
-    const badgeH = Math.min(Math.round(base * 0.052), contentBox.h);
-    mergeResult(
-      result,
-      await renderNode(ctx, children[0], { x: contentBox.x, y: contentBox.y, w: badgeW, h: badgeH }, env),
-    );
-    mergeResult(
-      result,
-      await renderStack(
-        ctx,
-        {
-          ...element,
-          type: "Stack",
-          props: { direction: "vertical", gap: "xs", grow: true },
-          children: children.slice(1),
-        },
-        {
-          x: contentBox.x + badgeW + Math.round(base * 0.018),
-          y: contentBox.y,
-          w: Math.max(1, contentBox.w - badgeW - Math.round(base * 0.018)),
-          h: contentBox.h,
-        },
-        env,
-      ),
-    );
-    return result;
-  }
-  ctx.save();
-  roundRect(
-    ctx,
-    box.x + pad / 2,
-    box.y + pad / 2,
-    Math.max(1, box.w - pad),
-    Math.max(1, box.h - pad),
-    panelRadius(box, 0.03),
-  );
-  ctx.clip();
-  mergeResult(
-    result,
-    await renderStack(
-      ctx,
-      { ...element, type: "Stack", props: { direction: "vertical", gap: "xs", grow: true }, children },
-      contentBox,
-      env,
-    ),
-  );
-  ctx.restore();
-  return result;
-}
-
-function drawBadge(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): void {
-  const props = propsOf(element);
-  const text = typeof props.text === "string" ? props.text : textContent(elementChildren(element));
-  const base = Math.min(env.dims.width, env.dims.height);
-  const colors = toneColor(props.tone, env);
-  const fontSize = Math.round(base * 0.02);
-  ctx.font = fontFor(env, "display", fontSize);
-  const w = Math.min(box.w, ctx.measureText(text).width + fontSize * 1.8);
-  const h = Math.min(box.h, fontSize * 1.75);
-  roundRect(ctx, box.x, box.y + (box.h - h) / 2, w, h, h / 2);
-  ctx.fillStyle = colors.fill;
-  ctx.fill();
-  ctx.strokeStyle = colors.stroke;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.fillStyle = colors.fg;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, box.x + w / 2, box.y + box.h / 2);
-}
-
-function drawDivider(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): void {
-  const props = propsOf(element);
-  const label = typeof props.label === "string" ? props.label : undefined;
-  const y = box.y + box.h / 2;
-  ctx.strokeStyle = env.palette.border;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(box.x, y);
-  ctx.lineTo(box.x + box.w, y);
-  ctx.stroke();
-  if (label) {
-    const base = Math.min(env.dims.width, env.dims.height);
-    ctx.font = fontFor(env, "display", Math.round(base * 0.018));
-    ctx.fillStyle = env.palette.subtle;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, box.x + box.w / 2, y - base * 0.012);
-  }
-}
-
-function drawMeter(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): void {
-  const props = propsOf(element);
-  const base = Math.min(env.dims.width, env.dims.height);
-  const label = typeof props.label === "string" ? props.label : undefined;
-  const rawProgress =
-    typeof props.progress === "number"
-      ? props.progress
-      : typeof props.value === "number" && typeof props.max === "number" && props.max > 0
-        ? props.value / props.max
-        : 0;
-  const progress = Math.max(0, Math.min(1, rawProgress));
-  const colors = toneColor(props.tone, env);
-  const barH = Math.max(10, Math.round(base * 0.022));
-  let y = box.y;
-  if (label) {
-    ctx.font = fontFor(env, "display", Math.round(base * 0.022));
-    ctx.fillStyle = env.palette.fg;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText(wrapText(ctx, label, box.w)[0] ?? label, box.x, y);
-    y += base * 0.036;
-  }
-  roundRect(ctx, box.x, y, box.w, barH, barH / 2);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
-  ctx.fill();
-  const fillW = box.w * progress;
-  if (fillW > 0) {
-    roundRect(ctx, box.x, y, Math.max(barH, fillW), barH, barH / 2);
-    ctx.fillStyle = colors.stroke;
+  if (tone) {
+    roundRect(ctx, box.x, box.y, box.w, box.h, radius);
+    ctx.fillStyle = colors.fill;
     ctx.fill();
   }
-}
-
-function drawSystemMap(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): void {
-  const props = propsOf(element);
-  const steps = Array.isArray(props.steps)
-    ? props.steps.filter((step): step is string => typeof step === "string")
-    : [];
-  const labels = steps.length ? (steps as string[]) : ["Gather", "Author", "Compile", "Render", "Verify"];
-  const activeIndex = typeof props.activeIndex === "number" ? props.activeIndex : 0;
-  const base = Math.min(box.w, box.h);
-  const pad = Math.round(base * 0.1);
-  drawPanel(ctx, box, env);
-  const requested = props.orientation;
-  const horizontal = requested === "horizontal" ? true : requested === "vertical" ? false : box.w > box.h * 1.2;
-  const nodeCount = labels.length;
-  const gap = Math.round(base * 0.045);
-  const nodeW = horizontal ? (box.w - pad * 2 - gap * (nodeCount - 1)) / nodeCount : box.w - pad * 2;
-  const nodeH = horizontal ? box.h * 0.36 : (box.h - pad * 2 - gap * (nodeCount - 1)) / nodeCount;
-  ctx.font = fontFor(env, "display", Math.round(base * 0.065));
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  for (let i = 0; i < nodeCount; i++) {
-    const x = horizontal ? box.x + pad + i * (nodeW + gap) : box.x + pad;
-    const y = horizontal ? box.y + box.h / 2 - nodeH / 2 : box.y + pad + i * (nodeH + gap);
-    const active = i === activeIndex;
-    roundRect(ctx, x, y, nodeW, nodeH, Math.min(18, Math.round(base * 0.035)));
-    ctx.fillStyle = active ? rgba(env.palette.accent, 0.35) : rgba(env.palette.fg, 0.08);
-    ctx.fill();
-    ctx.strokeStyle = active ? env.palette.accent : env.palette.border;
-    ctx.lineWidth = active ? 4 : 2;
+  roundRect(ctx, box.x, box.y, box.w, box.h, radius);
+  ctx.strokeStyle = tone ? colors.stroke : env.palette.border;
+  ctx.lineWidth = tone ? 2 : 1.5;
+  ctx.stroke();
+  if (!env.palette.isLight) {
+    ctx.beginPath();
+    ctx.moveTo(box.x + radius, box.y + 1);
+    ctx.lineTo(box.x + box.w - radius, box.y + 1);
+    ctx.strokeStyle = `rgba(255, 255, 255, ${panelTokens.topHighlight})`;
+    ctx.lineWidth = 1;
     ctx.stroke();
-    ctx.fillStyle = env.palette.fg;
-    for (const [lineIndex, line] of wrapText(ctx, labels[i]!, nodeW * 0.84)
-      .slice(0, 2)
-      .entries()) {
-      ctx.fillText(line, x + nodeW / 2, y + nodeH / 2 + (lineIndex - 0.5) * base * 0.12);
+  }
+  if (tone) {
+    const barW = Math.max(4, Math.round(base * panelTokens.accentBarWidth));
+    const inset = Math.round(radius * 0.9);
+    roundRect(ctx, box.x, box.y + inset, barW, Math.max(barW, box.h - inset * 2), barW / 2);
+    ctx.fillStyle = colors.fg;
+    ctx.fill();
+  }
+
+  const metrics = panelMetrics(ctx, element, box, env);
+  const pad = metrics.pad;
+  const innerX = box.x + pad;
+  const innerW = Math.max(1, box.w - pad * 2);
+  const innerH = Math.max(1, box.h - pad * 2);
+  const children = elementChildElements(element);
+
+  // Natural content height → vertical centering inside the card. Children get
+  // a box of exactly their natural height so the inner stack doesn't re-center.
+  let contentH = metrics.titleBlock.height;
+  const childBox = { x: innerX, y: box.y + pad, w: innerW, h: innerH };
+  const badgeRow = panelBadgeRow(children);
+  let childrenH: number | undefined = 0;
+  let badgeTextH = 0;
+  if (children.length > 0) {
+    if (metrics.titleBlock.height > 0) contentH += metrics.contentGap;
+    const childHeights = children.map((child) => estimateHeight(ctx, child, childBox, env));
+    if (badgeRow && childHeights.every((h): h is number => typeof h === "number")) {
+      const badgeW = badgeChipWidth(ctx, env, children[0]!) + Math.round(base * 0.018);
+      const textBox = { ...childBox, w: Math.max(1, innerW - badgeW) };
+      const textHeights = children.slice(1).map((text) => estimateHeight(ctx, text, textBox, env) ?? 0);
+      badgeTextH = textHeights.reduce((sum, h) => sum + h, 0) + gapPx("xs", base) * Math.max(0, textHeights.length - 1);
+      childrenH = Math.max(childHeights[0]!, badgeTextH);
+    } else if (childHeights.every((h): h is number => typeof h === "number")) {
+      childrenH =
+        childHeights.reduce<number>((sum, h) => sum + (h ?? 0), 0) + gapPx("xs", base) * (children.length - 1);
+    } else {
+      childrenH = undefined; // growing content fills the card
+    }
+    contentH = childrenH === undefined ? innerH : contentH + childrenH;
+  }
+
+  let y = box.y + pad + Math.max(0, (innerH - contentH) / 2);
+
+  ctx.save();
+  roundRect(ctx, box.x + 2, box.y + 2, Math.max(1, box.w - 4), Math.max(1, box.h - 4), Math.max(1, radius - 2));
+  ctx.clip();
+
+  if (metrics.titleBlock.title) {
+    drawLaidOutText(ctx, env, metrics.titleBlock.title, innerX, y, env.palette.fg);
+    y += metrics.titleBlock.title.height;
+    if (metrics.titleBlock.subtitle) y += Math.round(base * 0.008);
+  }
+  if (metrics.titleBlock.subtitle) {
+    drawLaidOutText(ctx, env, metrics.titleBlock.subtitle, innerX, y, env.palette.subtle);
+    y += metrics.titleBlock.subtitle.height;
+  }
+  if (children.length > 0) {
+    if (metrics.titleBlock.height > 0) y += metrics.contentGap;
+    const remaining = Math.max(1, box.y + box.h - pad - y);
+    if (badgeRow) {
+      const badgeW = badgeChipWidth(ctx, env, children[0]!);
+      const badgeH = badgeChipSpec(ctx, env, children[0]!).chipH;
+      mergeResult(result, await renderNode(ctx, children[0]!, { x: innerX, y, w: badgeW, h: badgeH }, env));
+      const textX = innerX + badgeW + Math.round(base * 0.018);
+      mergeResult(
+        result,
+        await renderStack(
+          ctx,
+          { ...element, type: "Stack", props: { direction: "vertical", gap: "xs" }, children: children.slice(1) },
+          { x: textX, y, w: Math.max(1, innerX + innerW - textX), h: Math.min(remaining, Math.max(1, badgeTextH)) },
+          env,
+        ),
+      );
+    } else {
+      mergeResult(
+        result,
+        await renderStack(
+          ctx,
+          { ...element, type: "Stack", props: { direction: "vertical", gap: "xs", grow: true }, children },
+          { x: innerX, y, w: innerW, h: childrenH === undefined ? remaining : Math.min(remaining, childrenH) },
+          env,
+        ),
+      );
     }
   }
-}
-
-function drawTimelineRail(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): void {
-  const props = propsOf(element);
-  const steps = Array.isArray(props.steps)
-    ? props.steps.filter((step): step is string => typeof step === "string")
-    : [];
-  const labels = steps as string[];
-  if (labels.length === 0) return;
-  const activeIndex = typeof props.activeIndex === "number" ? props.activeIndex : 0;
-  const progress =
-    typeof props.progress === "number"
-      ? Math.max(0, Math.min(1, props.progress))
-      : labels.length <= 1
-        ? 1
-        : Math.max(0, Math.min(1, activeIndex / (labels.length - 1)));
-  const base = Math.min(env.dims.width, env.dims.height);
-  drawPanel(ctx, box, env);
-  const y = box.y + box.h / 2;
-  const start = box.x + base * 0.04;
-  const end = box.x + box.w - base * 0.04;
-  ctx.strokeStyle = env.palette.border;
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(start, y);
-  ctx.lineTo(end, y);
-  ctx.stroke();
-  ctx.strokeStyle = env.palette.accent;
-  ctx.beginPath();
-  ctx.moveTo(start, y);
-  ctx.lineTo(start + (end - start) * progress, y);
-  ctx.stroke();
-  labels.forEach((label, i) => {
-    const x = start + ((end - start) * i) / Math.max(1, labels.length - 1);
-    ctx.beginPath();
-    ctx.arc(x, y, i === activeIndex ? base * 0.012 : base * 0.008, 0, Math.PI * 2);
-    ctx.fillStyle = i <= activeIndex ? env.palette.accent : env.palette.subtle;
-    ctx.fill();
-    ctx.font = fontFor(env, "display", Math.round(base * 0.018));
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = env.palette.subtle;
-    ctx.fillText(label, x, y + base * 0.02);
-  });
+  ctx.restore();
+  return result;
 }
 
 async function renderStack(
@@ -595,14 +386,41 @@ async function renderStack(
     return result;
   }
 
-  const fixed = children.map((child) => estimateHeight(ctx, child, box, env));
-  const fixedTotal = fixed.reduce<number>((sum, height) => sum + (height ?? 0), 0);
-  const flexCount = Math.max(1, fixed.filter((height) => height === undefined).length);
-  const flexH = Math.max(1, (box.h - fixedTotal - gap * (children.length - 1)) / flexCount);
+  const avail = box.h - gap * (children.length - 1);
+  let fixed = children.map((child) => estimateHeight(ctx, child, box, env));
+  let fixedTotal = fixed.reduce<number>((sum, height) => sum + (height ?? 0), 0);
+  const flexCount = fixed.filter((height) => height === undefined).length;
+
   let y = box.y;
+  let flexH = 0;
+  if (flexCount > 0) {
+    flexH = Math.max(1, (avail - fixedTotal) / flexCount);
+  } else if (fixedTotal > avail) {
+    // Content is taller than the box: compress uniformly instead of overlapping.
+    const scale = avail / fixedTotal;
+    fixed = fixed.map((height) => (height === undefined ? undefined : height * scale));
+    fixedTotal = avail;
+  } else {
+    y += (avail - fixedTotal) / 2; // center surplus
+  }
+
+  const clipPad = Math.max(2, Math.round(gap * 0.45));
+  const rise = Math.round(base * TOKENS.motion.riseFraction);
   for (let i = 0; i < children.length; i++) {
     const h = fixed[i] ?? flexH;
-    mergeResult(result, await renderNode(ctx, children[i]!, { x: box.x, y, w: box.w, h }, env));
+    const childBox = { x: box.x, y, w: box.w, h };
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(box.x - clipPad, y - clipPad, box.w + clipPad * 2, h + clipPad * 2 + rise);
+    ctx.clip();
+    // Staggered entrance: children fade in and settle upward at scene start.
+    const t = easeOutCubic(enter01(env, i * TOKENS.motion.staggerMs, TOKENS.motion.enterMs));
+    if (t < 1) {
+      ctx.globalAlpha *= t;
+      ctx.translate(0, (1 - t) * rise);
+    }
+    mergeResult(result, await renderNode(ctx, children[i]!, childBox, env));
+    ctx.restore();
     y += h + gap;
   }
   return result;
@@ -624,6 +442,22 @@ async function renderGrid(
   const rows = Math.ceil(children.length / columns);
   const cellW = (box.w - gap * (columns - 1)) / columns;
   const fillCellH = (box.h - gap * (rows - 1)) / rows;
+
+  const rise = Math.round(base * TOKENS.motion.riseFraction);
+  const drawCell = async (index: number, x: number, y: number, w: number, h: number) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x - 2, y - 2, w + 4, h + 4 + rise);
+    ctx.clip();
+    const t = easeOutCubic(enter01(env, index * TOKENS.motion.staggerMs, TOKENS.motion.enterMs));
+    if (t < 1) {
+      ctx.globalAlpha *= t;
+      ctx.translate(0, (1 - t) * rise);
+    }
+    mergeResult(result, await renderNode(ctx, children[index]!, { x, y, w, h }, env));
+    ctx.restore();
+  };
+
   if (!props.grow) {
     const naturalRows = Array.from({ length: rows }, () => 0);
     let hasNaturalRows = true;
@@ -637,16 +471,19 @@ async function renderGrid(
     }
     const naturalTotal = naturalRows.reduce((sum, h) => sum + h, 0) + gap * (rows - 1);
     if (hasNaturalRows && naturalTotal <= box.h) {
-      let y = box.y + (box.h - naturalTotal) / 2;
+      // Give breathing room back to the cards: stretch rows up to 40% beyond
+      // natural height when the grid has surplus, then center the remainder.
+      const surplus = box.h - naturalTotal;
+      const stretch = Math.min(surplus / rows, (naturalTotal / rows) * 0.4);
+      const rowHeights = naturalRows.map((h) => h + stretch);
+      const total = rowHeights.reduce((sum, h) => sum + h, 0) + gap * (rows - 1);
+      let y = box.y + (box.h - total) / 2;
       for (let row = 0; row < rows; row++) {
-        const rowH = naturalRows[row]!;
+        const rowH = rowHeights[row]!;
         for (let col = 0; col < columns; col++) {
           const index = row * columns + col;
           if (index >= children.length) break;
-          mergeResult(
-            result,
-            await renderNode(ctx, children[index]!, { x: box.x + col * (cellW + gap), y, w: cellW, h: rowH }, env),
-          );
+          await drawCell(index, box.x + col * (cellW + gap), y, cellW, rowH);
         }
         y += rowH + gap;
       }
@@ -656,57 +493,25 @@ async function renderGrid(
   for (let i = 0; i < children.length; i++) {
     const col = i % columns;
     const row = Math.floor(i / columns);
-    mergeResult(
-      result,
-      await renderNode(
-        ctx,
-        children[i]!,
-        { x: box.x + col * (cellW + gap), y: box.y + row * (fillCellH + gap), w: cellW, h: fillCellH },
-        env,
-      ),
-    );
+    await drawCell(i, box.x + col * (cellW + gap), box.y + row * (fillCellH + gap), cellW, fillCellH);
   }
   return result;
 }
 
-function renderTextNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
-  drawTextNode(ctx, element, box, env);
-  return emptyResult();
-}
+/* ------------------------------------------------------------------ */
+/* Leaf adapters                                                       */
+/* ------------------------------------------------------------------ */
 
-function renderLowerThirdNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
-  drawLowerThird(ctx, element, box, env);
-  return emptyResult();
+function leaf(draw: (ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv) => void) {
+  return (ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult => {
+    draw(ctx, element, box, env);
+    return emptyResult();
+  };
 }
 
 function renderCalloutNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
   if (propsOf(element).when === false) return emptyResult();
   drawCallout(ctx, element, box, env);
-  return emptyResult();
-}
-
-function renderBadgeNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
-  drawBadge(ctx, element, box, env);
-  return emptyResult();
-}
-
-function renderDividerNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
-  drawDivider(ctx, element, box, env);
-  return emptyResult();
-}
-
-function renderMeterNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
-  drawMeter(ctx, element, box, env);
-  return emptyResult();
-}
-
-function renderSystemMapNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
-  drawSystemMap(ctx, element, box, env);
-  return emptyResult();
-}
-
-function renderTimelineRailNode(ctx: SKRSContext2D, element: HyperframeElement, box: Box, env: RenderEnv): DrawResult {
-  drawTimelineRail(ctx, element, box, env);
   return emptyResult();
 }
 
@@ -716,7 +521,7 @@ function renderCaptionSafeAreaNode(
   box: Box,
   env: RenderEnv,
 ): Promise<DrawResult> {
-  const safe = Math.round(Math.min(env.dims.width, env.dims.height) * 0.15);
+  const safe = Math.round(Math.min(env.dims.width, env.dims.height) * TOKENS.captionSafeArea);
   return renderStack(
     ctx,
     { ...element, type: "Stack", props: { direction: "vertical", gap: "md", grow: true } },
@@ -752,107 +557,15 @@ async function renderNode(
   return renderer.draw(ctx, element, box, env);
 }
 
-function collectKineticCaptions(element: HyperframeElement): HyperframeElement[] {
-  const found: HyperframeElement[] = [];
-  if (element.type === "KineticCaption") found.push(element);
-  for (const child of elementChildElements(element)) found.push(...collectKineticCaptions(child));
-  return found;
-}
-
-function normalizeEmphasisWord(word: string): string {
-  return word.toLowerCase().replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "");
-}
-
-function emphasisSet(value: unknown): Set<string> {
-  if (!Array.isArray(value)) return new Set();
-  return new Set(
-    value
-      .filter((item): item is string => typeof item === "string")
-      .map(normalizeEmphasisWord)
-      .filter(Boolean),
-  );
-}
-
-function drawCaptionLine(
-  ctx: SKRSContext2D,
-  line: string,
-  x: number,
-  y: number,
-  defaultFill: string,
-  accentFill: string,
-  emphasized: Set<string>,
-): void {
-  if (emphasized.size === 0) {
-    ctx.fillStyle = defaultFill;
-    ctx.fillText(line, x, y);
-    return;
-  }
-
-  const tokens = line.split(/(\s+)/);
-  const width = tokens.reduce((sum, token) => sum + ctx.measureText(token).width, 0);
-  let tx = x - width / 2;
-  ctx.textAlign = "left";
-  for (const token of tokens) {
-    const tokenWidth = ctx.measureText(token).width;
-    if (tokenWidth > 0) {
-      const normalized = normalizeEmphasisWord(token);
-      ctx.fillStyle = normalized && emphasized.has(normalized) ? accentFill : defaultFill;
-      ctx.fillText(token, tx, y);
-    }
-    tx += tokenWidth;
-  }
-  ctx.textAlign = "center";
-}
-
-function drawKineticCaption(ctx: SKRSContext2D, element: HyperframeElement, env: RenderEnv): void {
-  if (!env.activeCue?.text) return;
-  const props = propsOf(element);
-  const base = Math.min(env.dims.width, env.dims.height);
-  const maxWords = typeof props.maxWords === "number" ? props.maxWords : props.mode === "word-pop" ? 7 : 12;
-  const words = env.activeCue.text.split(/\s+/).slice(0, maxWords);
-  const text = words.join(" ");
-  const fontSize = Math.round(base * (props.mode === "minimal" ? 0.032 : 0.046));
-  ctx.font = fontFor(env, "display", fontSize);
-  const maxW = env.dims.width * 0.76;
-  const lines = wrapText(ctx, text, maxW).slice(0, 2);
-  const lineH = fontSize * 1.18;
-  const padX = base * 0.035;
-  const padY = base * 0.02;
-  const boxW = Math.min(
-    env.dims.width - base * 0.08,
-    Math.max(...lines.map((line) => ctx.measureText(line).width)) + padX * 2,
-  );
-  const boxH = lines.length * lineH + padY * 2;
-  const x = (env.dims.width - boxW) / 2;
-  const position = props.position;
-  const y =
-    position === "top"
-      ? base * 0.08
-      : position === "middle"
-        ? (env.dims.height - boxH) / 2
-        : env.dims.height - boxH - base * 0.075;
-  roundRect(ctx, x, y, boxW, boxH, Math.round(base * 0.022));
-  ctx.fillStyle = env.theme ? rgba(env.theme.colors.captionBg, 0.88) : "rgba(7, 10, 18, 0.72)";
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const defaultFill = env.theme ? env.theme.colors.captionFg : env.palette.fg;
-  const emphasized = emphasisSet(props.emphasis);
-  let ty = y + padY + lineH / 2;
-  for (const line of lines) {
-    drawCaptionLine(ctx, line, env.dims.width / 2, ty, defaultFill, env.palette.accent, emphasized);
-    ty += lineH;
-  }
-}
+/* ------------------------------------------------------------------ */
+/* Stage                                                               */
+/* ------------------------------------------------------------------ */
 
 async function renderStage(ctx: SKRSContext2D, element: HyperframeElement, env: RenderEnv): Promise<DrawResult> {
   const props = propsOf(element);
   const tone = typeof props.tone === "string" ? props.tone : "dark";
   const stageEnv: RenderEnv = { ...env, palette: paletteFor(tone, env.theme) };
-  drawStageBackground(ctx, stageEnv.dims, tone, stageEnv.theme);
+  drawStageBackground(ctx, stageEnv.dims, stageEnv);
   const base = Math.min(stageEnv.dims.width, stageEnv.dims.height);
   const pad = paddingPx(props.padding, base);
   const content: HyperframeElement = {
@@ -868,10 +581,6 @@ async function renderStage(ctx: SKRSContext2D, element: HyperframeElement, env: 
   );
   for (const caption of collectKineticCaptions(element)) drawKineticCaption(ctx, caption, stageEnv);
   return result;
-}
-
-function fixedHeight(multiplier: number): ComponentRenderer["estimateHeight"] {
-  return (_ctx, _element, _box, env) => Math.round(Math.min(env.dims.width, env.dims.height) * multiplier);
 }
 
 function minHeight(px: number, multiplier: number): ComponentRenderer["estimateHeight"] {
@@ -893,14 +602,16 @@ const COMPONENT_RENDERERS: Record<string, ComponentRenderer> = {
     draw: (ctx, element, _box, env) => renderStage(ctx, element, env),
   },
   Stack: {
+    estimateHeight: estimateStackHeight,
     draw: renderStack,
   },
   Grid: {
+    estimateHeight: estimateGridHeight,
     draw: renderGrid,
   },
   Text: {
     estimateHeight: estimateTextHeight,
-    draw: renderTextNode,
+    draw: leaf(drawTextNode),
   },
   CodeRef: {
     draw: renderCodeRef,
@@ -915,7 +626,7 @@ const COMPONENT_RENDERERS: Record<string, ComponentRenderer> = {
     draw: renderImageAsset,
   },
   Callout: {
-    estimateHeight: fixedHeight(0.11),
+    estimateHeight: estimateCalloutHeight,
     draw: renderCalloutNode,
   },
   CaptionSafeArea: {
@@ -926,31 +637,53 @@ const COMPONENT_RENDERERS: Record<string, ComponentRenderer> = {
     draw: renderUnsupportedNode,
   },
   LowerThird: {
-    estimateHeight: fixedHeight(0.2),
-    draw: renderLowerThirdNode,
+    estimateHeight: estimateLowerThirdHeight,
+    draw: leaf(drawLowerThird),
   },
   TimelineRail: {
-    estimateHeight: fixedHeight(0.13),
-    draw: renderTimelineRailNode,
+    estimateHeight: minHeight(64, 0.085),
+    draw: leaf(drawTimelineRail),
   },
   SystemMap: {
-    draw: renderSystemMapNode,
+    draw: leaf(drawSystemMap),
   },
   Panel: {
     estimateHeight: estimatePanelHeight,
     draw: renderPanel,
   },
   Badge: {
-    estimateHeight: minHeight(34, 0.036),
-    draw: renderBadgeNode,
+    estimateHeight: minHeight(30, 0.034),
+    draw: leaf(drawBadge),
   },
   Divider: {
-    estimateHeight: minHeight(34, 0.07),
-    draw: renderDividerNode,
+    estimateHeight: minHeight(28, 0.05),
+    draw: leaf(drawDivider),
   },
   Meter: {
-    estimateHeight: minHeight(76, 0.085),
-    draw: renderMeterNode,
+    estimateHeight: estimateMeterHeight,
+    draw: leaf(drawMeter),
+  },
+  BigStat: {
+    estimateHeight: estimateBigStatHeight,
+    draw: leaf(drawBigStat),
+  },
+  Checklist: {
+    estimateHeight: estimateChecklistHeight,
+    draw: leaf(drawChecklist),
+  },
+  Quote: {
+    estimateHeight: estimateQuoteHeight,
+    draw: leaf(drawQuote),
+  },
+  TravelPath: {
+    draw: leaf(drawTravelPath),
+  },
+  FunctionPlot: {
+    draw: leaf(drawFunctionPlot),
+  },
+  Formula: {
+    estimateHeight: estimateFormulaHeight,
+    draw: leaf(drawFormula),
   },
   PhaseBanner: renderComposite(PhaseBanner),
   SignalWall: renderComposite(SignalWall),
@@ -959,16 +692,15 @@ const COMPONENT_RENDERERS: Record<string, ComponentRenderer> = {
   ProofLadder: renderComposite(ProofLadder),
   StatusRail: renderComposite(StatusRail),
   CaptionDeck: renderComposite(CaptionDeck),
+  StatRow: renderComposite(StatRow),
+  CompareSplit: renderComposite(CompareSplit),
 };
 
 export const RENDERABLE_COMPONENT_TYPES = Object.freeze(Object.keys(COMPONENT_RENDERERS)) as readonly string[];
 
-export async function renderHyperframeElementToPng(
-  element: HyperframeElement,
-  opts: HyperframeTreeRenderOpts,
-): Promise<RenderedScene> {
+async function renderHyperframeElementToCanvas(element: HyperframeElement, opts: HyperframeTreeRenderOpts) {
   ensureFonts();
-  const dims = dimsFor(opts.aspectRatio);
+  const dims: Dims = dimsFor(opts.aspectRatio);
   const canvas = createCanvas(dims.width, dims.height);
   const ctx = canvas.getContext("2d");
   const env: RenderEnv = {
@@ -976,6 +708,7 @@ export async function renderHyperframeElementToPng(
     palette: paletteFor("dark", opts.theme),
     activeCue: opts.activeCue,
     theme: opts.theme,
+    motion: opts.motion,
   };
   const result =
     element.type === "Stage"
@@ -983,7 +716,14 @@ export async function renderHyperframeElementToPng(
       : await renderNode(ctx, element, { x: 0, y: 0, w: dims.width, h: dims.height }, env);
 
   if (opts.watermark !== false) drawWatermark(ctx, dims, opts.watermark ?? "agent-video.dev", canvasTheme(opts.theme));
+  return { canvas, ctx, dims, result };
+}
 
+export async function renderHyperframeElementToPng(
+  element: HyperframeElement,
+  opts: HyperframeTreeRenderOpts,
+): Promise<RenderedScene> {
+  const { canvas, dims, result } = await renderHyperframeElementToCanvas(element, opts);
   return {
     png: canvas.toBuffer("image/png"),
     width: dims.width,
@@ -991,4 +731,26 @@ export async function renderHyperframeElementToPng(
     resolvedRefs: result.resolvedRefs,
     warning: result.warning,
   };
+}
+
+export interface RenderedHyperframeFrame {
+  /** Raw RGBA pixels, row-major, suitable for an ffmpeg rawvideo pipe. */
+  rgba: Buffer;
+  width: number;
+  height: number;
+}
+
+/**
+ * Render one animated video frame as raw RGBA. `drawOverlay` runs after the
+ * tree (and watermark) so callers can burn in canonical captions per frame.
+ */
+export async function renderHyperframeElementToRgba(
+  element: HyperframeElement,
+  opts: HyperframeTreeRenderOpts & {
+    drawOverlay?: (ctx: SKRSContext2D, dims: Dims) => void;
+  },
+): Promise<RenderedHyperframeFrame> {
+  const { canvas, ctx, dims } = await renderHyperframeElementToCanvas(element, opts);
+  opts.drawOverlay?.(ctx, dims);
+  return { rgba: canvas.data(), width: dims.width, height: dims.height };
 }

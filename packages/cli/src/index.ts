@@ -20,6 +20,7 @@ import {
   bundleHyperframeFile,
   effectiveBeats,
   loadHyperframeContractFromSource,
+  themePresetManifest,
   type VideoSpec,
   type AspectRatio,
   type SpecError,
@@ -53,8 +54,10 @@ import {
   type CaptureEventType,
 } from "@agent-video/capture";
 
-const VERSION = "0.0.0";
-const BOOLEAN_FLAGS = new Set(["frames-only", "no-import", "help"]);
+import cliManifest from "../package.json" with { type: "json" };
+
+const VERSION: string = cliManifest.version;
+const BOOLEAN_FLAGS = new Set(["frames-only", "no-import", "help", "stills"]);
 
 // ---------------------------------------------------------------------------
 // Output helpers — everything an agent consumes is JSON.
@@ -527,11 +530,12 @@ async function cmdBundle(args: Args): Promise<never> {
     ok({
       ok: true,
       usage:
-        "agent-video bundle <validate|inspect|compile|render|workshop|components|templates|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
+        "agent-video bundle <validate|inspect|compile|render|workshop|components|templates|themes|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
       examples: [
         "agent-video bundle validate examples/bundle-v2",
         "agent-video bundle inspect examples/bundle-v2",
         "agent-video bundle components",
+        "agent-video bundle themes",
         "agent-video bundle templates",
         "agent-video bundle workshop examples/bundle-v2 --out .agent-video/workshop --aspect 16:9",
         "agent-video bundle compile examples/bundle-v2",
@@ -549,6 +553,15 @@ async function cmdBundle(args: Args): Promise<never> {
         "Use templates as complete examples. Prefer reusable components for common patterns; run `agent-video bundle components`.",
     });
   }
+  if (subcommand === "themes") {
+    ok({
+      ok: true,
+      stage: "bundle-themes",
+      themes: themePresetManifest(),
+      usage:
+        'Pick a preset by mood and set meta.theme = { "preset": "<id>" }; optionally override colors (e.g. brand accent) or typography. Presets already pass the contrast gates; overrides are re-validated.',
+    });
+  }
   if (subcommand === "components") {
     ok({
       ok: true,
@@ -563,7 +576,7 @@ async function cmdBundle(args: Args): Promise<never> {
   if (!bundleDir) {
     fail(
       "Missing bundle directory.",
-      "Usage: agent-video bundle <validate|inspect|compile|render|workshop|components|templates|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
+      "Usage: agent-video bundle <validate|inspect|compile|render|workshop|components|templates|themes|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
     );
   }
 
@@ -664,7 +677,12 @@ async function cmdBundle(args: Args): Promise<never> {
       });
     }
     if (subcommand === "render") {
-      const result = await renderBundle(bundleDir, { outDir, aspectRatios, cacheDir });
+      const result = await renderBundle(bundleDir, {
+        outDir,
+        aspectRatios,
+        cacheDir,
+        motion: args.flags.stills !== true,
+      });
       ok({
         ok: true,
         stage: "bundle-render",
@@ -708,7 +726,7 @@ async function cmdBundle(args: Args): Promise<never> {
 
   fail(
     `Unknown bundle command: '${subcommand}'`,
-    "Run `agent-video bundle help`. Commands: validate, inspect, compile, render, workshop, components, templates, schema.",
+    "Run `agent-video bundle help`. Commands: validate, inspect, compile, render, workshop, components, templates, themes, schema.",
   );
 }
 
@@ -855,13 +873,17 @@ COMMANDS
                          @agent-video/hyperframes.
   bundle components      List reusable hyperframe components from
                          @agent-video/hyperframes.
+  bundle themes          List theme presets (colors, typography, guidance) for
+                         meta.theme.
   bundle workshop DIR    Render every bundle scene/line/aspect as PNGs in a
                          static workshop gallery. Flags: --out DIR, --aspect,
                          --serve-seconds N.
   bundle compile DIR     TTS + measure + resolve refs/assets/ranges, then write
                          compiled-plan.json. Flags: --cache DIR.
-  bundle render DIR      Compile and render the v2 bundle to MP4. Flags:
-                         --out DIR, --aspect 16:9,9:16, --cache DIR.
+  bundle render DIR      Compile and render the v2 bundle to MP4. Hyperframe
+                         scenes render per-frame with motion; pass --stills to
+                         hold one frame per line. Flags: --out DIR,
+                         --aspect 16:9,9:16, --cache DIR, --stills.
   workshop render        Render the built-in component workshop gallery.
                          Flags: --out DIR, --aspect 16:9,9:16,
                          --serve-seconds N.

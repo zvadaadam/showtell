@@ -116,9 +116,13 @@ and burn-in captions when requested.
 - Hyperframes are trusted local code plus static policy lint, not a hostile-code
   sandbox. They must not read files, run subprocesses, call network APIs, play
   audio, or inspect environment variables; declare every resource in `spec.json`.
-- Current bundle rendering samples one still frame per narration line. Use
-  `ctx.scene.progress`, `ctx.range()`, and `ctx.viewport` to choose line-state
-  visuals and responsive layouts; use line-to-line cuts for pace.
+- Hyperframe scenes render **every frame** at the spec fps with a deterministic
+  motion clock: `ctx.scene.progress`, `ctx.time`, and `ctx.range()` advance
+  continuously, so range-driven props animate smoothly and the renderer adds
+  automatic entrances, chart growth, count-ups, and word-pop captions. Use
+  `ctx.scene.lineIndex`/`lineId` for line-state cuts and `ctx.viewport` for
+  responsive layouts. Stills (workshop, thumbnails) render end states.
+  `bundle render --stills` holds one frame per line for fast drafts.
 - Determinism means: same authored bundle, renderer/runtime version, resolved
   repo bytes, assets, and cached TTS audio produce the same MP4.
 
@@ -246,17 +250,25 @@ IDs:
 - `repo.baseRef` and `repo.headRef`: optional git refs used by defaults and
   diagnostics.
 - `theme`: optional shared brand system for all hyperframes in the video. It is
-  intentionally semantic, not a CSS dump. Prefer a preset plus small overrides:
-  `{ "preset"?: "agent-dark" | "paper" | "neutral", "colors"?: { "fg"?,
-"bg"?, "subtle"?, "accent"?, "success"?, "warning"?, "surface"?,
-"border"?, "captionBg"?, "captionFg"? }, "typography"?: { "display"?,
-"body"?, "mono"? } }`.
-  `mode?: "dark" | "paper" | "neutral"` is accepted as a tone alias, but
-  `preset` is the primary authoring field. The renderer resolves the recipe
-  into a complete `ctx.theme` before hyperframes run, so component code can read
-  every theme token without fallbacks. Colors are strict 6-digit hex values.
-  Typography values are plain registered font family names; the renderer ships
-  deterministic `Inter`, `Inter Bold`, and `JetBrains Mono` today.
+  intentionally semantic, not a CSS dump. Run `agent-video bundle themes` for
+  the designed presets with full tokens, then prefer a preset plus small
+  overrides:
+  `{ "preset"?: "ink" | "aurora" | "ember" | "orchid" | "graphite" |
+"agent-dark" | "paper" | "neutral", "colors"?: { "fg"?, "bg"?, "subtle"?,
+"accent"?, "accent2"?, "success"?, "warning"?, "surface"?, "border"?,
+"captionBg"?, "captionFg"? }, "typography"?: { "display"?, "body"?,
+"mono"? } }`.
+  The default preset is `ink`. `accent2` drives the background glow wash and
+  falls back to `accent`. Each preset also ships a categorical `chart` palette
+  (series order) used by multi-series charts and pies; override it with
+  `"chart": ["#hex", ...]` (2–10 colors) when a brand needs its own data
+  colors. `mode?: "dark" | "paper" | "neutral"` is accepted as a tone alias,
+  but `preset` is the primary authoring field. The renderer
+  resolves the recipe into a complete `ctx.theme` before hyperframes run, so
+  component code can read every theme token without fallbacks. Colors are
+  strict 6-digit hex values. Typography values are plain registered font
+  family names; the renderer ships deterministic `Inter`, `Inter Medium`,
+  `Inter SemiBold`, `Inter Bold`, and `JetBrains Mono` today.
   Foreground/background and caption color pairs must be readable; weak accent
   contrast is reported as a warning.
 - `Stage tone` inside hyperframe TSX is only a local treatment/fallback hint.

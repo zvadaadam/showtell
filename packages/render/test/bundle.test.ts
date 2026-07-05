@@ -71,7 +71,8 @@ test("compileBundle writes a deterministic plan with measured timing and live re
 test("renderBundle renders a captioned mp4 from executed hyperframes", async () => {
   const dir = tempBundle();
   const outDir = mkdtempSync(join(tmpdir(), "av-bundle-out-"));
-  const result = await renderBundle(dir, { outDir, aspectRatios: ["16:9"] });
+  // Stills: this test asserts captions/streams/refs; the animated path has its own test.
+  const result = await renderBundle(dir, { outDir, aspectRatios: ["16:9"], motion: false });
   expect(result.outputs).toHaveLength(1);
   const output = result.outputs[0]!;
   expect(existsSync(output.path)).toBe(true);
@@ -93,6 +94,86 @@ test("renderBundle renders a captioned mp4 from executed hyperframes", async () 
     durations.streams.every((stream) => Math.abs(Number(stream.duration) * 1000 - result.plan.meta.durationMs) <= 34),
   ).toBe(true);
 }, 120_000);
+
+test("embedded hyperframes SDK asset matches the real SDK source", () => {
+  // The compiled binary ships packages/render/src/hyperframes-sdk.source.txt so
+  // bundle render works outside this repo. Regenerate with `bun run gen:schema`.
+  const real = readFileSync(join(ROOT, "packages", "hyperframes", "src", "index.ts"), "utf-8");
+  const embedded = readFileSync(join(ROOT, "packages", "render", "src", "hyperframes-sdk.source.txt"), "utf-8");
+  expect(embedded).toBe(real);
+});
+
+test("renderBundle animates hyperframe scenes deterministically", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-bundle-motion-"));
+  mkdirSync(join(dir, "hyperframes"), { recursive: true });
+  writeFileSync(
+    join(dir, "hyperframes", "journey.tsx"),
+    `/* @jsx h */
+import { Stage, Stack, CaptionSafeArea, PhaseBanner, TravelPath, h, defineHyperframe, type HyperframeContext, type JsonSchema } from "@agent-video/hyperframes";
+const propsSchema: JsonSchema = { type: "object", additionalProperties: false, required: ["title"], properties: { title: { type: "string" } } };
+const inputs = { flight: { kind: "range" } } as const;
+function render(ctx: HyperframeContext<{ title: string }>) {
+  return (
+    <Stage padding="lg">
+      <CaptionSafeArea>
+        <Stack direction="vertical" gap="lg" grow>
+          <PhaseBanner eyebrow="motion" title={ctx.props.title} />
+          <TravelPath from={{ x: 0.8, y: 0.3, label: "PRG" }} to={{ x: 0.15, y: 0.6, label: "SF" }} progress={ctx.range("flight").progress} />
+        </Stack>
+      </CaptionSafeArea>
+    </Stage>
+  );
+}
+export default defineHyperframe({ schemaVersion: 1, propsSchema, inputs, render });
+`,
+  );
+  writeFileSync(
+    join(dir, "spec.json"),
+    JSON.stringify({
+      version: 2,
+      meta: { title: "Motion determinism", aspectRatios: ["16:9"], repo: { path: ROOT } },
+      assets: {},
+      audio: { tts: { provider: "say" }, captions: { mode: "burn-in", source: "narration" } },
+      scenes: [
+        {
+          id: "fly",
+          narration: { lines: [{ id: "l1", text: "The plane crosses the frame." }] },
+          refs: {},
+          visual: {
+            kind: "hyperframe",
+            src: "hyperframes/journey.tsx",
+            props: { title: "Motion check" },
+            inputs: { flight: "line:l1" },
+          },
+        },
+      ],
+    }),
+  );
+
+  // TTS audio (`say`) is not bit-reproducible across runs, so determinism is
+  // asserted on the decoded VIDEO stream: same spec, same pixels.
+  const videoStreamHash = (path: string): string =>
+    execFileSync("ffmpeg", ["-loglevel", "error", "-i", path, "-map", "0:v", "-f", "hash", "-"], {
+      encoding: "utf-8",
+    }).trim();
+  const cacheDir = mkdtempSync(join(tmpdir(), "av-bundle-motion-cache-"));
+  const first = await renderBundle(dir, {
+    outDir: mkdtempSync(join(tmpdir(), "av-bundle-motion-first-")),
+    aspectRatios: ["16:9"],
+    cacheDir,
+  });
+  const output = first.outputs[0]!;
+  expect(existsSync(output.path)).toBe(true);
+  const durations = probe(output.path);
+  expect(Math.abs(Number(durations.format.duration) * 1000 - first.plan.meta.durationMs)).toBeLessThanOrEqual(34);
+
+  const second = await renderBundle(dir, {
+    outDir: mkdtempSync(join(tmpdir(), "av-bundle-motion-second-")),
+    aspectRatios: ["16:9"],
+    cacheDir,
+  });
+  expect(videoStreamHash(second.outputs[0]!.path)).toBe(videoStreamHash(output.path));
+}, 180_000);
 
 test("caption sidecars use spoken narration, not visual prop labels", async () => {
   const dir = mkdtempSync(join(tmpdir(), "av-bundle-caption-text-"));
@@ -512,7 +593,7 @@ test("renderBundle normalizes duration for non-burn-in caption modes", async () 
   for (const mode of ["off", "sidecar"] as const) {
     const dir = tempBundle(mode);
     const outDir = mkdtempSync(join(tmpdir(), `av-bundle-${mode}-`));
-    const result = await renderBundle(dir, { outDir, aspectRatios: ["16:9"] });
+    const result = await renderBundle(dir, { outDir, aspectRatios: ["16:9"], motion: false });
     const output = result.outputs[0]!;
     expect(output.captionsBurnedIn).toBe(false);
     expect(Boolean(output.captionsPath)).toBe(mode === "sidecar");

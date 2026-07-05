@@ -3,14 +3,23 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { dimsFor, renderHyperframeElementToPng } from "@agent-video/compose";
-import { resolveBundleTheme, type AspectRatio, type BundleError } from "@agent-video/core";
+import {
+  resolveBundleTheme,
+  themePresetManifest,
+  type AspectRatio,
+  type BundleError,
+  type BundleThemePreset,
+} from "@agent-video/core";
 import {
   Badge,
   Callout,
+  TravelPath,
   CaptionDeck,
   CaptionSafeArea,
   Chart,
+  Checklist,
   CodeRef,
+  CompareSplit,
   DecisionGrid,
   DiffRef,
   Divider,
@@ -21,10 +30,13 @@ import {
   Panel,
   PhaseBanner,
   ProofLadder,
+  Quote,
   SignalWall,
   Stack,
   Stage,
+  StatRow,
   StatusRail,
+  SystemMap,
   Text,
   h,
   type CaptionCue,
@@ -76,6 +88,8 @@ interface WorkshopStory {
   title: string;
   group: string;
   description: string;
+  /** Render with this theme preset instead of the default. */
+  theme?: BundleThemePreset;
   build(assetPath: string): { element: HyperframeElement; activeCue?: CaptionCue };
 }
 
@@ -88,6 +102,7 @@ interface WorkshopThemeTokenSet {
     fg: string;
     subtle: string;
     accent: string;
+    accent2: string;
     success: string;
     warning: string;
     surface: string;
@@ -104,20 +119,13 @@ interface WorkshopThemeTokenSet {
 
 const DEFAULT_ASPECTS: AspectRatio[] = ["16:9", "9:16"];
 
-function workshopTheme(
-  preset: "agent-dark" | "paper" | "neutral",
-  title: string,
-  description: string,
-): WorkshopThemeTokenSet {
-  const theme = resolveBundleTheme({ preset, colors: {}, typography: {} });
-  return { id: preset, title, description, colors: theme.colors, typography: theme.typography };
-}
-
-const WORKSHOP_THEMES: WorkshopThemeTokenSet[] = [
-  workshopTheme("agent-dark", "Agent Dark", "Current deterministic default for technical videos."),
-  workshopTheme("paper", "Paper", "Light review surface for checking spacing and hierarchy."),
-  workshopTheme("neutral", "Neutral", "Quiet dark-gray system for product walkthroughs."),
-];
+const WORKSHOP_THEMES: WorkshopThemeTokenSet[] = themePresetManifest().map((preset) => ({
+  id: preset.id,
+  title: preset.id.charAt(0).toUpperCase() + preset.id.slice(1),
+  description: preset.description,
+  colors: preset.colors,
+  typography: preset.typography,
+}));
 
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
@@ -197,6 +205,54 @@ function writeWorkshopImageAsset(outDir: string): string {
     ),
   );
   return assetPath;
+}
+
+function themeGalleryStories(): WorkshopStory[] {
+  return themePresetManifest().map((preset) => ({
+    id: `theme-${preset.id}`,
+    title: `Theme: ${preset.id}${preset.default ? " (default)" : ""}`,
+    group: "theme",
+    description: preset.description,
+    theme: preset.id,
+    build: () => ({
+      element: h(
+        Stage,
+        { padding: "lg" },
+        h(
+          CaptionSafeArea,
+          {},
+          h(
+            Stack,
+            { direction: "vertical", gap: "lg", grow: true },
+            h(PhaseBanner, {
+              eyebrow: preset.id,
+              title: "The story your repo tells",
+              subtitle: preset.description,
+            }),
+            h(
+              Grid,
+              { columns: 2, gap: "sm", grow: true },
+              h(
+                Panel,
+                { tone: "accent", padding: "sm" },
+                h(Badge, { text: "active", tone: "info" }),
+                h(Text, { variant: "section" }, "Accent surface"),
+                h(Text, { variant: "caption" }, "Selected states, chips, and glows."),
+              ),
+              h(
+                Panel,
+                { padding: "sm" },
+                h(Badge, { text: "queued", tone: "muted" }),
+                h(Text, { variant: "section" }, "Quiet surface"),
+                h(Text, { variant: "caption" }, "Default cards stay recessive."),
+              ),
+            ),
+            h(StatusRail, { steps: ["discover", "compose", "render"], activeIndex: 1, progress: 0.6 }),
+          ),
+        ),
+      ),
+    }),
+  }));
 }
 
 function stories(): WorkshopStory[] {
@@ -334,6 +390,135 @@ function stories(): WorkshopStory[] {
                   activeIndex: 3,
                 }),
               ),
+            ),
+          ),
+        ),
+      }),
+    },
+    {
+      id: "stat-blocks",
+      title: "Stat Blocks",
+      group: "blocks",
+      description: "BigStat cards for the numbers that carry the story.",
+      build: () => ({
+        element: h(
+          Stage,
+          { padding: "lg" },
+          h(
+            CaptionSafeArea,
+            {},
+            h(
+              Stack,
+              { direction: "vertical", gap: "lg", grow: true },
+              h(PhaseBanner, { eyebrow: "release results", title: "The numbers behind the overhaul" }),
+              h(StatRow, {
+                stats: [
+                  { value: "183", label: "tests passing", delta: "+9", deltaTone: "success" },
+                  { value: "0", label: "layout overlaps" },
+                  { value: "8", label: "theme presets", delta: "+5", deltaTone: "success" },
+                  { value: "17.6:1", label: "fg contrast" },
+                ],
+              }),
+              h(Quote, {
+                text: "Pick a preset by mood; one word restyles every frame.",
+                attribution: "bundle themes",
+              }),
+            ),
+          ),
+        ),
+      }),
+    },
+    {
+      id: "compare-blocks",
+      title: "Compare Split",
+      group: "blocks",
+      description: "Before/after checklists with drawn state circles.",
+      build: () => ({
+        element: h(
+          Stage,
+          { padding: "lg" },
+          h(
+            CaptionSafeArea,
+            {},
+            h(
+              Stack,
+              { direction: "vertical", gap: "lg", grow: true },
+              h(PhaseBanner, { eyebrow: "what changed", title: "Before and after the design pass" }),
+              h(CompareSplit, {
+                beforeTitle: "Before",
+                before: [
+                  { label: "Overlapping labels", detail: "Estimates never matched drawn pixels." },
+                  { label: "Dead zones", detail: "60% empty frames in 9:16." },
+                  { label: "One blue theme", detail: "Hardcoded in the renderer." },
+                ],
+                afterTitle: "After",
+                after: [
+                  { label: "Measured layout", detail: "Clip-safe, surplus centered." },
+                  { label: "Balanced frames", detail: "Both aspect ratios, no gaps." },
+                  { label: "Eight presets", detail: "Design tokens in one module." },
+                ],
+              }),
+              h(Checklist, {
+                columns: 2,
+                items: [
+                  { label: "Layout engine", state: "done" },
+                  { label: "Theme presets", state: "done" },
+                  { label: "Block library", state: "active", detail: "You are looking at it." },
+                  { label: "Motion pass", state: "todo" },
+                ],
+              }),
+            ),
+          ),
+        ),
+      }),
+    },
+    {
+      id: "travel-path",
+      title: "Travel Path",
+      group: "blocks",
+      description: "Animated journey primitive; stills show the arrived end state.",
+      build: () => ({
+        element: h(
+          Stage,
+          { padding: "lg" },
+          h(
+            CaptionSafeArea,
+            {},
+            h(
+              Stack,
+              { direction: "vertical", gap: "lg", grow: true },
+              h(PhaseBanner, { eyebrow: "journey", title: "Prague to San Francisco" }),
+              h(TravelPath, {
+                from: { x: 0.86, y: 0.22, label: "Prague" },
+                to: { x: 0.08, y: 0.6, label: "San Francisco" },
+                curve: 0.35,
+              }),
+            ),
+          ),
+        ),
+      }),
+    },
+    {
+      id: "system-map",
+      title: "System Map",
+      group: "story",
+      description: "Ordered process map with number chips, connectors, and one active step.",
+      build: () => ({
+        element: h(
+          Stage,
+          { tone: "dark", padding: "xl" },
+          h(
+            CaptionSafeArea,
+            {},
+            h(
+              Stack,
+              { direction: "vertical", gap: "lg", grow: true },
+              h(PhaseBanner, {
+                eyebrow: "process",
+                title: "From spec to deterministic video",
+                subtitle: "The renderer owns every step after intent.",
+              }),
+              h(SystemMap, { steps: ["Gather", "Author", "Compile", "Render", "Verify"], activeIndex: 2 }),
             ),
           ),
         ),
@@ -563,7 +748,7 @@ export async function renderWorkshop(
   mkdirSync(outDir, { recursive: true });
   const assetPath = writeWorkshopImageAsset(outDir);
   const renderedFrames: WorkshopRenderedFrame[] = [];
-  const allStories = stories();
+  const allStories = [...stories(), ...themeGalleryStories()];
 
   for (const story of allStories) {
     for (const aspectRatio of ratios) {
@@ -571,7 +756,9 @@ export async function renderWorkshop(
       const rendered = await renderHyperframeElementToPng(element, {
         aspectRatio,
         activeCue,
-        theme: resolveBundleTheme(),
+        theme: story.theme
+          ? resolveBundleTheme({ preset: story.theme, colors: {}, typography: {} })
+          : resolveBundleTheme(),
         watermark: false,
       });
       const file = fileBase(story, aspectRatio);
