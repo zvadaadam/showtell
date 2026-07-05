@@ -18,3 +18,9 @@ The example is intentionally structured like a future real bundle:
 - `assets/data/metrics.json` is a declared data asset.
 - `assets/audio/bed.wav` is a tiny silent placeholder music bed so future asset
   probing can verify duration, hashing, looping, and ducking behavior.
+- `meta.presenter` shows the always-on presenter bubble. The bundle only ships
+  the avatar (`assets/presenter/avatar.png` — swap in the author's real photo);
+  `"model": "Claude"` resolves the badge mark from the marks built into the
+  renderer (claude-code, codex, gemini, copilot, cursor, opencode). Set
+  `meta.presenter.logo` to a bundle-local SVG/PNG only to override them. The
+  ring pulses with measured narration loudness.

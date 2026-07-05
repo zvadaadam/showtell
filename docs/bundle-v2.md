@@ -273,6 +273,27 @@ IDs:
   contrast is reported as a warning.
 - `Stage tone` inside hyperframe TSX is only a local treatment/fallback hint.
   Use `meta.theme.preset` for the video's light/dark/neutral palette.
+- `presenter`: optional renderer-owned presenter bubble — the author's avatar in
+  a circle with a circular model badge, drawn on top of every frame like the
+  watermark, with an accent ring that pulses with the narration's measured
+  loudness (the renderer extracts a per-line RMS envelope from the synthesized
+  TTS audio into `compiled-plan.json`). Include it by default when the video
+  has a human author to credit:
+  `{ "enabled"?: boolean (default true), "image": string, "model"?: string,
+"logo"?: string, "position"?: "auto" | "top-left" | "top-center" | "top-right" |
+"bottom-left" | "bottom-right" (default "auto"), "size"?: "sm" | "md" | "lg"
+(default "md") }`.
+  `image` and `logo` are bundle-relative image files validated like assets (not
+  asset IDs). The badge mark resolves in order: `logo` (bundle-local override,
+  SVG or PNG) → a renderer-shipped mark matched from `model` (`claude-code`,
+  `codex`, `gemini`, `copilot`, `cursor`, `opencode`, plus vendor aliases like
+  `claude`, `anthropic`, `openai`, `chatgpt`, `google`) → a monogram of
+  `model`; with none of these, no badge is drawn. The compiled plan records the
+  resolved built-in as `meta.presenter.builtinLogo`.
+  `"auto"` position resolves to the top-right corner on `16:9`/`1:1` and
+  top-center on `9:16`. Stills (workshop frames, thumbnails, builtin bundle
+  scenes) render the bubble at rest; only animated hyperframe scenes pulse.
+  Hyperframes never see the bubble — it is chrome, not scene content.
 
 `assets` values:
 

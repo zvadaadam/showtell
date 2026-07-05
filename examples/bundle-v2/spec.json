@@ -5,6 +5,10 @@
     "title": "How agent-video bundle v2 works",
     "fps": 30,
     "aspectRatios": ["16:9", "9:16"],
+    "presenter": {
+      "image": "assets/presenter/avatar.png",
+      "model": "Claude"
+    },
     "repo": {
       "path": "../..",
       "baseRef": "main",

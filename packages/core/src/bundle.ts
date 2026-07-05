@@ -36,6 +36,26 @@ const Captions = z
   })
   .strict();
 
+/**
+ * Always-on presenter bubble: the user's avatar with a circular model badge,
+ * drawn by the renderer on every frame and pulsing with narration loudness.
+ * `position: "auto"` picks the top-right corner on landscape/square frames and
+ * top-center on 9:16.
+ */
+const Presenter = z
+  .object({
+    enabled: z.boolean().default(true),
+    /** Bundle-relative path to the presenter avatar image (rendered circular). */
+    image: z.string().min(1),
+    /** Model that authored the video; badge monogram fallback when no logo. */
+    model: z.string().min(1).optional(),
+    /** Bundle-relative path to the model logo image for the circular badge. */
+    logo: z.string().min(1).optional(),
+    position: z.enum(["auto", "top-left", "top-center", "top-right", "bottom-left", "bottom-right"]).default("auto"),
+    size: z.enum(["sm", "md", "lg"]).default("md"),
+  })
+  .strict();
+
 const Music = z
   .object({
     id: Id,
@@ -119,6 +139,7 @@ export const BundleSpec = z
         fps: z.number().int().min(1).max(120).default(30),
         aspectRatios: z.array(AspectRatio).min(1).default(["16:9"]),
         theme: Theme.optional(),
+        presenter: Presenter.optional(),
         repo: z
           .object({ path: z.string().default(".."), baseRef: z.string().optional(), headRef: z.string().optional() })
           .strict()
@@ -139,6 +160,7 @@ export const BundleSpec = z
   .strict();
 
 export type BundleSpec = z.infer<typeof BundleSpec>;
+export type BundlePresenter = z.infer<typeof Presenter>;
 export type BundleScene = z.infer<typeof Scene>;
 export type BundleRepoRef = z.infer<typeof RepoRef>;
 export type BundleAsset = z.infer<typeof Asset>;
@@ -180,6 +202,10 @@ export function bundleAssetFile(bundleDir: string, asset: BundleAsset): { path: 
 
 export function bundleHyperframeFile(bundleDir: string, src: string): { path: string; bytes: number } {
   return safeExistingFileInRoot(bundleDir, src, { maxBytes: MAX_HYPERFRAME_BYTES });
+}
+
+export function bundlePresenterImageFile(bundleDir: string, src: string): { path: string; bytes: number } {
+  return safeExistingFileInRoot(bundleDir, src, { maxBytes: MAX_ASSET_BYTES.image });
 }
 
 export function resolveBundleRepoPath(bundleDir: string, spec: BundleSpec): string {
@@ -594,6 +620,30 @@ export function validateBundle(bundleDirInput: string): BundleValidationResult {
       );
     }
   });
+
+  if (spec.meta.presenter?.enabled) {
+    const presenterImages = [
+      { field: "image", src: spec.meta.presenter.image },
+      ...(spec.meta.presenter.logo ? [{ field: "logo", src: spec.meta.presenter.logo }] : []),
+    ];
+    for (const { field, src } of presenterImages) {
+      try {
+        bundlePresenterImageFile(bundleDir, src);
+      } catch (e) {
+        const code = safeFileErrorCode(e) === "MISSING_FILE" ? "MISSING_PRESENTER_IMAGE" : "BAD_PRESENTER_IMAGE_PATH";
+        errors.push(
+          err(
+            code,
+            `meta.presenter.${field}`,
+            (e as Error).message,
+            code === "MISSING_PRESENTER_IMAGE"
+              ? "Create the presenter image file, fix the path, or set meta.presenter.enabled to false."
+              : "Presenter image paths must be bundle-relative regular files, stay inside the bundle, and fit the image size limit.",
+          ),
+        );
+      }
+    }
+  }
 
   spec.audio.music.forEach((music, i) => {
     const asset = spec.assets[music.asset];

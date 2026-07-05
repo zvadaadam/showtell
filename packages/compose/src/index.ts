@@ -4,6 +4,14 @@ export { renderHyperframeElementToPng, renderHyperframeElementToRgba } from "./r
 export type { HyperframeTreeRenderOpts, RenderedHyperframeFrame } from "./render-hyperframe-tree.ts";
 export type { MotionClock } from "./hyperframe/motion.ts";
 export { renderCaptionedFrame, drawCaptionOverlay } from "./render-caption.ts";
+export { drawPresenterOverlay, loadPresenterOverlay, renderPresenterFrame } from "./hyperframe/presenter.ts";
+export { AGENT_LOGO_IDS, resolveAgentLogo, type AgentLogo } from "./hyperframe/agent-logos.ts";
+export type {
+  LoadedPresenter,
+  PresenterOverlayState,
+  PresenterPosition,
+  PresenterSize,
+} from "./hyperframe/presenter.ts";
 export { dimsFor, type Dims } from "./dims.ts";
 export { probeImageInfo } from "./image-info.ts";
 export type { ImageInfo } from "./image-info.ts";

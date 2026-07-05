@@ -151,6 +151,52 @@
               },
               "additionalProperties": false
             },
+            "presenter": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "image": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "logo": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "position": {
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "top-left",
+                    "top-center",
+                    "top-right",
+                    "bottom-left",
+                    "bottom-right"
+                  ],
+                  "default": "auto"
+                },
+                "size": {
+                  "type": "string",
+                  "enum": [
+                    "sm",
+                    "md",
+                    "lg"
+                  ],
+                  "default": "md"
+                }
+              },
+              "required": [
+                "image"
+              ],
+              "additionalProperties": false
+            },
             "repo": {
               "type": "object",
               "properties": {

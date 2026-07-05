@@ -15,6 +15,7 @@ import {
   assertSafeOutputPath,
   bundleAssetFile,
   bundleHyperframeFile,
+  bundlePresenterImageFile,
   effectiveBeats,
   loadHyperframeContractFromSource,
   readRepoMeta,
@@ -28,10 +29,14 @@ import {
   canvasTheme,
   dimsFor,
   drawCaptionOverlay,
+  loadPresenterOverlay,
   renderCaptionedFrame,
+  resolveAgentLogo,
   renderHyperframeElementToRgba,
   renderHyperframeElementToPng,
+  renderPresenterFrame,
   renderSceneToPng,
+  type LoadedPresenter,
   type RenderedScene,
 } from "@agent-video/compose";
 import { probeDurationMs, synthesize } from "@agent-video/providers";
@@ -44,6 +49,7 @@ import {
   framesAudioToClip,
   type MusicMixTrack,
 } from "./ffmpeg.ts";
+import { amplitudeAt, extractAmplitudeEnvelope } from "./envelope.ts";
 import { resolveBundlePoint, resolveBundleRange, resolveBundleSpan } from "./bundle-time.ts";
 import { executeHyperframe, hyperframeThemeFromSpec } from "./hyperframe-runtime.ts";
 
@@ -67,6 +73,8 @@ export interface CompiledBundleLine {
   endMs: number;
   durationMs: number;
   ttsCached: boolean;
+  /** Normalized loudness per envelope window; present when the presenter bubble is on. */
+  envelope?: number[];
 }
 
 export interface CompiledBundleSpan {
@@ -129,6 +137,26 @@ export interface CompiledBundleAsset {
   height?: number;
 }
 
+export interface CompiledBundlePresenterImage {
+  src: string;
+  path: string;
+  bytes: number;
+  sha256: string;
+  width?: number;
+  height?: number;
+}
+
+export interface CompiledBundlePresenter {
+  image: CompiledBundlePresenterImage;
+  /** Bundle-local badge logo, when the spec declares one. */
+  logo?: CompiledBundlePresenterImage;
+  /** Renderer-shipped mark resolved from `model` when no bundle logo is set. */
+  builtinLogo?: string;
+  model?: string;
+  position: NonNullable<BundleSpec["meta"]["presenter"]>["position"];
+  size: NonNullable<BundleSpec["meta"]["presenter"]>["size"];
+}
+
 export interface CompiledBundleMusic {
   id: string;
   asset: string;
@@ -161,6 +189,7 @@ export interface CompiledBundlePlan {
     aspectRatios: AspectRatio[];
     theme?: BundleSpec["meta"]["theme"];
     resolvedTheme: ResolvedBundleTheme;
+    presenter?: CompiledBundlePresenter;
     durationMs: number;
     sceneCount: number;
   };
@@ -182,6 +211,8 @@ export interface BundleCompileRuntime {
   lineAudio: Map<string, string>;
   assetPaths: Map<string, string>;
   assetData: Map<string, unknown>;
+  /** Preloaded presenter bubble images; absent when the presenter is off. */
+  presenter?: LoadedPresenter;
 }
 
 export interface BundleVisualMoment {
@@ -517,6 +548,53 @@ export async function compileBundle(
     }
   }
 
+  let presenter: CompiledBundlePresenter | undefined;
+  let loadedPresenter: LoadedPresenter | undefined;
+  if (spec.meta.presenter?.enabled) {
+    const presenterSpec = spec.meta.presenter;
+    const compilePresenterImage = async (field: string, src: string): Promise<CompiledBundlePresenterImage> => {
+      try {
+        const safe = bundlePresenterImageFile(bundleDir, src);
+        const info = await probeImageInfo(safe.path);
+        return {
+          src,
+          path: rel(bundleDir, safe.path),
+          bytes: safe.bytes,
+          sha256: sha256(readFileSync(safe.path)),
+          width: info?.width,
+          height: info?.height,
+        };
+      } catch (e) {
+        throw new BundleCompileError(
+          [
+            compileError(
+              "BAD_PRESENTER_IMAGE",
+              `meta.presenter.${field}`,
+              `Could not compile presenter ${field}: ${(e as Error).message}`,
+              "Use a bundle-relative image file, or set meta.presenter.enabled to false.",
+            ),
+          ],
+          warnings,
+        );
+      }
+    };
+    presenter = {
+      image: await compilePresenterImage("image", presenterSpec.image),
+      logo: presenterSpec.logo ? await compilePresenterImage("logo", presenterSpec.logo) : undefined,
+      builtinLogo: presenterSpec.logo ? undefined : resolveAgentLogo(presenterSpec.model)?.id,
+      model: presenterSpec.model,
+      position: presenterSpec.position,
+      size: presenterSpec.size,
+    };
+    loadedPresenter = await loadPresenterOverlay({
+      imagePath: resolve(bundleDir, presenter.image.path),
+      logoPath: presenter.logo ? resolve(bundleDir, presenter.logo.path) : undefined,
+      model: presenterSpec.model,
+      position: presenterSpec.position,
+      size: presenterSpec.size,
+    });
+  }
+
   const provider = spec.audio.tts.provider;
   const voice = spec.audio.tts.voice;
   const model = spec.audio.tts.model;
@@ -540,6 +618,7 @@ export async function compileBundle(
         endMs,
         durationMs: syn.durationMs,
         ttsCached: syn.cached,
+        envelope: loadedPresenter ? extractAmplitudeEnvelope(syn.wavPath) : undefined,
       });
       lineAudio.set(lineKey(scene.id, line.id), syn.wavPath);
       cursorMs = endMs;
@@ -668,6 +747,7 @@ export async function compileBundle(
       aspectRatios: spec.meta.aspectRatios,
       theme: spec.meta.theme,
       resolvedTheme: resolveBundleTheme(spec.meta.theme),
+      presenter,
       durationMs: totalMs,
       sceneCount: spec.scenes.length,
     },
@@ -693,7 +773,18 @@ export async function compileBundle(
       warnings,
     );
   }
-  return { spec, bundleDir, repoPath, lineAudio, assetPaths, assetData, plan, planPath, warnings };
+  return {
+    spec,
+    bundleDir,
+    repoPath,
+    lineAudio,
+    assetPaths,
+    assetData,
+    presenter: loadedPresenter,
+    plan,
+    planPath,
+    warnings,
+  };
 }
 
 export async function renderBundleScene(
@@ -703,6 +794,9 @@ export async function renderBundleScene(
   aspectRatio: AspectRatio,
   moment?: BundleVisualMoment,
 ): Promise<RenderedScene> {
+  const theme = hyperframeThemeFromSpec(runtime.spec);
+  // Stills always show the presenter bubble at rest (amplitude 0 = end state).
+  const presenterAtRest = runtime.presenter ? { ...runtime.presenter, amplitude: 0 } : undefined;
   if (scene.visual.kind === "hyperframe") {
     const executed = await executeHyperframe({
       scene,
@@ -714,17 +808,20 @@ export async function renderBundleScene(
     return renderHyperframeElementToPng(executed.element, {
       aspectRatio,
       activeCue: executed.activeCue,
-      theme: hyperframeThemeFromSpec(runtime.spec),
+      theme,
       watermark: "agent-video.dev",
+      presenter: presenterAtRest,
     });
   }
 
-  return renderSceneToPng(builtinToScene(scene, runtime), {
+  const rendered = await renderSceneToPng(builtinToScene(scene, runtime), {
     repoPath: runtime.repoPath,
     aspectRatio,
     watermark: "agent-video.dev",
-    theme: hyperframeThemeFromSpec(runtime.spec),
+    theme,
   });
+  if (!presenterAtRest) return rendered;
+  return { ...rendered, png: await renderPresenterFrame(rendered.png, aspectRatio, presenterAtRest, theme) };
 }
 
 function srtStamp(ms: number): string {
@@ -888,6 +985,9 @@ export async function renderBundle(
                     lineMs: timeMs - line.startMs,
                     fps,
                   },
+                  presenter: compiled.presenter
+                    ? { ...compiled.presenter, amplitude: amplitudeAt(line.envelope, timeMs - line.startMs) }
+                    : undefined,
                   drawOverlay: burnInCaptions
                     ? (frameCtx, frameDims) => drawCaptionOverlay(frameCtx, frameDims, line.text, captionTheme)
                     : undefined,
@@ -954,6 +1054,8 @@ export async function renderBundle(
                     lineMs: timeMs - lastLine.startMs,
                     fps,
                   },
+                  // No narration during the hold: the bubble rests.
+                  presenter: compiled.presenter ? { ...compiled.presenter, amplitude: 0 } : undefined,
                 });
                 return frame.rgba;
               },

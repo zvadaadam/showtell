@@ -83,6 +83,16 @@ Do not use Tailwind-style `className` strings or CSS font stacks in hyperframes.
 `Stage tone` is a local treatment hint, not the video palette selector; use
 `meta.theme.preset` for light/dark/neutral.
 
+Add a presenter bubble by default when the video speaks for a person:
+`meta.presenter` with `image` (their avatar, bundle-relative path) and `model`
+(who authored the video — `"Claude"`, `"Codex"`, `"Gemini"`, … resolves the
+badge mark shipped inside the renderer; no logo files to copy). Use
+`meta.presenter.logo` only to override with a bundle-local image. The renderer
+keeps the bubble on every frame — top-right on 16:9, top-center on 9:16 — and
+pulses its accent ring with the real narration loudness. It is renderer-owned
+chrome: never rebuild it inside a hyperframe. Set `"enabled": false` (or omit
+the block) to turn it off.
+
 For hyperframes, declare resource ports once in the hyperframe module's literal
 `inputs` object. In `spec.json`, use `visual.inputs` only to map those ports to
 scene refs, bundle assets, named ranges, or direct time refs such as `line:l2`.
