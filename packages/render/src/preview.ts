@@ -1,5 +1,5 @@
 /**
- * Local watch server — the "npx serve" of agent-video bundles. Serves the built
+ * Local watch server — the "npx serve" of showtell bundles. Serves the built
  * web player (a static SPA) at `/`, plus the rendered bundle (manifest.json +
  * mp4s + thumbnails) at `/bundle/*`. The agent hands back a live URL, not a file.
  *

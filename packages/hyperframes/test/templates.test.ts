@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadHyperframeContractFromSource } from "@agent-video/core";
+import { loadHyperframeContractFromSource } from "@showtell/core";
 import { DecisionGrid, PhaseBanner, h, hyperframeComponents, hyperframeTemplates } from "../src/index.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");

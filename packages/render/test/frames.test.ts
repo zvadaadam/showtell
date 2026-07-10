@@ -3,10 +3,10 @@ import { readFileSync, rmSync, existsSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { VideoSpec } from "@agent-video/core";
+import type { VideoSpec } from "@showtell/core";
 import { renderFrames } from "../src/index.ts";
 
-const outDir = join(tmpdir(), "agent-video-test-frames");
+const outDir = join(tmpdir(), "showtell-test-frames");
 
 const spec: VideoSpec = {
   meta: { title: "t", fps: 30, aspectRatios: ["16:9", "9:16"], watermark: true, repo: { path: "." } },

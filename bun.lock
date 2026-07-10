@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "agent-video",
+      "name": "showtell",
       "devDependencies": {
         "@types/bun": "1.3.14",
         "lefthook": "2.1.9",
@@ -14,28 +14,28 @@
       },
     },
     "packages/capture": {
-      "name": "@agent-video/capture",
+      "name": "@showtell/capture",
       "version": "0.0.0",
     },
     "packages/cli": {
-      "name": "@agent-video/cli",
+      "name": "@showtell/cli",
       "version": "0.0.0",
       "bin": {
-        "agent-video": "./src/index.ts",
+        "showtell": "./src/index.ts",
       },
       "dependencies": {
-        "@agent-video/capture": "workspace:*",
-        "@agent-video/core": "workspace:*",
-        "@agent-video/hyperframes": "workspace:*",
-        "@agent-video/render": "workspace:*",
+        "@showtell/capture": "workspace:*",
+        "@showtell/core": "workspace:*",
+        "@showtell/hyperframes": "workspace:*",
+        "@showtell/render": "workspace:*",
       },
     },
     "packages/compose": {
-      "name": "@agent-video/compose",
+      "name": "@showtell/compose",
       "version": "0.0.0",
       "dependencies": {
-        "@agent-video/core": "workspace:*",
-        "@agent-video/hyperframes": "workspace:*",
+        "@showtell/core": "workspace:*",
+        "@showtell/hyperframes": "workspace:*",
         "@fontsource/inter": "5.2.8",
         "@fontsource/jetbrains-mono": "5.2.8",
         "@fontsource/noto-sans-math": "^5.2.9",
@@ -44,7 +44,7 @@
       },
     },
     "packages/core": {
-      "name": "@agent-video/core",
+      "name": "@showtell/core",
       "version": "0.0.0",
       "dependencies": {
         "typescript": "5.9.3",
@@ -53,13 +53,13 @@
       },
     },
     "packages/hyperframes": {
-      "name": "@agent-video/hyperframes",
+      "name": "@showtell/hyperframes",
       "version": "0.0.0",
     },
     "packages/player": {
-      "name": "@agent-video/player",
+      "name": "@showtell/player",
       "dependencies": {
-        "@agent-video/core": "workspace:*",
+        "@showtell/core": "workspace:*",
         "@tailwindcss/vite": "^4.1.18",
         "@tanstack/react-devtools": "latest",
         "@tanstack/react-router": "latest",
@@ -94,39 +94,39 @@
       },
     },
     "packages/providers": {
-      "name": "@agent-video/providers",
+      "name": "@showtell/providers",
       "version": "0.0.0",
     },
     "packages/render": {
-      "name": "@agent-video/render",
+      "name": "@showtell/render",
       "version": "0.0.0",
       "dependencies": {
-        "@agent-video/capture": "workspace:*",
-        "@agent-video/compose": "workspace:*",
-        "@agent-video/core": "workspace:*",
-        "@agent-video/hyperframes": "workspace:*",
-        "@agent-video/providers": "workspace:*",
+        "@showtell/capture": "workspace:*",
+        "@showtell/compose": "workspace:*",
+        "@showtell/core": "workspace:*",
+        "@showtell/hyperframes": "workspace:*",
+        "@showtell/providers": "workspace:*",
       },
     },
   },
   "packages": {
     "@acemir/cssom": ["@acemir/cssom@0.9.31", "", {}, "sha512-ZnR3GSaH+/vJ0YlHau21FjfLYjMpYVIzTD8M8vIEQvIGxeOXyXdzCI140rrCY862p/C/BbzWsjc1dgnM9mkoTA=="],
 
-    "@agent-video/capture": ["@agent-video/capture@workspace:packages/capture"],
+    "@showtell/capture": ["@showtell/capture@workspace:packages/capture"],
 
-    "@agent-video/cli": ["@agent-video/cli@workspace:packages/cli"],
+    "@showtell/cli": ["@showtell/cli@workspace:packages/cli"],
 
-    "@agent-video/compose": ["@agent-video/compose@workspace:packages/compose"],
+    "@showtell/compose": ["@showtell/compose@workspace:packages/compose"],
 
-    "@agent-video/core": ["@agent-video/core@workspace:packages/core"],
+    "@showtell/core": ["@showtell/core@workspace:packages/core"],
 
-    "@agent-video/hyperframes": ["@agent-video/hyperframes@workspace:packages/hyperframes"],
+    "@showtell/hyperframes": ["@showtell/hyperframes@workspace:packages/hyperframes"],
 
-    "@agent-video/player": ["@agent-video/player@workspace:packages/player"],
+    "@showtell/player": ["@showtell/player@workspace:packages/player"],
 
-    "@agent-video/providers": ["@agent-video/providers@workspace:packages/providers"],
+    "@showtell/providers": ["@showtell/providers@workspace:packages/providers"],
 
-    "@agent-video/render": ["@agent-video/render@workspace:packages/render"],
+    "@showtell/render": ["@showtell/render@workspace:packages/render"],
 
     "@asamuzakjp/css-color": ["@asamuzakjp/css-color@5.1.11", "", { "dependencies": { "@asamuzakjp/generational-cache": "^1.0.1", "@csstools/css-calc": "^3.2.0", "@csstools/css-color-parser": "^4.1.0", "@csstools/css-parser-algorithms": "^4.0.0", "@csstools/css-tokenizer": "^4.0.0" } }, "sha512-KVw6qIiCTUQhByfTd78h2yD1/00waTmm9uy/R7Ck/ctUyAPj+AEDLkQIdJW0T8+qGgj3j5bpNKK7Q3G+LedJWg=="],
 
@@ -944,7 +944,7 @@
 
     "zwitch": ["zwitch@2.0.4", "", {}, "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A=="],
 
-    "@agent-video/player/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
+    "@showtell/player/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@babel/helper-compilation-targets/lru-cache": ["lru-cache@5.1.1", "", { "dependencies": { "yallist": "^3.0.2" } }, "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w=="],
 

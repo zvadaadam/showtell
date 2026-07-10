@@ -54,7 +54,7 @@ export function ensureFonts(): void {
   }
   if (missed.length > 0) {
     process.stderr.write(
-      `[agent-video] WARNING: could not register pinned font(s): ${missed.join(", ")}. ` +
+      `[showtell] WARNING: could not register pinned font(s): ${missed.join(", ")}. ` +
         `Renders will use a fallback face — this is a packaging bug.\n`,
     );
   }

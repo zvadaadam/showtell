@@ -115,7 +115,7 @@ export function analyzeCaptureWorkflow(opts: {
     return {
       ok: false,
       error: "Missing capture source.",
-      hint: "Pass sourcePath, or pass id/sessionId for a capture already imported into .agent-video/captures.",
+      hint: "Pass sourcePath, or pass id/sessionId for a capture already imported into .showtell/captures.",
     };
   }
   const result = analyzeVisualActivity({

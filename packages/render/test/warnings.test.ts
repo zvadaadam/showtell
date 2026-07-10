@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { VideoSpec } from "@agent-video/core";
+import type { VideoSpec } from "@showtell/core";
 import { renderVideo } from "../src/index.ts";
 
 let repo: string;

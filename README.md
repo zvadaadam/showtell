@@ -1,172 +1,190 @@
-# agent-video
+# Showtell
 
-**Loom for agents** — a local, repo-aware video renderer. Instead of writing you an
-answer, a coding agent makes you a short **narrated video**. Because it runs locally,
-it reads your real `git diff`, files at `file:line`, and a running app — so the code on
-screen is always your actual code, not a paraphrase.
+**Agents don't just tell. They show.**
 
-```
-spec.json  ──▶  agent-video render  ──▶  out-16x9.mp4 + out-9x16.mp4
-(scenes +        (deterministic:           (narrated, watermarked)
- narration)       refs → live bytes →
-                  TTS → ffmpeg)
-```
+Showtell is an open-source motion engine for videos made by agents, for humans.
+An agent writes a small spec—or a richer bundle with programmable
+hyperframes—and Showtell renders a polished, narrated MP4.
 
-For great videos, use a bundle: a directory with `spec.json`,
-agent-authored `hyperframes/*.tsx`, declared assets, and a renderer-emitted
-`compiled-plan.json`. For quick videos, the CLI can also render a single
-`spec.json` with built-in visuals. See
-[docs/bundle-v2.md](docs/bundle-v2.md) and [examples/bundle-v2](examples/bundle-v2).
+It is designed for agent-made explainers, PR walkthroughs, product demos,
+release recaps, lessons, reports, and visual stories. Code and diff scenes point
+to real files and Git refs, so Showtell reads the live source instead of asking
+an agent to paste it into a video.
 
-## Install (macOS)
+## Install
+
+Showtell supports Apple Silicon macOS and glibc-based Linux on x64 or ARM64.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zvadaadam/agent-video/main/scripts/install.sh | sh
-brew install ffmpeg   # required for rendering
-agent-video version   # verify
+brew install ffmpeg
+npm install --global showtell
+showtell version
 ```
 
-The installer downloads the release binary (checksum-verified), installs
-it to `~/.local/bin`, and drops the **agent-video skill** into
-`~/.claude/skills/` so Claude Code can make videos immediately. macOS is the
-supported platform for v0.x: narration uses the local `say` engine by default
-(no API key needed); set `audio.tts.provider` to `"openai"`/`"elevenlabs"` for
-premium voices. Releases and checksums: [GitHub Releases](https://github.com/zvadaadam/agent-video/releases).
-Maintainers cut a release by bumping the version and pushing a `v*` tag
-(`bun scripts/build-release.ts` builds the same artifacts locally). An npm
-package (`bunx agent-video`) is planned once the package name is settled — the
-CLI manifest is already publish-shaped.
-
-## Development quickstart
-
-Prereqs: [bun](https://bun.sh), [ffmpeg](https://ffmpeg.org) (`brew install ffmpeg`), and Git 2.24+.
+On Ubuntu or Debian:
 
 ```bash
-bun install
-bun run build:cli                 # → ./dist/agent-video (a standalone binary)
-
-./dist/agent-video validate examples/how-it-works.spec.json
-./dist/agent-video render   examples/how-it-works.spec.json --out .agent-video/out
-./dist/agent-video preview  examples/how-it-works.spec.json   # serves a local watch page
-
-./dist/agent-video bundle validate examples/bundle-v2
-./dist/agent-video bundle inspect  examples/bundle-v2
-./dist/agent-video bundle components
-./dist/agent-video bundle templates
-./dist/agent-video bundle compile  examples/bundle-v2
-./dist/agent-video bundle render   examples/bundle-v2 --out .agent-video/bundle-v2 --aspect 16:9,9:16
+sudo apt-get update
+sudo apt-get install -y ffmpeg espeak-ng
+npm install --global showtell
+showtell version
 ```
 
-During development you can skip the build and run the CLI directly: `bun packages/cli/src/index.ts <cmd>`.
+You can also run it without installing globally:
 
-## The Authoring Rule
+```bash
+npx showtell help
+```
 
-The agent authors intent and visuals, never execution machinery. In a simple
-`spec.json`, that means scenes with narration and built-in visuals. In a bundle,
-that means `spec.json` plus deterministic hyperframes. The agent **never**
-writes ffmpeg, frame math, pasted source code, or `compiled-plan.json`.
-`code`/`diff` visuals carry **references** (`file`, `lineStart`/`lineEnd`, git
-`ref`); the renderer reads the live bytes, so the code is always ground-truth.
+The npm package selects one self-contained Bun-compiled binary for your
+platform. You do not need Bun installed to run it.
 
-```jsonc
+## Let an agent use it
+
+Install the bundled Showtell skill for your coding agent, then ask naturally:
+
+> Make me a showtell of this PR.
+
+> Turn this architecture into a two-minute narrated video.
+
+> Create a launch video from the changes on this branch.
+
+The skill teaches the agent to gather source material, author the spec, review
+stills, and render the final video:
+
+```bash
+showtell skill install
+```
+
+For Codex, choose its skill directory explicitly:
+
+```bash
+showtell skill install --dir ~/.codex/skills
+```
+
+## Make your first showtell
+
+Create `hello.spec.json`:
+
+```json
 {
-  "meta": { "title": "PR: idempotency keys", "aspectRatios": ["16:9", "9:16"], "repo": { "path": "." } },
+  "meta": {
+    "title": "What changed",
+    "aspectRatios": ["16:9"],
+    "repo": { "path": "." }
+  },
   "scenes": [
     {
       "kind": "title",
-      "content": { "heading": "Idempotency keys" },
-      "narration": "This PR makes the webhook safe to retry.",
-      "duration": "auto",
+      "content": { "heading": "What changed" },
+      "narration": "Here is the short version of this change.",
+      "duration": "auto"
     },
     {
-      "kind": "diff",
-      "content": { "file": "src/webhook.ts", "ref": "main..HEAD" },
-      "narration": "We check the key before processing.",
-      "duration": "auto",
-    },
-  ],
+      "kind": "code",
+      "content": {
+        "file": "README.md",
+        "lineStart": 1,
+        "lineEnd": 18,
+        "focus": [1]
+      },
+      "narration": "The project introduces itself right here.",
+      "duration": "auto"
+    }
+  ]
 }
 ```
 
-Built-in visuals cover **title · code · diff · talking-points · chart · screencap**.
-Every scene has `narration` + `"duration": "auto"` (length derived from the
-spoken audio). Run `agent-video schema` for the simple spec contract.
-
-## Two modes
-
-- **Compose** (Mode B) — the renderer draws scenes (code, diffs, charts, titles) from your
-  repo, assets, and hyperframe primitives. Deterministic: same spec → same mp4.
-- **Capture** (Mode A) — a `screencap` scene composites a real screen recording, for
-  showing a running app or demo. `playback.mode: "smart"` removes visually idle time
-  from any recording, and uses click/type/scroll/navigate events when available for
-  better presentation. Wrapped external CLI actions record a start/end event window;
-  smart playback aligns that cue to visual activity so delayed tool dispatch does not
-  highlight stale frames. Landscape/desktop captures use ScreenStudio-style camera
-  follow by default; portrait/mobile captures stay full-frame and show tap/type
-  feedback instead.
+Validate it, review fast stills, then render:
 
 ```bash
-agent-video capture start-external ./demo.webm --id demo -- agent-browser record start ./demo.webm
-agent-video capture exec --id demo -- agent-browser click @submit
-agent-video capture exec --id demo -- agent-browser type @email "dev@example.com"
-agent-video capture stop-external --id demo -- agent-browser record stop
-agent-video capture analyze --id demo
+showtell validate hello.spec.json
+showtell render hello.spec.json --frames-only --out .showtell/frames
+showtell render hello.spec.json --out .showtell/out
 ```
 
-```jsonc
-{
-  "kind": "screencap",
-  "content": {
-    "source": "browser",
-    "sessionRef": "demo",
-    "playback": { "mode": "smart", "camera": "auto", "actionEffects": "auto" },
-  },
-  "narration": "Here is the useful interaction without the dead air.",
-  "duration": "auto",
-}
+Showtell emits structured JSON, including output paths and actionable `hint`
+fields when something needs fixing.
+
+## Simple specs and full bundles
+
+For a quick video, use one `spec.json` with built-in visuals:
+
+- `title`
+- `code`
+- `diff`
+- `talking-points`
+- `chart`
+- `screencap`
+
+For a richer video, use a Showtell bundle:
+
+```text
+my-video.showtell/
+  spec.json
+  hyperframes/*.tsx
+  assets/**
+  compiled-plan.json  # generated by Showtell
 ```
 
-## For agents
-
-agent-video is built to be driven by a coding agent: the `agent-video` CLI is
-agent-first — structured JSON output, actionable errors with a `hint`, and
-self-describing `--help`. The [`skills/agent-video`](skills/agent-video/SKILL.md)
-skill teaches an agent the workflow (gather `git diff` → author `spec.json` →
-validate → render → report).
-
-For richer videos, bundle v2 keeps the agent as the director. The agent writes
-narration, refs, assets, music/caption policy, and hyperframe code; the
-renderer validates, measures, compiles exact timings, renders, and muxes. This
-avoids a giant hand-timed JSON timeline while still giving agents a path to
-custom line-state changes and layouts. Reuse starts with hyperframe components
-from `agent-video bundle components`; templates are complete examples, not the
-main abstraction.
-
-## Packages
-
-| Package                               | Role                                                 |
-| ------------------------------------- | ---------------------------------------------------- |
-| [`core`](packages/core)               | spec types + JSON Schema + git/diff resolver         |
-| [`compose`](packages/compose)         | Mode B: built-in visuals + hyperframe primitives     |
-| [`capture`](packages/capture)         | Mode A: screen recordings → directed screencap clips |
-| [`hyperframes`](packages/hyperframes) | typed authoring kit + reusable components            |
-| [`providers`](packages/providers)     | TTS gateway (narration audio)                        |
-| [`render`](packages/render)           | orchestrator: spec → mp4 (two-pass) + local preview  |
-| [`cli`](packages/cli)                 | the `agent-video` binary                             |
-
-## Development
+Hyperframes are deterministic visual programs. They let an agent choreograph
+code, data, maps, screenshots, captions, diagrams, and animation against the
+narration without manually calculating frames or writing ffmpeg commands.
 
 ```bash
-bun run lint          # oxlint
-bun run format        # prettier
-bun run typecheck     # tsc --noEmit
-bun test              # bun test
-bun packages/cli/src/index.ts eval   # deterministic end-to-end self-test
+showtell bundle components
+showtell bundle themes
+showtell bundle validate my-video.showtell
+showtell bundle workshop my-video.showtell --out .showtell/workshop
+showtell bundle render my-video.showtell --out .showtell/out --aspect 16:9,9:16
 ```
 
-A lefthook pre-commit hook runs lint + format + typecheck. CI runs the full suite on macOS.
+See the [bundle authoring guide](docs/bundle-v2.md) and the
+[complete example](examples/bundle-v2).
+
+## How it stays in sync
+
+Narration uses `"duration": "auto"`. Showtell first synthesizes and measures the
+spoken audio, then lays out the visual timeline against that measured duration.
+The same input produces the same frames, and narration is cached per line.
+
+Local narration works without an API key through macOS `say` or Linux
+`espeak-ng`. OpenAI, Replicate, and ElevenLabs voices are also supported through
+environment credentials.
+
+## Useful commands
+
+```bash
+showtell help
+showtell schema
+showtell validate <spec.json>
+showtell render <spec.json> --out <dir>
+showtell preview <spec.json>
+showtell bundle inspect <bundle-dir>
+showtell bundle workshop <bundle-dir>
+showtell bundle render <bundle-dir> --out <dir>
+showtell capture analyze --id <capture-id>
+```
+
+Every command is non-interactive, flag-driven, and agent-readable. Run
+`showtell help` for examples and the complete command surface.
+
+## Requirements and current limits
+
+- Apple Silicon macOS, or glibc-based Linux on x64/ARM64
+- `ffmpeg`
+- `espeak-ng` on Linux when using the default local narration provider
+- Git 2.24 or newer for repository references
+- Screen Recording permission only when capturing on macOS
+
+Rendering existing screenshots and screencap files works on Linux. Recording a
+new screen session remains macOS-only in `0.1.0`.
+
+## Build from source
+
+Contributors can find the short setup and verification guide in
+[docs/development.md](docs/development.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Portions of `packages/capture` are adapted from
-[@deus/screen-studio](https://github.com/) (MIT).
+MIT. See [LICENSE](LICENSE).

@@ -1,7 +1,7 @@
 {
   "$schema": "../packages/core/schema.json",
   "meta": {
-    "title": "agent-video — golden walkthrough",
+    "title": "showtell — golden walkthrough",
     "aspectRatios": ["16:9", "9:16"],
     "tts": { "provider": "say" },
     "repo": { "path": ".", "baseRef": "main", "headRef": "HEAD" }
@@ -9,8 +9,8 @@
   "scenes": [
     {
       "kind": "title",
-      "content": { "heading": "agent-video", "subtitle": "A repo-aware walkthrough, rendered locally" },
-      "narration": "Here's a quick tour of agent-video — every scene kind, rendered from this real repository.",
+      "content": { "heading": "showtell", "subtitle": "A repo-aware walkthrough, rendered locally" },
+      "narration": "Here's a quick tour of showtell — every scene kind, rendered from this real repository.",
       "duration": "auto"
     },
     {

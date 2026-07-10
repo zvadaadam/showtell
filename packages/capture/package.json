@@ -1,5 +1,5 @@
 {
-  "name": "@agent-video/capture",
+  "name": "@showtell/capture",
   "version": "0.1.0",
   "private": true,
   "type": "module",

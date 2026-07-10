@@ -109,7 +109,7 @@ test("renderBundle animates hyperframe scenes deterministically", async () => {
   writeFileSync(
     join(dir, "hyperframes", "journey.tsx"),
     `/* @jsx h */
-import { Stage, Stack, CaptionSafeArea, PhaseBanner, TravelPath, h, defineHyperframe, type HyperframeContext, type JsonSchema } from "@agent-video/hyperframes";
+import { Stage, Stack, CaptionSafeArea, PhaseBanner, TravelPath, h, defineHyperframe, type HyperframeContext, type JsonSchema } from "@showtell/hyperframes";
 const propsSchema: JsonSchema = { type: "object", additionalProperties: false, required: ["title"], properties: { title: { type: "string" } } };
 const inputs = { flight: { kind: "range" } } as const;
 function render(ctx: HyperframeContext<{ title: string }>) {
@@ -263,7 +263,7 @@ test("changing only the hyperframe render body changes rendered frames", async (
   const source = (label: string) =>
     [
       "/* @jsx h */",
-      'import { type HyperframeContext, type JsonSchema, Stage, Text, h, defineHyperframe } from "@agent-video/hyperframes";',
+      'import { type HyperframeContext, type JsonSchema, Stage, Text, h, defineHyperframe } from "@showtell/hyperframes";',
       "interface Props { title: string }",
       'const propsSchema: JsonSchema = { type: "object", additionalProperties: false, required: ["title"], properties: { title: { type: "string" } } };',
       "const inputs = {};",
@@ -328,7 +328,7 @@ test("renderBundle reports every repo ref drawn in a hyperframe frame", async ()
     join(dir, "hyperframes", "multi.tsx"),
     [
       "/* @jsx h */",
-      'import { CodeRef, DiffRef, Grid, Stage, h, defineHyperframe } from "@agent-video/hyperframes";',
+      'import { CodeRef, DiffRef, Grid, Stage, h, defineHyperframe } from "@showtell/hyperframes";',
       'const propsSchema = { type: "object", properties: {} };',
       'const inputs = { code: { kind: "repo", refKind: "code" }, diff: { kind: "repo", refKind: "diff" } };',
       "function render(ctx) {",
@@ -374,7 +374,7 @@ test("renderBundle renders component-kit hyperframes without media primitives", 
   mkdirSync(join(dir, "hyperframes"), { recursive: true });
   const source = [
     "/* @jsx h */",
-    'import { CaptionSafeArea, DecisionGrid, PhaseBanner, SignalWall, Stack, Stage, StatusRail, h, defineHyperframe } from "@agent-video/hyperframes";',
+    'import { CaptionSafeArea, DecisionGrid, PhaseBanner, SignalWall, Stack, Stage, StatusRail, h, defineHyperframe } from "@showtell/hyperframes";',
     'const propsSchema = { type: "object", additionalProperties: false, required: ["title", "steps", "options", "signals"], properties: { title: { type: "string" }, steps: { type: "array", items: { type: "string" } }, options: { type: "array", items: { type: "string" } }, signals: { type: "array", items: { type: "string" } } } };',
     "const inputs = {};",
     "function render(ctx) {",
@@ -644,7 +644,7 @@ test("renderBundle rejects unknown ctx.range names", async () => {
     join(dir, "hyperframes", "bad-range.tsx"),
     [
       "/* @jsx h */",
-      'import { Stage, Text, h, defineHyperframe } from "@agent-video/hyperframes";',
+      'import { Stage, Text, h, defineHyperframe } from "@showtell/hyperframes";',
       'const propsSchema = { type: "object", properties: {} };',
       "const inputs = {};",
       "function render(ctx) {",

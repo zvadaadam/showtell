@@ -1,5 +1,5 @@
-import type { BundleScene, BundleTimeSpanValue } from "@agent-video/core";
-import { parseBundleTimePointRef, parseBundleTimeSpanRef } from "@agent-video/core";
+import type { BundleScene, BundleTimeSpanValue } from "@showtell/core";
+import { parseBundleTimePointRef, parseBundleTimeSpanRef } from "@showtell/core";
 import type { CompiledBundleScene, CompiledBundleSpan } from "./bundle.ts";
 
 interface BundleTimeResolveState {

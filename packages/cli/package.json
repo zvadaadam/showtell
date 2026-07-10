@@ -1,29 +1,30 @@
 {
-  "name": "@agent-video/cli",
+  "name": "@showtell/cli",
   "version": "0.1.0",
   "type": "module",
-  "description": "Loom for agents — a local, repo-aware video renderer CLI. Agents author spec.json + hyperframes; the renderer produces narrated MP4s.",
+  "description": "Open-source motion engine for videos made by agents, for humans.",
   "license": "MIT",
   "bin": {
-    "agent-video": "./src/index.ts"
+    "showtell": "./src/index.ts"
   },
   "dependencies": {
-    "@agent-video/capture": "workspace:*",
-    "@agent-video/core": "workspace:*",
-    "@agent-video/hyperframes": "workspace:*",
-    "@agent-video/render": "workspace:*"
+    "@showtell/capture": "workspace:*",
+    "@showtell/core": "workspace:*",
+    "@showtell/hyperframes": "workspace:*",
+    "@showtell/render": "workspace:*"
   },
-  "homepage": "https://agent-video.dev",
+  "homepage": "https://github.com/zvadaadam/showtell#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zvadaadam/agent-video.git",
+    "url": "git+https://github.com/zvadaadam/showtell.git",
     "directory": "packages/cli"
   },
   "engines": {
     "bun": ">=1.2.0"
   },
   "os": [
-    "darwin"
+    "darwin",
+    "linux"
   ],
   "files": [
     "src"
@@ -34,6 +35,6 @@
     "renderer",
     "cli",
     "ai",
-    "loom"
+    "hyperframes"
   ]
 }

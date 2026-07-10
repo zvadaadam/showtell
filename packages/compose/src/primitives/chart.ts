@@ -1,5 +1,5 @@
 import type { SKRSContext2D } from "@napi-rs/canvas";
-import type { ChartScene } from "@agent-video/core";
+import type { ChartScene } from "@showtell/core";
 import { THEME, type CanvasTheme } from "../theme.ts";
 import type { Dims } from "../dims.ts";
 import { roundRect } from "../draw.ts";

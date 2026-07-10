@@ -2,14 +2,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { dimsFor, renderHyperframeElementToPng } from "@agent-video/compose";
+import { dimsFor, renderHyperframeElementToPng } from "@showtell/compose";
 import {
   resolveBundleTheme,
   themePresetManifest,
   type AspectRatio,
   type BundleError,
   type BundleThemePreset,
-} from "@agent-video/core";
+} from "@showtell/core";
 import {
   Badge,
   Callout,
@@ -44,7 +44,7 @@ import {
   type ResolvedAsset,
   type ResolvedCode,
   type ResolvedDiff,
-} from "@agent-video/hyperframes";
+} from "@showtell/hyperframes";
 import { addUniqueWarning, compileBundle, lineMoment, renderBundleScene } from "./bundle.ts";
 import { serveStaticFile } from "./static-server.ts";
 
@@ -743,7 +743,7 @@ export async function renderWorkshop(
     aspectRatios?: AspectRatio[];
   } = {},
 ): Promise<WorkshopRenderResult> {
-  const outDir = resolve(opts.outDir ?? ".agent-video/workshop");
+  const outDir = resolve(opts.outDir ?? ".showtell/workshop");
   const ratios = opts.aspectRatios ?? DEFAULT_ASPECTS;
   mkdirSync(outDir, { recursive: true });
   const assetPath = writeWorkshopImageAsset(outDir);

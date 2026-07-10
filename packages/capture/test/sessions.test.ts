@@ -27,7 +27,7 @@ test("resolveSession refuses to escape the captures sandbox", () => {
 
 test("sessionPath confines to the captures dir", () => {
   const p = sessionPath("clip", "/tmp/proj");
-  expect(p).toBe("/tmp/proj/.agent-video/captures/clip.mp4");
+  expect(p).toBe("/tmp/proj/.showtell/captures/clip.mp4");
   expect(() => sessionPath("../clip")).toThrow();
 });
 

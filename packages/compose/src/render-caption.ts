@@ -1,5 +1,5 @@
 import { createCanvas, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
-import type { AspectRatio } from "@agent-video/core";
+import type { AspectRatio } from "@showtell/core";
 import { ensureFonts } from "./fonts.ts";
 import { dimsFor, type Dims } from "./dims.ts";
 import { THEME, type CanvasTheme } from "./theme.ts";

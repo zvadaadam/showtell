@@ -7,7 +7,7 @@ import {
   DETERMINISTIC_CONTAINER_ARGS,
   DETERMINISTIC_VIDEO_ARGS,
   FASTSTART_ARGS,
-} from "@agent-video/capture";
+} from "@showtell/capture";
 
 /**
  * A stream of raw RGBA frames + a narration wav → a fixed-duration mp4 clip.

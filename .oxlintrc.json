@@ -4,5 +4,5 @@
     "correctness": "error",
     "suspicious": "warn"
   },
-  "ignorePatterns": ["dist", "node_modules", ".video", ".agent-video", "packages/player"]
+  "ignorePatterns": ["dist", "node_modules", ".video", ".showtell", "packages/player"]
 }

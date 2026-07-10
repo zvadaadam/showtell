@@ -138,7 +138,7 @@ cp ${shellQuote(invalidWav)} "$out"
 
     expect(result.exitCode).toBe(1);
     expect(stderr).toContain(
-      'TTS provider "say" produced an invalid or empty wav for line "fresh invalid synthesis." - nothing was cached. Check that speech synthesis works in this environment (e.g. run: say -o /tmp/test.wav "hello").',
+      'TTS provider "say" produced an invalid or empty wav for line "fresh invalid synthesis." - nothing was cached. Check local speech synthesis (macOS: say; Linux: espeak-ng) or the selected remote provider.',
     );
     expect(existsSync(ttsCachePath(text, localCacheDir))).toBe(false);
   } finally {

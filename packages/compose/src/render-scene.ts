@@ -1,7 +1,7 @@
 /** Render a single (Mode B) scene to a PNG buffer — deterministic. */
 import { createCanvas } from "@napi-rs/canvas";
-import type { Scene, AspectRatio } from "@agent-video/core";
-import { resolveCodeRef, resolveDiff } from "@agent-video/core";
+import type { Scene, AspectRatio } from "@showtell/core";
+import { resolveCodeRef, resolveDiff } from "@showtell/core";
 import { ensureFonts } from "./fonts.ts";
 import { dimsFor } from "./dims.ts";
 import { canvasTheme, type SemanticTheme } from "./theme.ts";
@@ -19,7 +19,7 @@ export const COMPOSABLE_KINDS = ["title", "code", "diff", "talking-points", "cha
 export interface RenderSceneOpts {
   repoPath: string;
   aspectRatio: AspectRatio;
-  /** Watermark text, or false to omit (premium). Default "agent-video.dev". */
+  /** Watermark text, or false to omit (premium). Default "showtell". */
   watermark?: string | false;
   theme?: SemanticTheme;
 }
@@ -79,7 +79,7 @@ export async function renderSceneToPng(scene: Scene, opts: RenderSceneOpts): Pro
   }
 
   if (opts.watermark !== false) {
-    drawWatermark(ctx, dims, opts.watermark ?? "agent-video.dev", theme);
+    drawWatermark(ctx, dims, opts.watermark ?? "showtell", theme);
   }
 
   return {
@@ -92,7 +92,7 @@ export async function renderSceneToPng(scene: Scene, opts: RenderSceneOpts): Pro
 }
 
 /** A full-frame transparent PNG with just the watermark — to overlay on video. */
-export function renderWatermarkPng(aspectRatio: AspectRatio, text = "agent-video.dev"): Buffer {
+export function renderWatermarkPng(aspectRatio: AspectRatio, text = "showtell"): Buffer {
   ensureFonts();
   const dims = dimsFor(aspectRatio);
   const canvas = createCanvas(dims.width, dims.height);

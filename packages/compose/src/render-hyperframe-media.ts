@@ -1,12 +1,12 @@
 import { createCanvas, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
-import type { ChartScene, CodeScene, DiffScene, ResolvedCode, ResolvedDiff } from "@agent-video/core";
+import type { ChartScene, CodeScene, DiffScene, ResolvedCode, ResolvedDiff } from "@showtell/core";
 import type {
   HyperframeElement,
   HyperframeTheme,
   ResolvedAsset,
   ResolvedCode as HyperResolvedCode,
   ResolvedDiff as HyperResolvedDiff,
-} from "@agent-video/hyperframes";
+} from "@showtell/hyperframes";
 import { roundRect } from "./draw.ts";
 import type { Dims } from "./dims.ts";
 import { tokenize } from "./highlight.ts";

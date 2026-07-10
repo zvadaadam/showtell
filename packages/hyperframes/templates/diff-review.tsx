@@ -12,7 +12,7 @@ import {
   Stage,
   h,
   defineHyperframe,
-} from "@agent-video/hyperframes";
+} from "@showtell/hyperframes";
 
 interface Props {
   eyebrow?: string;

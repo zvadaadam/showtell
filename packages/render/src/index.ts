@@ -2,15 +2,15 @@
 import { mkdirSync, writeFileSync, copyFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import type { VideoSpec, AspectRatio, VideoManifest } from "@agent-video/core";
-import { buildManifest, readRepoMeta } from "@agent-video/core";
-import { renderSceneToPng, renderWatermarkPng, dimsFor, COMPOSABLE_KINDS } from "@agent-video/compose";
-import { probeDurationMs, synthesize } from "@agent-video/providers";
-import { compositeScreencap } from "@agent-video/capture";
+import type { VideoSpec, AspectRatio, VideoManifest } from "@showtell/core";
+import { buildManifest, readRepoMeta } from "@showtell/core";
+import { renderSceneToPng, renderWatermarkPng, dimsFor, COMPOSABLE_KINDS } from "@showtell/compose";
+import { probeDurationMs, synthesize } from "@showtell/providers";
+import { compositeScreencap } from "@showtell/capture";
 import { imageAudioToClip, concatClips } from "./ffmpeg.ts";
 import { prepareScreencapPresentation, type ScreencapPresentation } from "./screencap.ts";
 
-export { probeDurationMs } from "@agent-video/providers";
+export { probeDurationMs } from "@showtell/providers";
 export { startPreviewServer, resolvePlayerDist, type PreviewHandle } from "./preview.ts";
 export { compileBundle, renderBundle, BundleCompileError } from "./bundle.ts";
 export type { BundleCompileResult, BundleRenderResult, CompiledBundlePlan, CompiledBundleOutput } from "./bundle.ts";
@@ -67,7 +67,7 @@ export interface RenderFramesResult {
 function watermarkText(spec: VideoSpec): string | false {
   const w = spec.meta.watermark;
   if (w === false) return false;
-  return typeof w === "string" ? w : "agent-video.dev";
+  return typeof w === "string" ? w : "showtell";
 }
 
 /**
@@ -166,7 +166,7 @@ export async function renderVideo(
   opts: { repoPath: string; outDir: string; baseName: string; aspectRatios?: AspectRatio[]; cacheDir?: string },
 ): Promise<RenderVideoResult> {
   const ratios = opts.aspectRatios ?? spec.meta.aspectRatios;
-  const cacheDir = opts.cacheDir ?? ".agent-video/cache";
+  const cacheDir = opts.cacheDir ?? ".showtell/cache";
   const fps = spec.meta.fps;
   const provider = spec.meta.tts?.provider ?? "say";
   const voice = spec.meta.tts?.voice;

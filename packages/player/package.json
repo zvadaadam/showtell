@@ -1,5 +1,5 @@
 {
-  "name": "@agent-video/player",
+  "name": "@showtell/player",
   "private": true,
   "type": "module",
   "imports": {
@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agent-video/core": "workspace:*",
+    "@showtell/core": "workspace:*",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-router": "latest",

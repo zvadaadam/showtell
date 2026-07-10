@@ -1,8 +1,7 @@
 name: Release
 
-# Publishing is DELIBERATE: only a pushed v* tag creates a GitHub Release.
-# workflow_dispatch is a dry run — it builds and uploads the artifacts for
-# inspection without publishing anything.
+# Publishing is deliberate: only a pushed v* tag creates a GitHub Release.
+# workflow_dispatch builds and uploads every platform artifact for inspection.
 on:
   push:
     tags: ["v*"]
@@ -15,8 +14,7 @@ concurrency:
   group: release-${{ github.ref }}
 
 jobs:
-  release:
-    # macOS is the supported platform for v0.x (say TTS + AVFoundation capture).
+  gates:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,11 +27,9 @@ jobs:
       - name: Install ffmpeg
         run: brew install ffmpeg
       - run: bun install --frozen-lockfile
-      - name: Gates
-        run: |
-          bun run lint
-          bun run typecheck
-          bun test
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun test
       - name: Verify tag matches package version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -42,27 +38,81 @@ jobs:
             echo "Tag ${GITHUB_REF_NAME} does not match package.json version v$PKG_VERSION" >&2
             exit 1
           fi
-      - name: Build release artifacts
-        run: bun scripts/build-release.ts
-      - name: Smoke test the arm64 binary
+
+  native-binary:
+    needs: gates
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            target: darwin-arm64
+          - runner: ubuntu-latest
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+          no-cache: true
+      - run: bun install --frozen-lockfile
+      - name: Build native binary
+        run: bun scripts/build-npm-package.ts --target ${{ matrix.target }}
+      - name: Smoke test native binary
         run: |
-          tar -xzf dist/release/agent-video-v*-darwin-arm64.tar.gz -C dist/release
-          ./dist/release/agent-video version
-          ./dist/release/agent-video bundle components > /dev/null
-      - name: Smoke test the x64 binary (Rosetta)
+          ./dist/bin/showtell-${{ matrix.target }} version
+          ./dist/bin/showtell-${{ matrix.target }} bundle components > /dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: showtell-${{ matrix.target }}
+          path: dist/bin/showtell-${{ matrix.target }}
+          if-no-files-found: error
+
+  release:
+    needs: native-binary
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+          no-cache: true
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: showtell-*
+          path: dist/bin
+          merge-multiple: true
+      - name: Assemble release artifacts
+        run: bun scripts/build-release.ts --binary-dir dist/bin
+      - name: Smoke test the macOS archive
         run: |
-          softwareupdate --install-rosetta --agree-to-license || true
-          mkdir -p dist/release/x64
-          tar -xzf dist/release/agent-video-v*-darwin-x64.tar.gz -C dist/release/x64
-          arch -x86_64 ./dist/release/x64/agent-video version
+          mkdir -p dist/release/native-smoke
+          tar -xzf dist/release/showtell-v*-darwin-arm64.tar.gz -C dist/release/native-smoke
+          ./dist/release/native-smoke/showtell version
+          ./dist/release/native-smoke/showtell bundle components > /dev/null
+      - name: Smoke test npm platform selection
+        run: |
+          VERSION=$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')
+          mkdir -p dist/release/npm-smoke
+          npm install --prefix dist/release/npm-smoke ./dist/release/showtell-$VERSION.tgz ./dist/release/showtell-darwin-arm64-$VERSION.tgz --ignore-scripts
+          ./dist/release/npm-smoke/node_modules/.bin/showtell version
+          ./dist/release/npm-smoke/node_modules/.bin/showtell skill install --dir dist/release/npm-smoke/skills
       - name: Create GitHub release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/release/agent-video-v*-darwin-arm64.tar.gz
-            dist/release/agent-video-v*-darwin-x64.tar.gz
-            dist/release/agent-video-skill-v*.tar.gz
+            dist/release/showtell-v*.tar.gz
+            dist/release/showtell-skill-v*.tar.gz
+            dist/release/showtell-*.tgz
             dist/release/SHA256SUMS
           generate_release_notes: true
       - name: Upload artifacts (dry run)

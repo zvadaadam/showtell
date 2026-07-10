@@ -1,17 +1,16 @@
 ---
-name: agent-video
+name: showtell
 description: >-
-  Produce a short narrated VIDEO instead of a text answer — a local, repo-aware
-  walkthrough. Use when the user asks to "make a video", "record a walkthrough",
-  "explain this PR/change/codebase as a video", "demo this", or wants a shareable
-  Loom-style recap of work. Renders locally from the real repo (git diff,
-  file:line, terminal, screen capture); never uploads code.
+  Use the open-source Showtell motion engine to make videos by agents, for
+  humans. Trigger when the user asks an agent to make a video, visual explainer,
+  PR walkthrough, demo, launch recap, lesson, report, or story. Renders locally
+  from declared inputs and real repo references; never uploads source code.
 ---
 
-# agent-video
+# Showtell
 
 Turn your work into a short narrated video. You author a **`spec.json`**; the
-`agent-video` CLI renders it to an MP4 (both desktop 16:9 and mobile 9:16) and
+`showtell` CLI renders it to an MP4 (both desktop 16:9 and mobile 9:16) and
 serves a live **web player** — a watch surface with chaptered scenes, a
 click-to-seek transcript, speed control, and the repo metadata. The deliverable
 you hand back is a **running watch URL, not a file**. Because it runs locally,
@@ -44,7 +43,7 @@ hyperframes, captions around visuals, music ranges, or multiple repo/data inputs
 in one narrated chapter:
 
 ```text
-my-video.agent-video/
+my-video.showtell/
   spec.json
   hyperframes/*.tsx
   assets/**
@@ -59,7 +58,7 @@ hardcode a new renderer scene template when a smart agent can compose a one-off
 hyperframe from safe primitives. See `docs/bundle-v2.md`.
 
 Put shared video style in `meta.theme`, not scattered through component code.
-Run `agent-video bundle themes` to list the designed presets with their full
+Run `showtell bundle themes` to list the designed presets with their full
 color tokens, then pick ONE by mood — this is the main design decision and a
 single word restyles every frame, glow, chip, and chart:
 
@@ -98,8 +97,8 @@ For hyperframes, declare resource ports once in the hyperframe module's literal
 scene refs, bundle assets, named ranges, or direct time refs such as `line:l2`.
 Keep visual copy/layout settings in `visual.props`.
 
-Reusable components live in `@agent-video/hyperframes`. Run
-`agent-video bundle components` before writing a custom hyperframe. Think in
+Reusable components live in `@showtell/hyperframes`. Run
+`showtell bundle components` before writing a custom hyperframe. Think in
 three layers:
 
 - host primitives: `Stage`, `Stack`, `Grid`, `Text`, `Panel`, `Badge`, `Meter`,
@@ -131,7 +130,7 @@ JSX examples. Use those examples as the default starting point for custom
 hyperframes.
 
 Starter templates are complete examples, not the main reuse layer. Run
-`agent-video bundle templates` when a full starter is close to the story, then
+`showtell bundle templates` when a full starter is close to the story, then
 copy it into the bundle and adapt its `propsSchema`, `inputs`, and
 `render(ctx)`. Use `KineticCaption` or lower-third components for TikTok-style
 visual text. Canonical subtitles still come from exact narration text. If the
@@ -157,19 +156,19 @@ and `ctx.scene.lineId` pick the line-state visual, while `ctx.scene.progress`,
 `ctx.time`, and `ctx.range()` advance continuously for smooth motion.
 `bundle render --stills` holds one frame per line when you need a fast draft.
 Hyperframes are trusted local code with static policy lint, not a hostile-code
-sandbox: import only `@agent-video/hyperframes` and declare all
+sandbox: import only `@showtell/hyperframes` and declare all
 repo/assets/ranges in `spec.json`.
 
 Bundle commands:
 
-- `agent-video bundle schema`
-- `agent-video bundle validate <bundle-dir>`
-- `agent-video bundle inspect <bundle-dir>`
-- `agent-video bundle components`
-- `agent-video bundle templates`
-- `agent-video bundle workshop <bundle-dir> [--out DIR] [--aspect 16:9,9:16]`
-- `agent-video bundle compile <bundle-dir>`
-- `agent-video bundle render <bundle-dir> [--out DIR] [--aspect 16:9,9:16]`
+- `showtell bundle schema`
+- `showtell bundle validate <bundle-dir>`
+- `showtell bundle inspect <bundle-dir>`
+- `showtell bundle components`
+- `showtell bundle templates`
+- `showtell bundle workshop <bundle-dir> [--out DIR] [--aspect 16:9,9:16]`
+- `showtell bundle compile <bundle-dir>`
+- `showtell bundle render <bundle-dir> [--out DIR] [--aspect 16:9,9:16]`
 
 ## Workflow
 
@@ -187,21 +186,21 @@ Bundle commands:
      renderer auto-fits the font, so smaller, tighter excerpts read far better.
    - Make narration match what's on screen — don't claim something the frame
      doesn't show.
-3. **Validate**: `agent-video validate spec.json` — fix any errors (each has a `hint`).
-4. **Render**: `agent-video render spec.json --frames-only` first (fast, no
+3. **Validate**: `showtell validate spec.json` — fix any errors (each has a `hint`).
+4. **Render**: `showtell render spec.json --frames-only` first (fast, no
    audio) and **look at the PNG frames**. Fix any scene where the narration
    describes something the frame doesn't show — this is the #1 quality problem.
    In particular: `diff` shows raw diff text (not a chart); `chart` data is
    **literal numbers you supply** (the renderer does not compute git stats); a
    `code` excerpt shows only its `file:line` window. Make the words match the pixels.
-5. **Serve the player**: `agent-video preview spec.json` — renders, then serves
+5. **Serve the player**: `showtell preview spec.json` — renders, then serves
    the web player (chaptered scenes, click-to-seek transcript, speed, metadata,
    16:9/9:16) and returns a stable `watchUrl`. Build the player once first:
    `bun run build:player`.
 6. **Report**: reply with the `watchUrl` — a live local URL the user opens, **not
    a file path** — and one sentence describing the video.
 
-For bundle videos, run `agent-video bundle workshop <bundle-dir>` before the
+For bundle videos, run `showtell bundle workshop <bundle-dir>` before the
 final render when visual polish matters. It renders real scene/line/aspect PNGs
 through the same hyperframe canvas renderer, producing a static gallery that is
 much faster to review than a full MP4.
@@ -213,7 +212,7 @@ much faster to review than a full MP4.
   "meta": {
     "title": "PR #482: idempotency keys",
     "aspectRatios": ["16:9", "9:16"], // desktop, mobile, or "1:1" (default: ["16:9"])
-    "tts": { "provider": "say" }, // "say" (macOS), "openai", "replicate", or "elevenlabs" (API keys from env)
+    "tts": { "provider": "say" }, // local: macOS say or Linux espeak-ng; remote providers use environment API keys
     "repo": { "path": ".", "baseRef": "main", "headRef": "HEAD" },
   },
   "scenes": [
@@ -250,18 +249,18 @@ much faster to review than a full MP4.
 
 ## CLI (all commands emit JSON; errors carry a `hint`)
 
-- `agent-video schema` — print the full JSON Schema for `spec.json`.
-- `agent-video validate <spec.json>` — validate against the contract.
-- `agent-video render <spec.json> [--out DIR] [--aspect 16:9,9:16] [--frames-only]` — render MP4(s).
-- `agent-video preview <spec.json> [--port N]` — render + serve the web player; returns `watchUrl`. (Build the player once: `bun run build:player`.)
-- `agent-video capture [--id NAME] [--seconds N]` — record the screen (macOS) for a `screencap` scene.
-- `agent-video capture import <recording.webm|mp4> --id NAME [--events events.json]` — import an agent-browser recording.
-- `agent-video capture analyze --id NAME` — inspect visual activity before rendering smart playback.
-- `agent-video capture start-external <raw.webm|mp4> --id NAME -- <record-start command>` — track an external recorder.
-- `agent-video capture exec --id NAME -- <tool command>` — run a real CLI action and record an inferred event window when possible.
-- `agent-video capture stop-external --id NAME -- <record-stop command>` — stop tracking and import the raw recording.
-- `agent-video capture event --id NAME --type click --x N --y N --t-ms N` — append one action event for smarter camera targets.
-  Run `agent-video help` for the latest.
+- `showtell schema` — print the full JSON Schema for `spec.json`.
+- `showtell validate <spec.json>` — validate against the contract.
+- `showtell render <spec.json> [--out DIR] [--aspect 16:9,9:16] [--frames-only]` — render MP4(s).
+- `showtell preview <spec.json> [--port N]` — render + serve the web player; returns `watchUrl`. (Build the player once: `bun run build:player`.)
+- `showtell capture [--id NAME] [--seconds N]` — record the screen (macOS) for a `screencap` scene.
+- `showtell capture import <recording.webm|mp4> --id NAME [--events events.json]` — import an agent-browser recording.
+- `showtell capture analyze --id NAME` — inspect visual activity before rendering smart playback.
+- `showtell capture start-external <raw.webm|mp4> --id NAME -- <record-start command>` — track an external recorder.
+- `showtell capture exec --id NAME -- <tool command>` — run a real CLI action and record an inferred event window when possible.
+- `showtell capture stop-external --id NAME -- <record-stop command>` — stop tracking and import the raw recording.
+- `showtell capture event --id NAME --type click --x N --y N --t-ms N` — append one action event for smarter camera targets.
+  Run `showtell help` for the latest.
 
 ## Output format
 

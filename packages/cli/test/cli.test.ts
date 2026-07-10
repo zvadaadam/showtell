@@ -28,7 +28,7 @@ function run(args: string[]): { code: number; out: unknown; err: unknown } {
 function tempBundle(): string {
   const dir = mkdtempSync(join(tmpdir(), "av-cli-bundle-"));
   cpSync(join(ROOT, "examples", "bundle-v2"), dir, { recursive: true });
-  rmSync(join(dir, ".agent-video"), { recursive: true, force: true });
+  rmSync(join(dir, ".showtell"), { recursive: true, force: true });
   rmSync(join(dir, "compiled-plan.json"), { force: true });
   const specPath = join(dir, "spec.json");
   const spec = JSON.parse(readFileSync(specPath, "utf-8")) as BundleSpecForTest & { meta: { repo: { path: string } } };
@@ -41,7 +41,7 @@ function tempBundle(): string {
 function seedSayTtsCache(bundleDir: string, spec: BundleSpecForTest): void {
   const tts = spec.audio?.tts;
   if (tts?.provider && tts.provider !== "say") return;
-  const cacheDir = join(bundleDir, ".agent-video", "cache", "tts");
+  const cacheDir = join(bundleDir, ".showtell", "cache", "tts");
   mkdirSync(cacheDir, { recursive: true });
   for (const line of spec.scenes.flatMap((scene) => scene.narration.lines)) {
     const key = createHash("sha256")
@@ -70,7 +70,7 @@ function miniHyperframeBundle(): string {
     join(dir, "hyperframes", "frame.tsx"),
     [
       "/* @jsx h */",
-      'import { Stage, Text, h, defineHyperframe } from "@agent-video/hyperframes";',
+      'import { Stage, Text, h, defineHyperframe } from "@showtell/hyperframes";',
       'const propsSchema = { type: "object", additionalProperties: false, required: ["title"], properties: { title: { type: "string" } } };',
       "const inputs = {};",
       "function render(ctx) {",
@@ -105,7 +105,33 @@ test("schema → JSON Schema on stdout, exit 0", () => {
 test("version → structured JSON, exit 0", () => {
   const { code, out } = run(["version"]);
   expect(code).toBe(0);
-  expect(out).toMatchObject({ name: "agent-video" });
+  expect(out).toMatchObject({ name: "showtell" });
+});
+
+test("help and component discovery use the Showtell public surface", () => {
+  const components = run(["bundle", "components"]);
+  expect(components.code).toBe(0);
+  expect(components.out).toMatchObject({ package: "@showtell/hyperframes" });
+
+  const help = run(["help"]);
+  expect(help.code).toBe(0);
+  expect(help.out).toContain("showtell — A motion engine for agents.");
+  expect(help.out).toContain("showtell <command>");
+  expect(help.out).toContain("@showtell/hyperframes");
+  expect(help.out).toContain(".showtell/workshop");
+});
+
+test("skill install writes the bundled Showtell skill idempotently", () => {
+  const dir = mkdtempSync(join(tmpdir(), "showtell-skill-"));
+  const first = run(["skill", "install", "--dir", dir]);
+  expect(first.code).toBe(0);
+  expect(first.out).toMatchObject({ ok: true, stage: "skill-install" });
+  const skillPath = join(dir, "showtell", "SKILL.md");
+  expect(readFileSync(skillPath, "utf-8")).toContain("name: showtell");
+
+  const second = run(["skill", "install", "--dir", dir]);
+  expect(second.code).toBe(0);
+  expect(readFileSync(skillPath, "utf-8")).toContain("# Showtell");
 });
 
 test("validate a good spec → ok:true, exit 0", () => {
@@ -173,7 +199,7 @@ test("bundle templates → reusable hyperframe starter list", () => {
     package: string;
     templates: { id: string; path: string; visualCaption?: boolean }[];
   };
-  expect(o).toMatchObject({ ok: true, stage: "bundle-templates", package: "@agent-video/hyperframes" });
+  expect(o).toMatchObject({ ok: true, stage: "bundle-templates", package: "@showtell/hyperframes" });
   expect(o.templates.map((template) => template.id)).toContain("code-kinetic-caption");
   expect(o.templates.some((template) => template.visualCaption)).toBe(true);
 });
@@ -187,7 +213,7 @@ test("bundle components → reusable hyperframe component kit", () => {
     package: string;
     components: { importName: string; layer: string }[];
   };
-  expect(o).toMatchObject({ ok: true, stage: "bundle-components", package: "@agent-video/hyperframes" });
+  expect(o).toMatchObject({ ok: true, stage: "bundle-components", package: "@showtell/hyperframes" });
   expect(o.components).toContainEqual(expect.objectContaining({ importName: "DecisionGrid", layer: "story" }));
   expect(o.components).toContainEqual(expect.objectContaining({ importName: "CodeRef", layer: "media" }));
 });

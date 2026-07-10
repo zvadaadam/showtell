@@ -1,6 +1,6 @@
 /** Leaf hyperframe atoms: text, lower third, callout, badge, divider, meter. */
 import type { SKRSContext2D } from "@napi-rs/canvas";
-import type { HyperframeElement } from "@agent-video/hyperframes";
+import type { HyperframeElement } from "@showtell/hyperframes";
 import { roundRect, wrapText } from "../draw.ts";
 import { propsOf, type Box } from "../render-hyperframe-shared.ts";
 import { elementChildren, textContent } from "./element.ts";

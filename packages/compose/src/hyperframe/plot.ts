@@ -1,6 +1,6 @@
 /** Education primitives: FunctionPlot (numeric x/y curves) and Formula (display equations). */
 import { Path2D, type SKRSContext2D } from "@napi-rs/canvas";
-import type { HyperframeElement } from "@agent-video/hyperframes";
+import type { HyperframeElement } from "@showtell/hyperframes";
 import { roundRect } from "../draw.ts";
 import { propsOf, type Box } from "../render-hyperframe-shared.ts";
 import { clamp01, easeOutCubic, enter01, pulse01 } from "./motion.ts";

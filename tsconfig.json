@@ -17,8 +17,8 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["bun"],
     "paths": {
-      "@agent-video/core": ["./packages/core/src/index.ts"],
-      "@agent-video/hyperframes": ["./packages/hyperframes/src/index.ts"]
+      "@showtell/core": ["./packages/core/src/index.ts"],
+      "@showtell/hyperframes": ["./packages/hyperframes/src/index.ts"]
     }
   },
   "include": [

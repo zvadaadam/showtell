@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import type { Scene } from "@agent-video/core";
-import { KineticCaption, Stage, h, hyperframeComponents } from "@agent-video/hyperframes";
+import type { Scene } from "@showtell/core";
+import { KineticCaption, Stage, h, hyperframeComponents } from "@showtell/hyperframes";
 import { renderSceneToPng, renderHyperframeElementToPng, COMPOSABLE_KINDS } from "../src/index.ts";
 import { legendItems, parseChartData, valueScale } from "../src/primitives/chart.ts";
 import { RENDERABLE_COMPONENT_TYPES } from "../src/render-hyperframe-tree.ts";

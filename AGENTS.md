@@ -1,10 +1,10 @@
-# agent-video — agent guide
+# showtell — agent guide
 
-**What this is:** "Loom for agents" — a local, repo-aware **motion render engine**. A coding agent authors intent (`spec.json` + hyperframes) and the engine renders every frame on a deterministic motion clock into a short narrated MP4 — animated visualization, not slide generation. Being local is the moat: code/diff visuals reference the repo by `file:line`/git ref and the renderer reads the **live bytes**, so rendered code is always ground-truth.
+**What this is:** "A motion engine for agents" — a local, repo-aware **motion render engine**. A coding agent authors intent (`spec.json` + hyperframes) and the engine renders every frame on a deterministic motion clock into a short narrated MP4 — animated visualization, not slide generation. Being local is the moat: code/diff visuals reference the repo by `file:line`/git ref and the renderer reads the **live bytes**, so rendered code is always ground-truth.
 
 **The guiding principle: everything is motion.** Layout, themes, blocks, plots, and captions all sit on top of the motion engine (`packages/compose/src/hyperframe/motion.ts` is the clock; `ctx.time`/`ctx.range()` are the authoring surface). When adding or reviewing features, ask how they move, not just how they look — stills are the degenerate case (end states), never the design target.
 
-**Read first:** `docs/bundle-v2.md` for the bundle v2 authoring model, plus `.context/plan/agent-video-goal.md` when present. Progress + gate ledger: `.context/plan/agent-video-progress.md`.
+**Read first:** `docs/bundle-v2.md` for the bundle v2 authoring model, plus `.context/plan/showtell-goal.md` when present. Progress + gate ledger: `.context/plan/showtell-progress.md`.
 
 ## The contract (never violate)
 
@@ -19,7 +19,7 @@
 Bundle v2 is a **bundle**, not a giant JSON timeline:
 
 ```text
-my-video.agent-video/
+my-video.showtell/
   spec.json
   hyperframes/*.tsx
   assets/**
@@ -47,7 +47,7 @@ Current bundle commands:
 - `bun packages/cli/src/index.ts bundle components`
 - `bun packages/cli/src/index.ts bundle templates`
 - `bun packages/cli/src/index.ts bundle themes`
-- `bun packages/cli/src/index.ts bundle workshop <bundle-dir> --out .agent-video/workshop --aspect 16:9,9:16`
+- `bun packages/cli/src/index.ts bundle workshop <bundle-dir> --out .showtell/workshop --aspect 16:9,9:16`
 - `bun packages/cli/src/index.ts bundle compile <bundle-dir>`
 - `bun packages/cli/src/index.ts bundle render <bundle-dir> --out <dir> --aspect 16:9,9:16`
 
@@ -68,8 +68,8 @@ without guessing hidden rules. Validation errors must point to the exact
 - `packages/hyperframes` — typed hyperframe authoring kit + reusable starter templates
 - `packages/providers` — BYO-API model gateway (TTS: Replicate/OpenAI/ElevenLabs + local `say`)
 - `packages/render` — orchestrator: validate → resolve refs → TTS → measure → compose+capture → ffmpeg mux + watermark → mp4
-- `packages/cli` — `agent-video` binary
-- `skills/agent-video`, `skills/agent-video-eval`
+- `packages/cli` — `showtell` binary
+- `skills/showtell`, `skills/showtell-eval`
 
 ## Conventions
 

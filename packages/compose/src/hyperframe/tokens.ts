@@ -7,8 +7,8 @@
  * only decides HOW those colors are applied. Tune the design language in one
  * place instead of hunting magic numbers through the renderers.
  */
-import { resolveBundleTheme } from "@agent-video/core";
-import type { CaptionCue, HyperframeTheme } from "@agent-video/hyperframes";
+import { resolveBundleTheme } from "@showtell/core";
+import type { CaptionCue, HyperframeTheme } from "@showtell/hyperframes";
 import type { Dims } from "../dims.ts";
 
 export const TOKENS = {

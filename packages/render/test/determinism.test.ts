@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { VideoManifest, VideoSpec } from "@agent-video/core";
+import type { VideoManifest, VideoSpec } from "@showtell/core";
 import { renderVideo } from "../src/index.ts";
 
 function hashFile(path: string): string {
@@ -61,7 +61,7 @@ const spec: VideoSpec = {
 };
 
 test("CONTRACT: rendering the same spec twice produces byte-identical mp4 output", async () => {
-  const root = mkdtempSync(join(tmpdir(), "agent-video-determinism-"));
+  const root = mkdtempSync(join(tmpdir(), "showtell-determinism-"));
   const cacheDir = join(root, "cache");
   const firstOutDir = join(root, "first");
   const secondOutDir = join(root, "second");

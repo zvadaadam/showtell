@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import type { BundleScene } from "@agent-video/core";
+import type { BundleScene } from "@showtell/core";
 import type { CompiledBundleScene } from "../src/bundle.ts";
 import { resolveBundlePoint, resolveBundleRange, resolveBundleSpan } from "../src/bundle-time.ts";
 

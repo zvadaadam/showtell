@@ -1,5 +1,5 @@
 /**
- * The agent-video MANIFEST — the portable description of a rendered bundle
+ * The showtell MANIFEST — the portable description of a rendered bundle
  * (the mp4s + this manifest.json). The renderer EMITS it; the web player
  * CONSUMES only it. This is the seam between the deterministic renderer and the
  * presentation layer.
@@ -68,7 +68,7 @@ export const VideoManifest = z
     scenes: z.array(ManifestScene),
   })
   .strict()
-  .describe("Portable description of a rendered agent-video bundle.");
+  .describe("Portable description of a rendered showtell bundle.");
 
 export type ManifestRefs = z.infer<typeof ManifestRefs>;
 export type ManifestScene = z.infer<typeof ManifestScene>;

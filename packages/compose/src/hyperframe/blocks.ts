@@ -1,6 +1,6 @@
 /** Showcase blocks: BigStat, Checklist, Quote — the "beautiful by default" layer. */
 import type { SKRSContext2D } from "@napi-rs/canvas";
-import type { HyperframeElement } from "@agent-video/hyperframes";
+import type { HyperframeElement } from "@showtell/hyperframes";
 import { wrapText } from "../draw.ts";
 import { propsOf, type Box } from "../render-hyperframe-shared.ts";
 import { clamp01, countUpValue, easeOutBack, easeOutCubic, easeOutExpo, enter01, pulse01 } from "./motion.ts";

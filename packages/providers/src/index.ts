@@ -111,7 +111,7 @@ function assertValidSynthesis(path: string, provider: TtsProvider, text: string)
   const durationMs = validWavDurationMs(path);
   if (durationMs !== undefined) return durationMs;
   throw new Error(
-    `TTS provider "${provider}" produced an invalid or empty wav for line "${narrationPreview(text)}" - nothing was cached. Check that speech synthesis works in this environment (e.g. run: say -o /tmp/test.wav "hello").`,
+    `TTS provider "${provider}" produced an invalid or empty wav for line "${narrationPreview(text)}" - nothing was cached. Check local speech synthesis (macOS: say; Linux: espeak-ng) or the selected remote provider.`,
   );
 }
 
@@ -124,7 +124,7 @@ export async function synthesize(req: SynthesizeRequest, opts: SynthesizeOpts = 
       `TTS provider "${provider}" is not available yet. Available: ${availableTtsProviders().join(", ")}.`,
     );
   }
-  const cacheDir = opts.cacheDir ?? ".agent-video/cache/tts";
+  const cacheDir = opts.cacheDir ?? ".showtell/cache/tts";
   mkdirSync(cacheDir, { recursive: true });
   const wavPath = join(cacheDir, `${provider}-${cacheKey(provider, req)}.wav`);
 

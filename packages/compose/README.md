@@ -1,4 +1,4 @@
-# @agent-video/compose
+# @showtell/compose
 
 Mode B rendering: turn a spec scene or executed hyperframe tree into a still
 PNG frame, per aspect ratio, with
@@ -13,4 +13,4 @@ wall-clock/RNG).
 - `scenes/{title,talking-points}.ts` — full-scene presenters for built-in visuals.
 - `dims`, `theme`, `draw`, `fonts`, `highlight` — shared layout, palette, and helpers.
 
-Internal package of [agent-video](../../README.md).
+Internal package of [showtell](../../README.md).

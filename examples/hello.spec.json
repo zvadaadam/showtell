@@ -1,7 +1,7 @@
 {
   "$schema": "../packages/core/schema.json",
   "meta": {
-    "title": "agent-video — hello",
+    "title": "showtell — hello",
     "fps": 30,
     "aspectRatios": ["16:9", "9:16"],
     "tts": { "provider": "say" },
@@ -11,10 +11,10 @@
     {
       "kind": "title",
       "content": {
-        "heading": "agent-video",
-        "subtitle": "Loom for agents — a local, repo-aware video renderer"
+        "heading": "showtell",
+        "subtitle": "A motion engine for agents — a local, repo-aware video renderer"
       },
-      "narration": "agent-video turns a coding agent's work into a short narrated walkthrough, rendered locally so it can read your real code.",
+      "narration": "showtell turns a coding agent's work into a short narrated walkthrough, rendered locally so it can read your real code.",
       "duration": "auto"
     },
     {

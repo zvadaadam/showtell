@@ -1,18 +1,20 @@
 {
-  "name": "agent-video",
+  "name": "showtell",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Loom for agents — a local, repo-aware video renderer. An agent produces a short narrated video instead of a text answer.",
-  "homepage": "https://agent-video.dev",
+  "description": "Open-source motion engine for videos made by agents, for humans.",
+  "homepage": "https://github.com/zvadaadam/showtell#readme",
   "license": "MIT",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
     "validate": "bun packages/cli/src/index.ts validate",
-    "agent-video": "bun packages/cli/src/index.ts",
-    "build:cli": "bun build packages/cli/src/index.ts --compile --outfile dist/agent-video",
+    "showtell": "bun packages/cli/src/index.ts",
+    "build:cli": "bun build packages/cli/src/index.ts --compile --outfile dist/showtell",
+    "build:npm": "bun scripts/build-npm-package.ts",
+    "publish:npm": "bun scripts/publish-npm.ts",
     "build:player": "cd packages/player && bun --bun run build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test",

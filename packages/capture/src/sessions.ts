@@ -1,4 +1,4 @@
-/** Capture session store: recordings live at <root>/.agent-video/captures/<id>.mp4. */
+/** Capture session store: recordings live at <root>/.showtell/captures/<id>.mp4. */
 import { existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
@@ -11,13 +11,13 @@ export function assertValidSessionId(id: string): void {
   if (!VALID_ID.test(id)) {
     throw new Error(
       `Invalid capture session id "${id}". Allowed: letters, digits, "_" and "-" (max 64 chars). ` +
-        `Session ids are filenames under .agent-video/captures — paths are not permitted.`,
+        `Session ids are filenames under .showtell/captures — paths are not permitted.`,
     );
   }
 }
 
 function capturesDir(root = "."): string {
-  return join(root, ".agent-video", "captures");
+  return join(root, ".showtell", "captures");
 }
 
 export function ensureCapturesDir(root = "."): string {
@@ -32,7 +32,7 @@ export function sessionPath(id: string, root = "."): string {
 }
 
 /** Provision a synthetic capture session (ffmpeg testsrc) if one doesn't exist.
- *  Used by `agent-video eval` so the self-test renders screencap scenes without
+ *  Used by `showtell eval` so the self-test renders screencap scenes without
  *  Screen Recording permission. */
 export function ensureSyntheticSession(id: string, root = ".", seconds = 4): string {
   const p = sessionPath(id, root);
@@ -101,7 +101,7 @@ export function importCaptureSession(opts: { id: string; sourcePath: string; roo
  * Resolve a screencap scene's sessionRef (from an untrusted, agent-authored spec)
  * to a real recording path. Resolution is confined to the captures sandbox by
  * construction: the ref must be a valid session id, and the resolved file must
- * live inside <root>/.agent-video/captures. No absolute paths, no traversal,
+ * live inside <root>/.showtell/captures. No absolute paths, no traversal,
  * no "any .mp4 on disk" — those would be arbitrary-file-read primitives.
  */
 export function resolveSession(sessionRef: string, root = "."): string {
@@ -114,6 +114,6 @@ export function resolveSession(sessionRef: string, root = "."): string {
   }
   if (existsSync(p)) return p;
   throw new Error(
-    `Capture session "${sessionRef}" not found (looked at ${p}). Record one with \`agent-video capture --id ${sessionRef}\` first.`,
+    `Capture session "${sessionRef}" not found (looked at ${p}). Record one with \`showtell capture --id ${sessionRef}\` first.`,
   );
 }
