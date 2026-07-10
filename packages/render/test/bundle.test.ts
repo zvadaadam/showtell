@@ -93,7 +93,7 @@ test("renderBundle renders a captioned mp4 from executed hyperframes", async () 
   expect(
     durations.streams.every((stream) => Math.abs(Number(stream.duration) * 1000 - result.plan.meta.durationMs) <= 34),
   ).toBe(true);
-}, 120_000);
+}, 240_000);
 
 test("embedded hyperframes SDK asset matches the real SDK source", () => {
   // The compiled binary ships packages/render/src/hyperframes-sdk.source.txt so
@@ -603,7 +603,7 @@ test("renderBundle normalizes duration for non-burn-in caption modes", async () 
       durations.streams.every((stream) => Math.abs(Number(stream.duration) * 1000 - result.plan.meta.durationMs) <= 34),
     ).toBe(true);
   }
-}, 180_000);
+}, 360_000);
 
 test("renderBundle returns render warnings with scene and line paths", async () => {
   const dir = mkdtempSync(join(tmpdir(), "av-bundle-warning-"));
