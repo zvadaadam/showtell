@@ -1,5 +1,5 @@
 import { extname } from "node:path";
-import { SafeFileError, safeExistingFileInRoot } from "@agent-video/core";
+import { SafeFileError, safeExistingFileInRoot } from "@showtell/core";
 
 export const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -25,7 +25,7 @@ function contentType(path: string): string {
 
 export function serveStaticFile(rootDir: string, urlPath: string): Response | undefined {
   const rel = urlPath.replace(/^\/+/, "");
-  // Never serve dotfiles or render intermediates (.work, .agent-video caches).
+  // Never serve dotfiles or render intermediates (.work, .showtell caches).
   if (rel.split(/[\\/]/).some((part) => part.startsWith("."))) return undefined;
   try {
     const file = safeExistingFileInRoot(rootDir, rel).path;

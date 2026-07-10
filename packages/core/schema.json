@@ -46,7 +46,7 @@
                     "openai",
                     "elevenlabs"
                   ],
-                  "description": "TTS provider. Local 'say' needs no key; others are BYO-API."
+                  "description": "TTS provider. Local 'say' uses macOS say or Linux espeak-ng; others are BYO-API."
                 },
                 "model": {
                   "type": "string"
@@ -66,7 +66,7 @@
                 "string"
               ],
               "default": true,
-              "description": "Watermark text; true = \"agent-video.dev\". Free tier shows it."
+              "description": "Watermark text; true = \"showtell\". Free tier shows it."
             },
             "repo": {
               "type": "object",
@@ -462,7 +462,7 @@
                       "sessionRef": {
                         "type": "string",
                         "pattern": "^[A-Za-z0-9_-]{1,64}$",
-                        "description": "Recorded capture session id (a filename under .agent-video/captures, not a path)."
+                        "description": "Recorded capture session id (a filename under .showtell/captures, not a path)."
                       },
                       "clip": {
                         "type": "object",

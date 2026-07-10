@@ -1,4 +1,4 @@
-import type { HyperframeElement } from "@agent-video/hyperframes";
+import type { HyperframeElement } from "@showtell/hyperframes";
 import type { RenderedScene } from "./render-scene.ts";
 
 export interface Box {

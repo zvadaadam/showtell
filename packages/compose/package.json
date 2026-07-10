@@ -1,5 +1,5 @@
 {
-  "name": "@agent-video/compose",
+  "name": "@showtell/compose",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@agent-video/core": "workspace:*",
-    "@agent-video/hyperframes": "workspace:*",
+    "@showtell/core": "workspace:*",
+    "@showtell/hyperframes": "workspace:*",
     "@fontsource/inter": "5.2.8",
     "@fontsource/jetbrains-mono": "5.2.8",
     "@fontsource/noto-sans-math": "^5.2.9",

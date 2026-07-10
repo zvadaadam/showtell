@@ -3,10 +3,10 @@ import { existsSync, rmSync, statSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { VideoSpec } from "@agent-video/core";
+import type { VideoSpec } from "@showtell/core";
 import { renderVideo, probeDurationMs } from "../src/index.ts";
 
-const outDir = join(tmpdir(), "agent-video-test-video");
+const outDir = join(tmpdir(), "showtell-test-video");
 
 const spec: VideoSpec = {
   meta: { title: "t", fps: 30, aspectRatios: ["16:9"], watermark: true, tts: { provider: "say" }, repo: { path: "." } },

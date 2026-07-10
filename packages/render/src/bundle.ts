@@ -10,7 +10,7 @@ import type {
   BundleSpec,
   ResolvedBundleTheme,
   Scene,
-} from "@agent-video/core";
+} from "@showtell/core";
 import {
   assertSafeOutputPath,
   bundleAssetFile,
@@ -23,7 +23,7 @@ import {
   resolveCodeRef,
   resolveDiff,
   validateBundle,
-} from "@agent-video/core";
+} from "@showtell/core";
 import {
   probeImageInfo,
   canvasTheme,
@@ -38,8 +38,8 @@ import {
   renderSceneToPng,
   type LoadedPresenter,
   type RenderedScene,
-} from "@agent-video/compose";
-import { probeDurationMs, synthesize } from "@agent-video/providers";
+} from "@showtell/compose";
+import { probeDurationMs, synthesize } from "@showtell/providers";
 import {
   concatClips,
   imageAudioToClip,
@@ -509,7 +509,7 @@ export async function compileBundle(
 
   const { spec, bundleDir, repoPath, warnings } = validation;
   const planPath = join(bundleDir, "compiled-plan.json");
-  const cacheDir = opts.cacheDir ?? join(bundleDir, ".agent-video", "cache");
+  const cacheDir = opts.cacheDir ?? join(bundleDir, ".showtell", "cache");
   const rawSpec = readFileSync(join(bundleDir, "spec.json"));
 
   const assetPaths = new Map<string, string>();
@@ -809,7 +809,7 @@ export async function renderBundleScene(
       aspectRatio,
       activeCue: executed.activeCue,
       theme,
-      watermark: "agent-video.dev",
+      watermark: "showtell",
       presenter: presenterAtRest,
     });
   }
@@ -817,7 +817,7 @@ export async function renderBundleScene(
   const rendered = await renderSceneToPng(builtinToScene(scene, runtime), {
     repoPath: runtime.repoPath,
     aspectRatio,
-    watermark: "agent-video.dev",
+    watermark: "showtell",
     theme,
   });
   if (!presenterAtRest) return rendered;
@@ -978,7 +978,7 @@ export async function renderBundle(
                   aspectRatio,
                   activeCue: executed.activeCue,
                   theme,
-                  watermark: "agent-video.dev",
+                  watermark: "showtell",
                   motion: {
                     absoluteMs: timeMs,
                     sceneMs: timeMs - planScene.startMs,
@@ -1047,7 +1047,7 @@ export async function renderBundle(
                   // Narration is over: kinetic captions clear during the hold.
                   activeCue: undefined,
                   theme,
-                  watermark: "agent-video.dev",
+                  watermark: "showtell",
                   motion: {
                     absoluteMs: timeMs,
                     sceneMs: timeMs - planScene.startMs,

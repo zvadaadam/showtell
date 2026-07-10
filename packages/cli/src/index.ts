@@ -1,14 +1,15 @@
 #!/usr/bin/env bun
 /**
- * agent-video CLI — agent-first by design.
+ * showtell CLI — agent-first by design.
  *
  * Principles (mirrors screen-studio's CLI): non-interactive, all-flags,
  * structured JSON on stdout, actionable errors with a `hint` field on stderr,
  * idempotent, self-describing via --help. A fresh agent should be able to drive
  * the whole pipeline from `--help` alone.
  */
-import { readFileSync, existsSync } from "node:fs";
-import { basename } from "node:path";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
+import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
 import {
   validateSpec,
@@ -24,7 +25,7 @@ import {
   type VideoSpec,
   type AspectRatio,
   type SpecError,
-} from "@agent-video/core";
+} from "@showtell/core";
 import {
   renderFrames,
   renderVideo,
@@ -36,8 +37,8 @@ import {
   renderBundleWorkshop,
   renderWorkshop,
   startWorkshopServer,
-} from "@agent-video/render";
-import { hyperframeComponents, hyperframeTemplates } from "@agent-video/hyperframes";
+} from "@showtell/render";
+import { hyperframeComponents, hyperframeTemplates } from "@showtell/hyperframes";
 import {
   recordScreen,
   ensureCapturesDir,
@@ -52,9 +53,10 @@ import {
   startExternalCaptureWorkflow,
   stopExternalCaptureWorkflow,
   type CaptureEventType,
-} from "@agent-video/capture";
+} from "@showtell/capture";
 
 import cliManifest from "../package.json" with { type: "json" };
+import showtellSkill from "../../../skills/showtell/SKILL.md" with { type: "text" };
 
 const VERSION: string = cliManifest.version;
 const BOOLEAN_FLAGS = new Set(["frames-only", "no-import", "help", "stills"]);
@@ -136,7 +138,7 @@ function parseArgs(argv: string[]): Args {
 function loadSpecOrFail(file: string | undefined, usage: string): { spec: VideoSpec; warnings: SpecError[] } {
   if (!file) fail("Missing spec file.", usage);
   if (!existsSync(file)) {
-    fail(`Spec file not found: ${file}`, "Pass a path to a JSON spec. See `agent-video schema` for the contract.");
+    fail(`Spec file not found: ${file}`, "Pass a path to a JSON spec. See `showtell schema` for the contract.");
   }
   let raw: string;
   try {
@@ -165,7 +167,7 @@ function loadSpecOrFail(file: string | undefined, usage: string): { spec: VideoS
 
 function cmdValidate(args: Args): never {
   const file = args.positional[0];
-  const { spec, warnings } = loadSpecOrFail(file, "Usage: agent-video validate <spec.json>");
+  const { spec, warnings } = loadSpecOrFail(file, "Usage: showtell validate <spec.json>");
   ok({
     ok: true,
     file,
@@ -188,7 +190,7 @@ function parseAspectRatios(args: Args): AspectRatio[] | undefined {
 }
 
 async function cmdRender(args: Args): Promise<never> {
-  const usage = "Usage: agent-video render <spec.json> [--out DIR] [--repo PATH] [--aspect 16:9,9:16] [--frames-only]";
+  const usage = "Usage: showtell render <spec.json> [--out DIR] [--repo PATH] [--aspect 16:9,9:16] [--frames-only]";
   const file = args.positional[0]!;
   const { spec } = loadSpecOrFail(file, usage);
 
@@ -196,7 +198,7 @@ async function cmdRender(args: Args): Promise<never> {
   const framesOnly = flagEnabled(args.flags["frames-only"]);
   const outDir =
     (typeof args.flags.out === "string" ? args.flags.out : undefined) ??
-    (framesOnly ? ".agent-video/frames" : ".agent-video/out");
+    (framesOnly ? ".showtell/frames" : ".showtell/out");
 
   const aspectRatios = parseAspectRatios(args);
 
@@ -274,12 +276,11 @@ async function emitAndServe(
 }
 
 async function cmdPreview(args: Args): Promise<void> {
-  const usage =
-    "Usage: agent-video preview <spec.json> [--port N] [--repo PATH] [--aspect 16:9,9:16] [--serve-seconds N]";
+  const usage = "Usage: showtell preview <spec.json> [--port N] [--repo PATH] [--aspect 16:9,9:16] [--serve-seconds N]";
   const file = args.positional[0]!;
   const { spec } = loadSpecOrFail(file, usage);
   const repoPath = (typeof args.flags.repo === "string" ? args.flags.repo : undefined) ?? spec.meta.repo.path;
-  const outDir = ".agent-video/out";
+  const outDir = ".showtell/out";
   const baseName = basename(file)
     .replace(/\.json$/, "")
     .replace(/\.spec$/, "");
@@ -333,7 +334,7 @@ function cmdCapture(args: Args): never {
   if (subcommand) {
     fail(
       `Unknown capture subcommand: ${subcommand}`,
-      "Use `agent-video capture` to record, import, analyze, start-external, exec, stop-external, or event.",
+      "Use `showtell capture` to record, import, analyze, start-external, exec, stop-external, or event.",
     );
   }
 
@@ -366,7 +367,7 @@ function cmdCaptureImport(args: Args): never {
   if (!source) {
     fail(
       "Missing capture source file.",
-      "Usage: agent-video capture import <recording.webm|mp4> --id NAME [--events events.json] [--repo PATH]",
+      "Usage: showtell capture import <recording.webm|mp4> --id NAME [--events events.json] [--repo PATH]",
     );
   }
   const repoRoot = stringFlag(args.flags, "repo") ?? ".";
@@ -385,7 +386,7 @@ function cmdCaptureImport(args: Args): never {
 
 function cmdCaptureEvent(args: Args): never {
   const id = stringFlag(args.flags, "id");
-  if (!id) fail("Missing --id.", "Usage: agent-video capture event --id NAME --type click --x 100 --y 200 --t-ms 1234");
+  if (!id) fail("Missing --id.", "Usage: showtell capture event --id NAME --type click --x 100 --y 200 --t-ms 1234");
   const type = stringFlag(args.flags, "type");
   const x = numberFlag(args.flags, "x");
   const y = numberFlag(args.flags, "y");
@@ -436,15 +437,12 @@ function cmdCaptureStartExternal(args: Args): never {
   const repoRoot = stringFlag(args.flags, "repo") ?? ".";
   const id = stringFlag(args.flags, "id");
   if (!id)
-    fail(
-      "Missing --id.",
-      "Usage: agent-video capture start-external <raw.webm|mp4> --id NAME -- <record-start command>",
-    );
+    fail("Missing --id.", "Usage: showtell capture start-external <raw.webm|mp4> --id NAME -- <record-start command>");
   const sourcePath = args.positional[1] ?? stringFlag(args.flags, "source");
   if (!sourcePath) {
     fail(
       "Missing external recording source path.",
-      "Usage: agent-video capture start-external <raw.webm|mp4> --id NAME -- <record-start command>",
+      "Usage: showtell capture start-external <raw.webm|mp4> --id NAME -- <record-start command>",
     );
   }
   try {
@@ -466,7 +464,7 @@ function cmdCaptureStartExternal(args: Args): never {
 function cmdCaptureExec(args: Args): never {
   const repoRoot = stringFlag(args.flags, "repo") ?? ".";
   const id = stringFlag(args.flags, "id");
-  if (!id) fail("Missing --id.", "Usage: agent-video capture exec --id NAME -- <tool command>");
+  if (!id) fail("Missing --id.", "Usage: showtell capture exec --id NAME -- <tool command>");
   const eventType = captureEventTypeFlag(args.flags, "event-type") ?? "auto";
   try {
     finish(
@@ -492,7 +490,7 @@ function cmdCaptureExec(args: Args): never {
 function cmdCaptureStopExternal(args: Args): never {
   const repoRoot = stringFlag(args.flags, "repo") ?? ".";
   const id = stringFlag(args.flags, "id");
-  if (!id) fail("Missing --id.", "Usage: agent-video capture stop-external --id NAME -- <record-stop command>");
+  if (!id) fail("Missing --id.", "Usage: showtell capture stop-external --id NAME -- <record-stop command>");
   try {
     finish(
       stopExternalCaptureWorkflow({
@@ -530,16 +528,16 @@ async function cmdBundle(args: Args): Promise<never> {
     ok({
       ok: true,
       usage:
-        "agent-video bundle <validate|inspect|compile|render|workshop|components|templates|themes|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
+        "showtell bundle <validate|inspect|compile|render|workshop|components|templates|themes|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
       examples: [
-        "agent-video bundle validate examples/bundle-v2",
-        "agent-video bundle inspect examples/bundle-v2",
-        "agent-video bundle components",
-        "agent-video bundle themes",
-        "agent-video bundle templates",
-        "agent-video bundle workshop examples/bundle-v2 --out .agent-video/workshop --aspect 16:9",
-        "agent-video bundle compile examples/bundle-v2",
-        "agent-video bundle render examples/bundle-v2 --out .agent-video/bundle-v2 --aspect 16:9",
+        "showtell bundle validate examples/bundle-v2",
+        "showtell bundle inspect examples/bundle-v2",
+        "showtell bundle components",
+        "showtell bundle themes",
+        "showtell bundle templates",
+        "showtell bundle workshop examples/bundle-v2 --out .showtell/workshop --aspect 16:9",
+        "showtell bundle compile examples/bundle-v2",
+        "showtell bundle render examples/bundle-v2 --out .showtell/bundle-v2 --aspect 16:9",
       ],
     });
   }
@@ -547,10 +545,10 @@ async function cmdBundle(args: Args): Promise<never> {
     ok({
       ok: true,
       stage: "bundle-templates",
-      package: "@agent-video/hyperframes",
+      package: "@showtell/hyperframes",
       templates: hyperframeTemplates,
       usage:
-        "Use templates as complete examples. Prefer reusable components for common patterns; run `agent-video bundle components`.",
+        "Use templates as complete examples. Prefer reusable components for common patterns; run `showtell bundle components`.",
     });
   }
   if (subcommand === "themes") {
@@ -566,17 +564,17 @@ async function cmdBundle(args: Args): Promise<never> {
     ok({
       ok: true,
       stage: "bundle-components",
-      package: "@agent-video/hyperframes",
+      package: "@showtell/hyperframes",
       components: hyperframeComponents,
       usage:
-        'Import components from "@agent-video/hyperframes" inside hyperframes/*.tsx; use the requiredProps/commonProps/example fields, then compose with ctx.props, ctx.repo(), ctx.asset(), ctx.range(), and ctx.scene.lineIndex.',
+        'Import components from "@showtell/hyperframes" inside hyperframes/*.tsx; use the requiredProps/commonProps/example fields, then compose with ctx.props, ctx.repo(), ctx.asset(), ctx.range(), and ctx.scene.lineIndex.',
     });
   }
 
   if (!bundleDir) {
     fail(
       "Missing bundle directory.",
-      "Usage: agent-video bundle <validate|inspect|compile|render|workshop|components|templates|themes|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
+      "Usage: showtell bundle <validate|inspect|compile|render|workshop|components|templates|themes|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
     );
   }
 
@@ -720,13 +718,13 @@ async function cmdBundle(args: Args): Promise<never> {
     }
     fail(
       `Bundle ${subcommand} failed: ${(e as Error).message}`,
-      "Run `agent-video bundle validate <bundle-dir>` first, then check ffmpeg/TTS prerequisites.",
+      "Run `showtell bundle validate <bundle-dir>` first, then check ffmpeg/TTS prerequisites.",
     );
   }
 
   fail(
     `Unknown bundle command: '${subcommand}'`,
-    "Run `agent-video bundle help`. Commands: validate, inspect, compile, render, workshop, components, templates, themes, schema.",
+    "Run `showtell bundle help`. Commands: validate, inspect, compile, render, workshop, components, templates, themes, schema.",
   );
 }
 
@@ -737,7 +735,7 @@ async function cmdWorkshop(args: Args): Promise<never> {
   if (subcommand !== "render") {
     fail(
       "Unknown workshop command.",
-      "Usage: agent-video workshop render [--out DIR] [--aspect 16:9,9:16] [--serve-seconds N]",
+      "Usage: showtell workshop render [--out DIR] [--aspect 16:9,9:16] [--serve-seconds N]",
     );
   }
   const serveSeconds = integerFlag(args.flags, "serve-seconds");
@@ -782,7 +780,7 @@ function inspectHyperframeVisual(
 
 async function cmdEval(args: Args): Promise<never> {
   const file = (typeof args.flags.spec === "string" ? args.flags.spec : undefined) ?? "examples/golden.spec.json";
-  const { spec } = loadSpecOrFail(file, "Usage: agent-video eval [--spec PATH]");
+  const { spec } = loadSpecOrFail(file, "Usage: showtell eval [--spec PATH]");
   const repoPath = spec.meta.repo.path;
 
   // Provision synthetic capture sessions so screencap scenes render without
@@ -795,12 +793,12 @@ async function cmdEval(args: Args): Promise<never> {
   try {
     result = await renderVideo(spec, {
       repoPath,
-      outDir: ".agent-video/eval",
+      outDir: ".showtell/eval",
       baseName: "eval",
       aspectRatios: ["16:9", "9:16"],
     });
   } catch (e) {
-    fail(`Self-test render failed: ${(e as Error).message}`, "Fix the spec/repo and re-run `agent-video eval`.");
+    fail(`Self-test render failed: ${(e as Error).message}`, "Fix the spec/repo and re-run `showtell eval`.");
   }
 
   const ars = result.outputs.map((o) => o.aspectRatio);
@@ -830,13 +828,30 @@ function cmdSchema(): never {
   ok(videoSpecJsonSchema());
 }
 
+function cmdSkill(args: Args): never {
+  const action = args.positional[0] ?? "help";
+  if (action !== "install") {
+    fail(
+      `Unknown skill action: '${action}'`,
+      "Run `showtell skill install [--dir ~/.claude/skills]` to install the bundled agent skill.",
+    );
+  }
+
+  const baseDir = resolve(stringFlag(args.flags, "dir") ?? join(homedir(), ".claude", "skills"));
+  const skillDir = join(baseDir, "showtell");
+  const skillPath = join(skillDir, "SKILL.md");
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(skillPath, showtellSkill.endsWith("\n") ? showtellSkill : `${showtellSkill}\n`);
+  ok({ ok: true, stage: "skill-install", path: skillPath, bytes: Buffer.byteLength(showtellSkill) });
+}
+
 function cmdHelp(): never {
   // Human-readable to stdout. Keep it example-rich (agent-first).
   process.stdout.write(
-    `agent-video — Loom for agents. Author a spec.json; render a narrated video.
+    `showtell — A motion engine for agents. Author a spec.json; render a narrated video.
 
 USAGE
-  agent-video <command> [args] [--flags]
+  showtell <command> [args] [--flags]
 
 COMMANDS
   validate <spec.json>   Validate a spec against the contract. Structured JSON out;
@@ -870,9 +885,9 @@ COMMANDS
   bundle inspect DIR     Print scenes, refs, ranges, hyperframe ports, props
                          schemas, and warnings for agent planning.
   bundle templates       List reusable hyperframe starter templates from
-                         @agent-video/hyperframes.
+                         @showtell/hyperframes.
   bundle components      List reusable hyperframe components from
-                         @agent-video/hyperframes.
+                         @showtell/hyperframes.
   bundle themes          List theme presets (colors, typography, guidance) for
                          meta.theme.
   bundle workshop DIR    Render every bundle scene/line/aspect as PNGs in a
@@ -887,6 +902,8 @@ COMMANDS
   workshop render        Render the built-in component workshop gallery.
                          Flags: --out DIR, --aspect 16:9,9:16,
                          --serve-seconds N.
+  skill install          Install the bundled Showtell agent skill. Flag:
+                         --dir DIR (default: ~/.claude/skills).
   eval                   Self-test: render the golden example (or --spec PATH) in
                          both ratios and assert every gate. Returns pass/fail JSON.
   schema                 Print the published JSON Schema for spec.json.
@@ -901,15 +918,16 @@ THE CONTRACT (author only this; never write ffmpeg or paste source)
   Renderable now: ${IMPLEMENTED_SCENE_KINDS.join(", ")}.
 
 EXAMPLES
-  agent-video schema
-  agent-video validate examples/hello.spec.json
-  agent-video capture start-external ./demo.webm --id demo -- agent-browser record start ./demo.webm
-  agent-video capture exec --id demo -- agent-browser click @submit
-  agent-video capture stop-external --id demo -- agent-browser record stop
-  agent-video capture analyze --id demo
-  agent-video bundle components
-  agent-video bundle workshop examples/bundle-v2 --out .agent-video/workshop --aspect 16:9
-  agent-video bundle render examples/bundle-v2 --out .agent-video/bundle-v2 --aspect 16:9
+  showtell schema
+  showtell validate examples/hello.spec.json
+  showtell capture start-external ./demo.webm --id demo -- agent-browser record start ./demo.webm
+  showtell capture exec --id demo -- agent-browser click @submit
+  showtell capture stop-external --id demo -- agent-browser record stop
+  showtell capture analyze --id demo
+  showtell bundle components
+  showtell skill install
+  showtell bundle workshop examples/bundle-v2 --out .showtell/workshop --aspect 16:9
+  showtell bundle render examples/bundle-v2 --out .showtell/bundle-v2 --aspect 16:9
 
   Minimal spec:
   {
@@ -963,15 +981,18 @@ async function main(): Promise<void> {
     case "schema":
       cmdSchema();
       break;
+    case "skill":
+      cmdSkill(args);
+      break;
     case "version":
     case "--version":
     case "-v":
-      ok({ name: "agent-video", version: VERSION });
+      ok({ name: "showtell", version: VERSION });
       break;
     default:
       fail(
         `Unknown command: '${args.command}'`,
-        "Run `agent-video help`. Commands: validate, render, preview, capture, bundle, workshop, eval, schema, help, version.",
+        "Run `showtell help`. Commands: validate, render, preview, capture, bundle, workshop, skill, eval, schema, help, version.",
       );
   }
 }

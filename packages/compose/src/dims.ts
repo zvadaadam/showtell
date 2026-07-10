@@ -1,4 +1,4 @@
-import type { AspectRatio } from "@agent-video/core";
+import type { AspectRatio } from "@showtell/core";
 
 export interface Dims {
   width: number;

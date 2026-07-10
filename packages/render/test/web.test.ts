@@ -2,7 +2,7 @@ import { test, expect, beforeAll, afterAll } from "bun:test";
 import { chromium, type Browser } from "playwright";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { VideoSpec } from "@agent-video/core";
+import type { VideoSpec } from "@showtell/core";
 import { renderVideo, startPreviewServer, resolvePlayerDist, type PreviewHandle } from "../src/index.ts";
 
 // WEB gate (close-the-loop): render → serve the real player → drive it in a real
@@ -16,7 +16,7 @@ try {
   playerDir = null;
 }
 
-const outDir = join(tmpdir(), "agent-video-web-test");
+const outDir = join(tmpdir(), "showtell-web-test");
 let handle: PreviewHandle | undefined;
 let browser: Browser | undefined;
 

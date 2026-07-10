@@ -1,6 +1,6 @@
 /**
  * Theme registry — the open-core seam. The free build registers one clean
- * default theme; a private `@agent-video/player-pro` can `registerTheme(...)`
+ * default theme; a private `@showtell/player-pro` can `registerTheme(...)`
  * additional premium themes at startup without forking the player. The player
  * reads the registry and applies the active theme's CSS custom properties to its
  * root, and the theme switcher only appears once more than one theme is present.

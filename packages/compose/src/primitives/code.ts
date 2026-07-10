@@ -1,5 +1,5 @@
 import type { SKRSContext2D } from "@napi-rs/canvas";
-import type { CodeScene, ResolvedCode } from "@agent-video/core";
+import type { CodeScene, ResolvedCode } from "@showtell/core";
 import { THEME, type CanvasTheme } from "../theme.ts";
 import type { Dims } from "../dims.ts";
 import { fitMonoFont, windowAround, drawCard } from "../draw.ts";

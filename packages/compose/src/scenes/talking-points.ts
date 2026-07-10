@@ -1,5 +1,5 @@
 import type { SKRSContext2D } from "@napi-rs/canvas";
-import type { TalkingPointsScene } from "@agent-video/core";
+import type { TalkingPointsScene } from "@showtell/core";
 import { THEME, type CanvasTheme } from "../theme.ts";
 import type { Dims } from "../dims.ts";
 import { wrapText } from "../draw.ts";

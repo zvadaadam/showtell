@@ -1,5 +1,5 @@
 /**
- * The agent-video spec — the single contract between the LLM (which authors it)
+ * The showtell spec — the single contract between the LLM (which authors it)
  * and the deterministic renderer (which consumes it).
  *
  * Source of truth: these zod schemas. TypeScript types are inferred from them,
@@ -194,7 +194,7 @@ export const ScreencapScene = z
         sessionRef: z
           .string()
           .regex(/^[A-Za-z0-9_-]{1,64}$/, "A capture session id (letters/digits/_/-, max 64); not a path.")
-          .describe("Recorded capture session id (a filename under .agent-video/captures, not a path)."),
+          .describe("Recorded capture session id (a filename under .showtell/captures, not a path)."),
         clip: z
           .object({ start: z.number().min(0), end: z.number().positive() })
           .strict()
@@ -229,7 +229,7 @@ export const TtsConfig = z
   .object({
     provider: z
       .enum(["say", "replicate", "openai", "elevenlabs"])
-      .describe("TTS provider. Local 'say' needs no key; others are BYO-API."),
+      .describe("TTS provider. Local 'say' uses macOS say or Linux espeak-ng; others are BYO-API."),
     model: z.string().optional(),
     voice: z.string().optional(),
   })
@@ -244,7 +244,7 @@ export const Meta = z
     watermark: z
       .union([z.boolean(), z.string()])
       .default(true)
-      .describe('Watermark text; true = "agent-video.dev". Free tier shows it.'),
+      .describe('Watermark text; true = "showtell". Free tier shows it.'),
     repo: z
       .object({
         path: z.string().default("."),
@@ -302,7 +302,7 @@ export function sceneRefs(
 }
 
 /** The set of scene kinds the renderer can currently produce. All six ship in v1
- *  (screencap needs a recorded capture session — see `agent-video capture`). */
+ *  (screencap needs a recorded capture session — see `showtell capture`). */
 export const IMPLEMENTED_SCENE_KINDS: readonly SceneKind[] = [
   "title",
   "code",

@@ -301,7 +301,7 @@
                     "openai",
                     "elevenlabs"
                   ],
-                  "description": "TTS provider. Local 'say' needs no key; others are BYO-API."
+                  "description": "TTS provider. Local 'say' uses macOS say or Linux espeak-ng; others are BYO-API."
                 },
                 "model": {
                   "type": "string"

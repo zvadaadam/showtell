@@ -32,4 +32,34 @@ jobs:
       - name: Build the standalone binary + smoke test
         run: |
           bun run build:cli
-          ./dist/agent-video version
+          ./dist/showtell version
+          bun run build:npm
+          npm publish ./dist/npm/showtell --dry-run
+          npm publish ./dist/npm/showtell-darwin-arm64 --dry-run
+
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install render prerequisites
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg espeak-ng
+      - run: bun install --frozen-lockfile
+      - name: Build and exercise the native package
+        run: |
+          bun scripts/build-npm-package.ts --target ${{ matrix.target }}
+          ./dist/npm/showtell-${{ matrix.target }}/bin/showtell version
+          ./dist/npm/showtell-${{ matrix.target }}/bin/showtell render examples/hello.spec.json --frames-only --aspect 16:9 --out .showtell/linux-smoke
+          npm publish ./dist/npm/showtell-${{ matrix.target }} --dry-run

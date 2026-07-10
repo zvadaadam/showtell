@@ -5,7 +5,7 @@ dist/
 
 # render artifacts
 .video/
-.agent-video/
+.showtell/
 *.mp4
 *.wav
 !examples/**/*.mp4

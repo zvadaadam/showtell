@@ -1,6 +1,6 @@
 # Bundle v2: agent-authored hyperframe videos
 
-Status: implemented runtime. The repo now supports `agent-video bundle
+Status: implemented runtime. The repo now supports `showtell bundle
 validate|inspect|compile|render|workshop|components|templates|schema` for a v2
 source bundle. The current renderer validates hyperframe modules, extracts
 their literal input contracts, executes their pure `render(ctx)` function, and
@@ -13,7 +13,7 @@ Bundle v2 changes the authoring unit from one scene JSON file to a source
 bundle:
 
 ```text
-my-video.agent-video/
+my-video.showtell/
   spec.json
   hyperframes/
     intro.tsx
@@ -25,11 +25,11 @@ my-video.agent-video/
     images/demo.png
 ```
 
-After `agent-video bundle compile` or `agent-video bundle render`, the renderer
+After `showtell bundle compile` or `showtell bundle render`, the renderer
 adds generated files:
 
 ```text
-my-video.agent-video/
+my-video.showtell/
   compiled-plan.json
   out/
 ```
@@ -77,21 +77,21 @@ does not infer panels from props or rotate focus for the agent.
 All bundle commands are non-interactive and emit structured JSON:
 
 ```bash
-agent-video bundle schema
-agent-video bundle validate examples/bundle-v2
-agent-video bundle inspect examples/bundle-v2
-agent-video bundle components
-agent-video bundle templates
-agent-video bundle workshop examples/bundle-v2 --out .agent-video/workshop --aspect 16:9
-agent-video bundle compile examples/bundle-v2
-agent-video bundle render examples/bundle-v2 --out .agent-video/bundle-v2 --aspect 16:9,9:16
+showtell bundle schema
+showtell bundle validate examples/bundle-v2
+showtell bundle inspect examples/bundle-v2
+showtell bundle components
+showtell bundle templates
+showtell bundle workshop examples/bundle-v2 --out .showtell/workshop --aspect 16:9
+showtell bundle compile examples/bundle-v2
+showtell bundle render examples/bundle-v2 --out .showtell/bundle-v2 --aspect 16:9,9:16
 ```
 
 `bundle inspect` validates first, then prints a structured authoring map:
 scenes, narration lines, implicit/authored beats, refs, ranges, assets,
 hyperframe props schemas, and required input ports. Run it before compile when
 an agent needs to see what a hyperframe expects without reading the TSX by hand.
-`bundle components` lists reusable imports from `@agent-video/hyperframes`.
+`bundle components` lists reusable imports from `@showtell/hyperframes`.
 Agents should use this before authoring a custom hyperframe. `bundle templates`
 lists complete starters to copy only when the whole story shape is close.
 `bundle workshop` compiles the real bundle and renders every scene/line/aspect
@@ -141,7 +141,7 @@ The bundle root is the directory containing `spec.json`.
 
 ```jsonc
 {
-  "$schema": "https://agent-video.dev/schemas/bundle-v2.json",
+  "$schema": "https://raw.githubusercontent.com/zvadaadam/showtell/main/packages/core/bundle.schema.json",
   "version": 2,
   "meta": {
     "title": "PR walkthrough",
@@ -220,7 +220,7 @@ Built-ins remain available for migration and simple videos:
 
 ## Spec field contract
 
-This is the normative v2 shape. `agent-video bundle schema` prints the generated
+This is the normative v2 shape. `showtell bundle schema` prints the generated
 JSON Schema.
 
 Top level:
@@ -250,7 +250,7 @@ IDs:
 - `repo.baseRef` and `repo.headRef`: optional git refs used by defaults and
   diagnostics.
 - `theme`: optional shared brand system for all hyperframes in the video. It is
-  intentionally semantic, not a CSS dump. Run `agent-video bundle themes` for
+  intentionally semantic, not a CSS dump. Run `showtell bundle themes` for
   the designed presets with full tokens, then prefer a preset plus small
   overrides:
   `{ "preset"?: "ink" | "aurora" | "ember" | "orchid" | "graphite" |
@@ -415,7 +415,7 @@ Each hyperframe is agent-authored code with a narrow deterministic interface.
 The canonical module shape is a default object:
 
 ```ts
-import type { HyperframeContext, JsonSchema } from "@agent-video/hyperframes";
+import type { HyperframeContext, JsonSchema } from "@showtell/hyperframes";
 
 export interface HyperframeModule<Props> {
   schemaVersion: 1;
@@ -543,7 +543,7 @@ interface CaptionCue {
 }
 ```
 
-The `@agent-video/hyperframes` package is the reusable authoring kit. It
+The `@showtell/hyperframes` package is the reusable authoring kit. It
 provides type definitions, deterministic host primitives, media primitives,
 story components, and starter templates. The renderer executes `render(ctx)`
 and then draws the returned component tree through trusted compose primitives.
@@ -563,7 +563,7 @@ Think in three layers:
 Run this before authoring custom hyperframes:
 
 ```bash
-agent-video bundle components
+showtell bundle components
 ```
 
 The command returns structured JSON with component import names, layer
@@ -690,7 +690,7 @@ return (
 );
 ```
 
-Hyperframes should import only from `@agent-video/hyperframes`. Validation
+Hyperframes should import only from `@showtell/hyperframes`. Validation
 rejects common nondeterministic or unsafe source patterns before runtime. This
 is an agent-authoring policy gate, not a security sandbox for hostile code. The
 policy rejects:
@@ -700,7 +700,7 @@ policy rejects:
 - filesystem, network, subprocess, process, or environment access
 - `eval`, `Function`, timers, top-level await, or `import.meta`
 - dynamic imports
-- package imports other than `@agent-video/hyperframes`
+- package imports other than `@showtell/hyperframes`
 - DOM audio/video playback
 - pasted source text for code or diffs
 
@@ -710,10 +710,10 @@ Starter templates are complete examples, not the main reuse layer. Reuse
 components first; copy a template when it is close to the full story shape you
 need. Templates live in `packages/hyperframes/templates/`, with the
 machine-readable registry exported as `hyperframeTemplates` from
-`@agent-video/hyperframes`.
+`@showtell/hyperframes`.
 
 ```bash
-agent-video bundle templates
+showtell bundle templates
 ```
 
 The command returns structured JSON with each template's `id`, source `path`,
@@ -914,25 +914,25 @@ Every CLI command must return structured JSON. Failures include `code`, `path`,
 Recommended command surface:
 
 ```bash
-agent-video bundle schema
-agent-video bundle validate my-video.agent-video
-agent-video bundle inspect my-video.agent-video
-agent-video bundle components
-agent-video bundle templates
-agent-video bundle workshop my-video.agent-video --out .agent-video/workshop
-agent-video bundle compile my-video.agent-video
-agent-video bundle render my-video.agent-video --out .agent-video/out
+showtell bundle schema
+showtell bundle validate my-video.showtell
+showtell bundle inspect my-video.showtell
+showtell bundle components
+showtell bundle templates
+showtell bundle workshop my-video.showtell --out .showtell/workshop
+showtell bundle compile my-video.showtell
+showtell bundle render my-video.showtell --out .showtell/out
 # preview/watch URL support is future work for bundle v2
 ```
 
 Success shapes:
 
 ```jsonc
-// agent-video bundle validate my-video.agent-video
+// showtell bundle validate my-video.showtell
 {
   "ok": true,
   "stage": "bundle-validate",
-  "bundleDir": "my-video.agent-video",
+  "bundleDir": "my-video.showtell",
   "sceneCount": 2,
   "assetCount": 2,
   "hyperframes": [{ "scene": "proof", "src": "hyperframes/product-system.tsx" }],
@@ -941,7 +941,7 @@ Success shapes:
 ```
 
 ```jsonc
-// agent-video bundle inspect my-video.agent-video
+// showtell bundle inspect my-video.showtell
 {
   "ok": true,
   "stage": "bundle-inspect",
@@ -966,11 +966,11 @@ Success shapes:
 ```
 
 ```jsonc
-// agent-video bundle compile my-video.agent-video
+// showtell bundle compile my-video.showtell
 {
   "ok": true,
   "stage": "bundle-compile",
-  "planPath": "my-video.agent-video/compiled-plan.json",
+  "planPath": "my-video.showtell/compiled-plan.json",
   "durationMs": 8200,
   "sceneCount": 2,
   "assetCount": 2,
@@ -981,14 +981,14 @@ Success shapes:
 ```
 
 ```jsonc
-// agent-video bundle render my-video.agent-video --out .agent-video/out
+// showtell bundle render my-video.showtell --out .showtell/out
 {
   "ok": true,
   "stage": "bundle-render",
-  "planPath": "my-video.agent-video/compiled-plan.json",
+  "planPath": "my-video.showtell/compiled-plan.json",
   "outputs": [
-    { "aspectRatio": "16:9", "path": ".agent-video/out/bundle-16x9.mp4", "durationMs": 8200, "captionsBurnedIn": true },
-    { "aspectRatio": "9:16", "path": ".agent-video/out/bundle-9x16.mp4", "durationMs": 8200, "captionsBurnedIn": true },
+    { "aspectRatio": "16:9", "path": ".showtell/out/bundle-16x9.mp4", "durationMs": 8200, "captionsBurnedIn": true },
+    { "aspectRatio": "9:16", "path": ".showtell/out/bundle-9x16.mp4", "durationMs": 8200, "captionsBurnedIn": true },
   ],
   "resolvedCode": [{ "scene": 0, "file": "src/payments/idempotencyStore.ts", "sha256": "..." }],
   "warnings": [],

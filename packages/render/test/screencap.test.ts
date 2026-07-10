@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { VideoSpec } from "@agent-video/core";
+import type { VideoSpec } from "@showtell/core";
 import { renderVideo, probeDurationMs } from "../src/index.ts";
 
 let repo: string;
@@ -12,7 +12,7 @@ let outDir: string;
 beforeAll(() => {
   repo = mkdtempSync(join(tmpdir(), "av-screencap-"));
   outDir = join(repo, "out");
-  const caps = join(repo, ".agent-video", "captures");
+  const caps = join(repo, ".showtell", "captures");
   mkdirSync(caps, { recursive: true });
   // Synthetic "screen recording" stands in for a real avfoundation capture.
   execFileSync("ffmpeg", [
@@ -108,7 +108,7 @@ test("missing capture session fails with an actionable error", async () => {
 }, 20_000);
 
 test("screencap clip range is passed through to the compositor", async () => {
-  const caps = join(repo, ".agent-video", "captures");
+  const caps = join(repo, ".showtell", "captures");
   execFileSync("ffmpeg", [
     "-y",
     "-loglevel",
@@ -151,7 +151,7 @@ test("screencap clip range is passed through to the compositor", async () => {
 }, 40_000);
 
 test("screencap action-only playback drops dead lead-in around events", async () => {
-  const caps = join(repo, ".agent-video", "captures");
+  const caps = join(repo, ".showtell", "captures");
   execFileSync("ffmpeg", [
     "-y",
     "-loglevel",
@@ -205,7 +205,7 @@ test("screencap action-only playback drops dead lead-in around events", async ()
 }, 40_000);
 
 test("portrait screencaps default to full-frame instead of zoom camera", async () => {
-  const caps = join(repo, ".agent-video", "captures");
+  const caps = join(repo, ".showtell", "captures");
   execFileSync("ffmpeg", [
     "-y",
     "-loglevel",
@@ -284,7 +284,7 @@ test("portrait screencaps default to full-frame instead of zoom camera", async (
 }, 40_000);
 
 test("screencap clip ranges keep event windows that overlap the clip", async () => {
-  const caps = join(repo, ".agent-video", "captures");
+  const caps = join(repo, ".showtell", "captures");
   execFileSync("ffmpeg", [
     "-y",
     "-loglevel",
@@ -336,7 +336,7 @@ test("screencap clip ranges keep event windows that overlap the clip", async () 
 }, 40_000);
 
 test("screencap smart playback drops visually idle time without event metadata", async () => {
-  const caps = join(repo, ".agent-video", "captures");
+  const caps = join(repo, ".showtell", "captures");
   execFileSync("ffmpeg", [
     "-y",
     "-loglevel",

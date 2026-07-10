@@ -1,7 +1,7 @@
 {
   "$schema": "../packages/core/schema.json",
   "meta": {
-    "title": "agent-video — how it works",
+    "title": "showtell — how it works",
     "fps": 30,
     "aspectRatios": ["16:9", "9:16"],
     "tts": { "provider": "say" },
@@ -10,8 +10,8 @@
   "scenes": [
     {
       "kind": "title",
-      "content": { "heading": "agent-video", "subtitle": "Loom for agents — how it works" },
-      "narration": "agent-video is a local, repo-aware renderer. Instead of writing you an answer, a coding agent makes you a short narrated video.",
+      "content": { "heading": "showtell", "subtitle": "A motion engine for agents — how it works" },
+      "narration": "showtell is a local, repo-aware renderer. Instead of writing you an answer, a coding agent makes you a short narrated video.",
       "duration": "auto"
     },
     {
@@ -60,9 +60,9 @@
       "content": {
         "heading": "Use it",
         "points": [
-          "agent-video validate spec.json",
-          "agent-video render spec.json   →   mp4",
-          "agent-video preview spec.json  →   watchUrl"
+          "showtell validate spec.json",
+          "showtell render spec.json   →   mp4",
+          "showtell preview spec.json  →   watchUrl"
         ]
       },
       "narration": "To use it: validate your spec, render it to an mp4, or preview it on a local watch page. That's it — this very video was made by the tool explaining itself.",

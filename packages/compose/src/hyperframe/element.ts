@@ -1,5 +1,5 @@
 /** Element-tree utilities shared by the hyperframe renderers. */
-import type { HyperframeChild, HyperframeElement } from "@agent-video/hyperframes";
+import type { HyperframeChild, HyperframeElement } from "@showtell/hyperframes";
 
 export function isElement(value: HyperframeChild): value is HyperframeElement {
   return Boolean(value && typeof value === "object" && !Array.isArray(value) && "type" in value && "props" in value);

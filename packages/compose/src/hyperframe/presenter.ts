@@ -7,8 +7,8 @@
  */
 import { readFileSync } from "node:fs";
 import { createCanvas, loadImage, type Image, type SKRSContext2D } from "@napi-rs/canvas";
-import type { AspectRatio } from "@agent-video/core";
-import type { HyperframeTheme } from "@agent-video/hyperframes";
+import type { AspectRatio } from "@showtell/core";
+import type { HyperframeTheme } from "@showtell/hyperframes";
 import { dimsFor, type Dims } from "../dims.ts";
 import { ensureFonts } from "../fonts.ts";
 import { resolveAgentLogo } from "./agent-logos.ts";

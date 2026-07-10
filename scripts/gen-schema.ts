@@ -4,7 +4,7 @@
  * bundled into the compiled binary so `bundle render` works outside the repo). */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { bundleSpecJsonSchema, videoSpecJsonSchema, videoManifestJsonSchema } from "@agent-video/core";
+import { bundleSpecJsonSchema, videoSpecJsonSchema, videoManifestJsonSchema } from "@showtell/core";
 
 const root = join(import.meta.dir, "..");
 const coreDir = join(root, "packages", "core");

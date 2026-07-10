@@ -1,5 +1,5 @@
 {
-  "name": "@agent-video/render",
+  "name": "@showtell/render",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,10 +9,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@agent-video/capture": "workspace:*",
-    "@agent-video/compose": "workspace:*",
-    "@agent-video/core": "workspace:*",
-    "@agent-video/hyperframes": "workspace:*",
-    "@agent-video/providers": "workspace:*"
+    "@showtell/capture": "workspace:*",
+    "@showtell/compose": "workspace:*",
+    "@showtell/core": "workspace:*",
+    "@showtell/hyperframes": "workspace:*",
+    "@showtell/providers": "workspace:*"
   }
 }

@@ -1,4 +1,4 @@
-# @agent-video/hyperframes
+# @showtell/hyperframes
 
 Typed authoring kit for bundle v2 hyperframes.
 
@@ -10,8 +10,8 @@ and draws the returned component tree through trusted compose primitives.
 ## Use
 
 ```bash
-agent-video bundle components
-agent-video bundle templates
+showtell bundle components
+showtell bundle templates
 ```
 
 Use components first:
@@ -22,7 +22,7 @@ Use components first:
 - story components: `DecisionGrid`, `SignalWall`, `LaneStack`, `ProofLadder`,
   `StatusRail`, `PhaseBanner`, `CaptionDeck`, `StatRow`, `CompareSplit`
 
-`agent-video bundle components` returns the same vocabulary as structured JSON
+`showtell bundle components` returns the same vocabulary as structured JSON
 with import names, layers, prop hints, and JSX examples.
 
 Copy a starter from `templates/` only when a full example is close to the

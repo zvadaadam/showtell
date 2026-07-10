@@ -1,9 +1,9 @@
 {
-  "name": "@agent-video/providers",
+  "name": "@showtell/providers",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "BYO-API model gateway. TTS behind one interface (text+voice→wav); adapters: local `say` (now), Replicate/OpenAI/ElevenLabs (later). Cached per line.",
+  "description": "TTS gateway with local system speech plus OpenAI, Replicate, and ElevenLabs adapters. Cached per narration line.",
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts"

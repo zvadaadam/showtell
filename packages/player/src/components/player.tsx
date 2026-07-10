@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, forwardRef, useEffect, useMemo, useRef, useState } from 'react'
-import type { VideoManifest, ManifestScene } from '@agent-video/core'
+import type { VideoManifest, ManifestScene } from '@showtell/core'
 import { cn } from '#/lib/utils'
 import { DEFAULT_THEME_ID, getTheme, listThemes } from '#/lib/themes'
 import { playerAspectClasses } from './aspect'
@@ -166,7 +166,7 @@ function PlayerView({ manifest }: { manifest: VideoManifest }) {
         <div className="min-w-0">
           <Eyebrow className="flex items-center gap-2">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--av-accent)]" />
-            watch · agent-video
+            watch · showtell
           </Eyebrow>
           <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-[var(--av-paper)]" data-testid="title">
             {manifest.meta.title}

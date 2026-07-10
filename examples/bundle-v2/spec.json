@@ -1,8 +1,8 @@
 {
-  "$schema": "https://agent-video.dev/schemas/bundle-v2.json",
+  "$schema": "https://raw.githubusercontent.com/zvadaadam/showtell/main/packages/core/bundle.schema.json",
   "version": 2,
   "meta": {
-    "title": "How agent-video bundle v2 works",
+    "title": "How showtell bundle v2 works",
     "fps": 30,
     "aspectRatios": ["16:9", "9:16"],
     "presenter": {
@@ -56,7 +56,7 @@
         "lines": [
           {
             "id": "l1",
-            "text": "agent-video is Loom for agents: the agent directs the story, but the renderer owns every irreversible operation."
+            "text": "showtell is A motion engine for agents: the agent directs the story, but the renderer owns every irreversible operation."
           },
           {
             "id": "l2",
@@ -79,7 +79,7 @@
         "export": "default",
         "props": {
           "eyebrow": "product model",
-          "title": "Loom for agents",
+          "title": "A motion engine for agents",
           "body": "A local, repo-aware video renderer where the model authors intent and the renderer owns execution.",
           "steps": ["agent directs", "renderer executes"],
           "callouts": ["repo-aware storytelling", "no ffmpeg or pasted source"],

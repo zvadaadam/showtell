@@ -1,5 +1,5 @@
-import type { VideoSpec } from "@agent-video/core";
-import { probeDurationMs, probeVideoSize } from "@agent-video/providers";
+import type { VideoSpec } from "@showtell/core";
+import { probeDurationMs, probeVideoSize } from "@showtell/providers";
 import {
   alignEventsToVisualActivity,
   analyzeVisualActivity,
@@ -14,7 +14,7 @@ import {
   type CaptureEvent,
   type PlaybackPlan,
   type VisualActivityConfig,
-} from "@agent-video/capture";
+} from "@showtell/capture";
 
 type ScreencapScene = Extract<VideoSpec["scenes"][number], { kind: "screencap" }>;
 type ScreencapPlayback = NonNullable<ScreencapScene["content"]["playback"]>;

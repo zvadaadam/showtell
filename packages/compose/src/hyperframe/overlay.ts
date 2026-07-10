@@ -1,6 +1,6 @@
 /** Stage background and the kinetic-caption overlay. */
 import type { SKRSContext2D } from "@napi-rs/canvas";
-import type { HyperframeElement } from "@agent-video/hyperframes";
+import type { HyperframeElement } from "@showtell/hyperframes";
 import type { Dims } from "../dims.ts";
 import { roundRect, wrapText } from "../draw.ts";
 import { propsOf } from "../render-hyperframe-shared.ts";

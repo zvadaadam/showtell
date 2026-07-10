@@ -7,7 +7,7 @@
  * atoms, rails, and overlay (background + captions).
  */
 import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
-import type { AspectRatio } from "@agent-video/core";
+import type { AspectRatio } from "@showtell/core";
 import {
   CaptionDeck,
   CompareSplit,
@@ -23,7 +23,7 @@ import {
   type HyperframeComponent,
   type HyperframeElement,
   type HyperframeTheme,
-} from "@agent-video/hyperframes";
+} from "@showtell/hyperframes";
 import { dimsFor, type Dims } from "./dims.ts";
 import { drawWatermark, roundRect } from "./draw.ts";
 import { ensureFonts } from "./fonts.ts";
@@ -535,7 +535,7 @@ function renderCaptionSafeAreaNode(
 
 function unknownElementError(element: HyperframeElement): Error {
   return new Error(
-    `Unknown hyperframe element "${element.type}". Import a supported component from @agent-video/hyperframes.`,
+    `Unknown hyperframe element "${element.type}". Import a supported component from @showtell/hyperframes.`,
   );
 }
 
@@ -718,7 +718,7 @@ async function renderHyperframeElementToCanvas(element: HyperframeElement, opts:
       ? await renderStage(ctx, element, env)
       : await renderNode(ctx, element, { x: 0, y: 0, w: dims.width, h: dims.height }, env);
 
-  if (opts.watermark !== false) drawWatermark(ctx, dims, opts.watermark ?? "agent-video.dev", canvasTheme(opts.theme));
+  if (opts.watermark !== false) drawWatermark(ctx, dims, opts.watermark ?? "showtell", canvasTheme(opts.theme));
   if (opts.presenter) drawPresenterOverlay(ctx, env, opts.presenter);
   return { canvas, ctx, dims, result };
 }

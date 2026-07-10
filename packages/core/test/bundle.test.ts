@@ -387,7 +387,7 @@ test("bundle validation rejects git-option diff refs before compile", () => {
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
-          refs: { diff: { kind: "diff", file: "README.md", ref: "--output=/tmp/agent-video-pwned" } },
+          refs: { diff: { kind: "diff", file: "README.md", ref: "--output=/tmp/showtell-pwned" } },
           visual: { kind: "builtin", name: "diff", ref: "diff" },
         },
       ],

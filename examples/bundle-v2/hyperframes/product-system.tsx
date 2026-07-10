@@ -14,7 +14,7 @@ import {
   KineticCaption,
   defineHyperframe,
   h,
-} from "@agent-video/hyperframes";
+} from "@showtell/hyperframes";
 
 interface Props {
   eyebrow?: string;
@@ -69,7 +69,7 @@ function render(ctx: HyperframeContext<Props>) {
       <CaptionSafeArea>
         <Stack direction={isPortrait ? "vertical" : "horizontal"} gap="lg">
           <Stack grow>
-            <Text variant="eyebrow">{ctx.props.eyebrow ?? "agent-video bundle v2"}</Text>
+            <Text variant="eyebrow">{ctx.props.eyebrow ?? "showtell bundle v2"}</Text>
             <Text variant="title">{ctx.props.title}</Text>
             {ctx.props.body ? <Text variant="body">{ctx.props.body}</Text> : null}
           </Stack>

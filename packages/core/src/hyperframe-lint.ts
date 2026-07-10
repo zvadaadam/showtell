@@ -26,13 +26,13 @@ export function validateHyperframeSource(text: string, path: string, errors: Bun
         "BANNED_HYPERFRAME_IMPORT",
         path,
         `Hyperframe imports unsupported module "${specifier}".`,
-        'Hyperframes may import only from "@agent-video/hyperframes"; declare assets and repo refs in spec.json.',
+        'Hyperframes may import only from "@showtell/hyperframes"; declare assets and repo refs in spec.json.',
       ),
     );
   };
 
   const checkModuleSpecifier = (specifier: string): void => {
-    if (specifier !== "@agent-video/hyperframes") reportImport(specifier);
+    if (specifier !== "@showtell/hyperframes") reportImport(specifier);
   };
 
   const expressionRoot = (node: ts.Expression): string | undefined => {
@@ -101,7 +101,7 @@ export function validateHyperframeSource(text: string, path: string, errors: Bun
       const name = calledName(node.expression);
       if (name === "fetch") reportApi("fetch(", "Hyperframes cannot call the network; declare assets in spec.json.");
       if (name === "require")
-        reportApi("require(", "Hyperframes cannot import modules dynamically; use @agent-video/hyperframes only.");
+        reportApi("require(", "Hyperframes cannot import modules dynamically; use @showtell/hyperframes only.");
       if (name === "eval") reportApi("eval(", "Hyperframes cannot use eval.");
       if (name === "Function") reportApi("Function(", "Hyperframes cannot construct functions dynamically.");
       if (name === "setTimeout") reportApi("setTimeout", "Hyperframes cannot use timers; animate from ctx.time.");
