@@ -3,6 +3,7 @@ import { probeDurationMs, probeVideoSize } from "@showtell/providers";
 import {
   alignEventsToVisualActivity,
   analyzeVisualActivity,
+  compositeScreencap,
   computeCameraTimeline,
   createActionPlaybackPlan,
   createSmartPlaybackPlan,
@@ -10,14 +11,17 @@ import {
   remapEventsToPlayback,
   resolveSession,
   type ActionPlaybackConfig,
+  type ScreencapOverlay,
   type CameraKeyframe,
   type CaptureEvent,
   type PlaybackPlan,
   type VisualActivityConfig,
 } from "@showtell/capture";
 
-type ScreencapScene = Extract<VideoSpec["scenes"][number], { kind: "screencap" }>;
-type ScreencapPlayback = NonNullable<ScreencapScene["content"]["playback"]>;
+type SimpleScreencapScene = Extract<VideoSpec["scenes"][number], { kind: "screencap" }>;
+export type ScreencapSource = Pick<SimpleScreencapScene["content"], "sessionRef" | "clip" | "playback">;
+type ScreencapPlayback = NonNullable<ScreencapSource["playback"]>;
+type ScreencapCompositeOptions = Parameters<typeof compositeScreencap>[0];
 type CameraMode = "auto" | "follow" | "none";
 type ResolvedCameraMode = Exclude<CameraMode, "auto">;
 type ActionEffectMode = "auto" | "tap-glow" | "none";
@@ -34,17 +38,80 @@ export interface ScreencapPresentation {
   warnings: string[];
 }
 
+export type ScreencapPresentationCache = Map<number, ScreencapPresentation>;
+
+export interface ScreencapClipRequest {
+  sceneIndex: number;
+  capture: ScreencapSource;
+  repoPath: string;
+  outPath: string;
+  width: number;
+  height: number;
+  durationSec: number;
+  fps: number;
+  audio?: string;
+  overlays?: ScreencapOverlay[];
+}
+
+/**
+ * Prepare once per scene, then composite once per requested aspect ratio.
+ * Warnings are returned only on the preparation call so a multi-aspect render
+ * reports each scheduling fallback once, matching the scene-level semantics.
+ */
+export function renderScreencapClip(
+  presentations: ScreencapPresentationCache,
+  request: ScreencapClipRequest,
+): string[] {
+  let presentation = presentations.get(request.sceneIndex);
+  let warnings: string[] = [];
+  if (!presentation) {
+    presentation = prepareScreencapPresentation(request.capture, {
+      repoPath: request.repoPath,
+      durationSec: request.durationSec,
+      fps: request.fps,
+    });
+    presentations.set(request.sceneIndex, presentation);
+    warnings = [...presentation.warnings];
+  }
+
+  compositeScreencap(buildScreencapCompositeOptions(presentation, request));
+  return warnings;
+}
+
+/** Exact capture/mux handoff shared by every screencap rendering pipeline. */
+export function buildScreencapCompositeOptions(
+  presentation: ScreencapPresentation,
+  request: Omit<ScreencapClipRequest, "sceneIndex" | "capture" | "repoPath">,
+): ScreencapCompositeOptions {
+  return {
+    source: presentation.source,
+    sourceStartSec: presentation.sourceStartSec,
+    sourceDurationSec: presentation.sourceDurationSec,
+    outPath: request.outPath,
+    width: request.width,
+    height: request.height,
+    durationSec: request.durationSec,
+    fps: request.fps,
+    audio: request.audio,
+    overlays: request.overlays,
+    camera: presentation.camera,
+    sourceSize: presentation.sourceSize,
+    playbackPlan: presentation.playbackPlan,
+    actionEffects: presentation.actionEffects,
+  };
+}
+
 export function prepareScreencapPresentation(
-  scene: ScreencapScene,
+  capture: ScreencapSource,
   opts: { repoPath: string; durationSec: number; fps: number },
 ): ScreencapPresentation {
-  const ref = scene.content.sessionRef;
+  const ref = capture.sessionRef;
   const source = resolveSession(ref, opts.repoPath);
-  const clipRange = scene.content.clip;
+  const clipRange = capture.clip;
   const sourceStartSec = clipRange?.start ?? 0;
   const sourceDurationSec = clipRange ? clipRange.end - clipRange.start : undefined;
   const sourceDurationMs = measureSourceDurationMs(source, sourceStartSec, sourceDurationSec);
-  const playback = scene.content.playback;
+  const playback = capture.playback;
   const warnings: string[] = [];
 
   let events = eventsForClip(loadSessionEvents(ref, opts.repoPath), clipRange);
@@ -118,10 +185,7 @@ function measureSourceDurationMs(source: string, startSec: number, durationSec: 
   return Math.max(0, probeDurationMs(source) - startSec * 1000);
 }
 
-function eventsForClip(
-  events: CaptureEvent[] | null,
-  clipRange: ScreencapScene["content"]["clip"],
-): CaptureEvent[] | null {
+function eventsForClip(events: CaptureEvent[] | null, clipRange: ScreencapSource["clip"]): CaptureEvent[] | null {
   if (!events || !clipRange) return events;
   const startMs = clipRange.start * 1000;
   const endMs = clipRange.end * 1000;

@@ -381,11 +381,11 @@
                       },
                       "x": {
                         "type": "string",
-                        "description": "Optional label/category field. Hyperframe Chart requires this."
+                        "description": "Optional label/category field used by the built-in chart renderer."
                       },
                       "y": {
                         "type": "string",
-                        "description": "Optional numeric value field. Hyperframe Chart requires this."
+                        "description": "Optional numeric value field used by the built-in chart renderer."
                       },
                       "data": {
                         "type": "array",

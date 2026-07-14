@@ -1,5 +1,6 @@
 {
   "name": "@showtell/core",
+  "private": true,
   "version": "0.1.0",
   "type": "module",
   "description": "showtell spec types, JSON Schema, git/diff parsing, and timeline assembler.",
@@ -11,6 +12,7 @@
     "./manifest.schema.json": "./manifest.schema.json"
   },
   "dependencies": {
+    "parse5": "8.0.1",
     "typescript": "5.9.3",
     "zod": "3.25.76",
     "zod-to-json-schema": "3.25.2"

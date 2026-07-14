@@ -1,5 +1,6 @@
 {
   "name": "@showtell/cli",
+  "private": true,
   "version": "0.1.0",
   "type": "module",
   "description": "Open-source motion engine for videos made by agents, for humans.",
@@ -10,7 +11,6 @@
   "dependencies": {
     "@showtell/capture": "workspace:*",
     "@showtell/core": "workspace:*",
-    "@showtell/hyperframes": "workspace:*",
     "@showtell/render": "workspace:*"
   },
   "homepage": "https://github.com/zvadaadam/showtell#readme",

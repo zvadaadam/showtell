@@ -3,18 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Deterministic canvas renderer for built-in visuals and hyperframe primitive trees.",
+  "description": "Deterministic renderer-owned captions, presenter, watermark, and frame chrome.",
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@showtell/core": "workspace:*",
-    "@showtell/hyperframes": "workspace:*",
     "@fontsource/inter": "5.2.8",
     "@fontsource/jetbrains-mono": "5.2.8",
+    "@fontsource/league-gothic": "5.2.8",
     "@fontsource/noto-sans-math": "^5.2.9",
+    "@fontsource/space-mono": "5.2.8",
     "@napi-rs/canvas": "0.1.100",
-    "shiki": "1.29.2"
+    "@showtell/core": "workspace:*"
   }
 }

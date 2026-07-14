@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
-/** Build, verify, and publish the exact Showtell npm release tarballs. */
-import { readFileSync } from "node:fs";
+/** Verify and publish the exact npm tarballs already assembled and smoke-tested by release CI. */
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { RELEASE_TARGETS } from "./release-targets.ts";
 
 const root = join(import.meta.dir, "..");
 const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as { version: string };
-const binaryDirIndex = process.argv.indexOf("--binary-dir");
-const binaryDir = binaryDirIndex === -1 ? undefined : process.argv[binaryDirIndex + 1];
+const releaseDir = join(root, "dist", "release");
+const verifyOnly = process.argv.includes("--verify-only");
 
 function run(command: string[], stdout: "inherit" | "ignore" = "inherit"): Bun.SpawnSyncReturns<Buffer> {
   const result = Bun.spawnSync(command, { cwd: root, stdout, stderr: stdout });
@@ -23,19 +25,38 @@ function isPublished(name: string): boolean {
   return result.exitCode === 0;
 }
 
-if (!binaryDir) {
-  throw new Error(
-    "Publishing requires --binary-dir with showtell-darwin-arm64, showtell-linux-x64, and showtell-linux-arm64.",
-  );
+const packages = [...RELEASE_TARGETS.map((target) => target.packageName), "showtell"];
+const sumsPath = join(releaseDir, "SHA256SUMS");
+if (!existsSync(sumsPath)) throw new Error("Missing dist/release/SHA256SUMS. Run and smoke-test build:release first.");
+const expectedSums = new Map(
+  readFileSync(sumsPath, "utf-8")
+    .trim()
+    .split("\n")
+    .map((line) => {
+      const [digest, name] = line.trim().split(/\s+/, 2);
+      return [name, digest] as const;
+    }),
+);
+
+for (const name of packages) {
+  const file = `${name}-${version}.tgz`;
+  const path = join(releaseDir, file);
+  if (!existsSync(path)) throw new Error(`Missing tested release package ${path}. Run build:release first.`);
+  const actual = createHash("sha256").update(readFileSync(path)).digest("hex");
+  if (expectedSums.get(file) !== actual) throw new Error(`Release checksum mismatch for ${file}; refusing to publish.`);
 }
 
-run(["bun", "scripts/build-release.ts", "--binary-dir", binaryDir]);
+if (verifyOnly) {
+  process.stdout.write(
+    `${JSON.stringify({ ok: true, stage: "release-verify", version, packages, releaseDir }, null, 2)}\n`,
+  );
+  process.exit(0);
+}
 
-const packages = ["showtell-darwin-arm64", "showtell-linux-x64", "showtell-linux-arm64", "showtell"];
 for (const name of packages) {
   if (isPublished(name)) {
     process.stdout.write(`${JSON.stringify({ ok: true, package: name, version, skipped: "already published" })}\n`);
     continue;
   }
-  run(["npm", "publish", join(root, "dist", "release", `${name}-${version}.tgz`), "--access", "public"]);
+  run(["npm", "publish", join(releaseDir, `${name}-${version}.tgz`), "--access", "public", "--provenance"]);
 }

@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import { loadImage } from "@napi-rs/canvas";
-import { AGENT_LOGO_IDS, resolveAgentLogo } from "../src/hyperframe/agent-logos.ts";
+import { AGENT_LOGO_IDS, resolveAgentLogo } from "../src/agent-logos.ts";
 
 test("every shipped agent mark resolves to a loadable embedded SVG", async () => {
   expect(AGENT_LOGO_IDS.length).toBeGreaterThanOrEqual(6);

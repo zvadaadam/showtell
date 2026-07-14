@@ -10,6 +10,8 @@
 import { GlobalFonts } from "@napi-rs/canvas";
 import { readFileSync } from "node:fs";
 import jetbrainsMono from "@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2" with { type: "file" };
+import leagueGothic from "@fontsource/league-gothic/files/league-gothic-latin-400-normal.woff2" with { type: "file" };
+import spaceMono from "@fontsource/space-mono/files/space-mono-latin-400-normal.woff2" with { type: "file" };
 import inter400 from "@fontsource/inter/files/inter-latin-400-normal.woff2" with { type: "file" };
 import inter500 from "@fontsource/inter/files/inter-latin-500-normal.woff2" with { type: "file" };
 import inter600 from "@fontsource/inter/files/inter-latin-600-normal.woff2" with { type: "file" };
@@ -29,6 +31,8 @@ import notoSansMath from "@fontsource/noto-sans-math/files/noto-sans-math-latin-
  */
 const FACES: ReadonlyArray<readonly [path: string, alias: string]> = [
   [jetbrainsMono, "JetBrains Mono"],
+  [leagueGothic, "League Gothic"],
+  [spaceMono, "Space Mono"],
   [inter400, "Inter"],
   [inter500, "Inter Medium"],
   [inter600, "Inter SemiBold"],

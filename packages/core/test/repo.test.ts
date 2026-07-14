@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFileAtRef, resolveCodeRef, resolveDiff } from "../src/repo.ts";
+import { readFileAtRef, readRepoMeta, resolveCodeRef, resolveDiff } from "../src/repo.ts";
 
 let repo: string;
 
@@ -22,6 +22,10 @@ test("working-tree code refs must stay repo-relative", () => {
 
 test("working-tree code refs wrap unreadable repo paths", () => {
   expect(() => readFileAtRef(join(repo, "missing"), "a.ts")).toThrow(/Unsafe working-tree file "a.ts"/);
+});
+
+test("repo metadata is empty for a non-git directory", () => {
+  expect(readRepoMeta(repo)).toEqual({ commit: undefined, branch: undefined });
 });
 
 test("git diff refs also reject paths outside the repo", () => {

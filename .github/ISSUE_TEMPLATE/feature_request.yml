@@ -1,0 +1,28 @@
+name: Feature request
+description: Propose an improvement to Showtell.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What agent or viewer problem should Showtell solve?
+    validations:
+      required: true
+  - type: textarea
+    id: motion
+    attributes:
+      label: Motion behavior
+      description: Describe how the idea behaves over time, not only its end state.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed interface
+      description: Show the spec, HTML visual, browser component, runtime API, or CLI surface you imagine.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

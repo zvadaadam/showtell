@@ -6,7 +6,7 @@ export {
   FASTSTART_ARGS,
 } from "./encode.ts";
 export { ensureCapturesDir, sessionPath, resolveSession, ensureSyntheticSession } from "./sessions.ts";
-export { compositeScreencap } from "./composite.ts";
+export { compositeScreencap, type ScreencapOverlay } from "./composite.ts";
 export { computeCameraTimeline, type CaptureEvent, type CaptureEventType, type CameraKeyframe } from "./camera.ts";
 export { recordCaptureEvent, loadSessionEvents, normalizeCaptureEvents } from "./events.ts";
 export {

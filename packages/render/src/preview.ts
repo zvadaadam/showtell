@@ -25,17 +25,20 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * first (running from the repo), then relative to this package. Throws with a
  * build hint if it isn't built yet.
  */
-export function resolvePlayerDist(): string {
+export function resolvePlayerDist(options: { executablePath?: string; cwd?: string } = {}): string {
+  const executableDir = dirname(options.executablePath ?? process.execPath);
   const candidates = [
-    join(process.cwd(), "packages/player/dist/client"),
+    // Native archives place player/ directly beside the executable. Published
+    // npm packages use <package>/bin/showtell + <package>/player.
+    join(executableDir, "player"),
+    join(executableDir, "..", "player"),
+    join(options.cwd ?? process.cwd(), "packages/player/dist/client"),
     join(HERE, "..", "..", "player", "dist", "client"),
   ];
   for (const c of candidates) {
     if (existsSync(join(c, "_shell.html"))) return resolve(c);
   }
-  throw new Error(
-    "Player build not found (packages/player/dist/client/_shell.html). Build it first: `cd packages/player && bun --bun run build`.",
-  );
+  throw new Error("Player assets were not found beside the Showtell executable or in packages/player/dist/client.");
 }
 
 /**
@@ -54,6 +57,8 @@ export function startPreviewServer(opts: {
   const shell = join(playerDir, "_shell.html");
 
   const server = Bun.serve({
+    // Local watch servers only: repo-derived frames must not be LAN-visible.
+    hostname: "127.0.0.1",
     port: opts.port ?? 0,
     fetch(req) {
       let path = decodeURIComponent(new URL(req.url).pathname);
@@ -81,6 +86,6 @@ export function startPreviewServer(opts: {
 
   const port = server.port;
   if (port == null) throw new Error("Preview server failed to bind to a port.");
-  const url = `http://localhost:${port}/`;
+  const url = `http://127.0.0.1:${port}/`;
   return { videoId: opts.videoId, port, url, watchUrl: url, stop: () => server.stop(true) };
 }

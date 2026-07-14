@@ -2,7 +2,7 @@ import { test, expect, afterAll } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { startPreviewServer } from "../src/preview.ts";
+import { resolvePlayerDist, startPreviewServer } from "../src/preview.ts";
 
 // Fake a built player dir + a rendered bundle dir; the server just streams files.
 const playerDir = mkdtempSync(join(tmpdir(), "av-player-"));
@@ -16,7 +16,7 @@ mkdirSync(join(bundleDir, ".work"), { recursive: true });
 writeFileSync(join(bundleDir, ".work", "scene-000.mp4"), Buffer.from("intermediate"));
 
 const handle = startPreviewServer({ bundleDir, playerDir, title: "Preview Test", videoId: "abc123def456" });
-const at = (p: string) => `http://localhost:${handle.port}${p}`;
+const at = (p: string) => `http://127.0.0.1:${handle.port}${p}`;
 
 afterAll(() => {
   handle.stop();
@@ -29,6 +29,24 @@ test("serves the player shell at /", async () => {
   expect(res.status).toBe(200);
   expect(res.headers.get("content-type")).toContain("text/html");
   expect(await res.text()).toContain("id=root");
+});
+
+test("finds player assets in native archive and npm package layouts", () => {
+  const archive = mkdtempSync(join(tmpdir(), "showtell-archive-layout-"));
+  const npmPackage = mkdtempSync(join(tmpdir(), "showtell-npm-layout-"));
+  mkdirSync(join(archive, "player"));
+  mkdirSync(join(npmPackage, "player"));
+  mkdirSync(join(npmPackage, "bin"));
+  writeFileSync(join(archive, "player", "_shell.html"), "archive");
+  writeFileSync(join(npmPackage, "player", "_shell.html"), "npm");
+
+  expect(resolvePlayerDist({ executablePath: join(archive, "showtell"), cwd: archive })).toBe(join(archive, "player"));
+  expect(resolvePlayerDist({ executablePath: join(npmPackage, "bin", "showtell"), cwd: npmPackage })).toBe(
+    join(npmPackage, "player"),
+  );
+
+  rmSync(archive, { recursive: true, force: true });
+  rmSync(npmPackage, { recursive: true, force: true });
 });
 
 test("serves hashed player assets", async () => {

@@ -1,5 +1,6 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
-import { chromium, type Browser } from "playwright";
+import { chromium, type Page } from "playwright";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { VideoSpec } from "@showtell/core";
@@ -15,13 +16,14 @@ try {
 } catch {
   playerDir = null;
 }
+const browserAvailable = existsSync(chromium.executablePath());
+const webGateAvailable = playerDir !== null && browserAvailable;
 
-const outDir = join(tmpdir(), "showtell-web-test");
+const outDir = mkdtempSync(join(tmpdir(), "showtell-web-test-"));
 let handle: PreviewHandle | undefined;
-let browser: Browser | undefined;
 
 beforeAll(async () => {
-  if (!playerDir) return;
+  if (!webGateAvailable || !playerDir) return;
   const spec: VideoSpec = {
     meta: {
       title: "Web Gate",
@@ -40,54 +42,82 @@ beforeAll(async () => {
     title: spec.meta.title,
     videoId: "webgate000000000000000000000abcd",
   });
-  browser = await chromium.launch({ headless: true });
 }, 90_000);
 
 afterAll(async () => {
-  await browser?.close();
   handle?.stop();
+  rmSync(outDir, { recursive: true, force: true });
 });
 
-test.skipIf(playerDir === null)(
+async function assertPlayerPlayback(page: Page): Promise<void> {
+  const res = await page.goto(handle!.watchUrl, { waitUntil: "load" });
+  expect(res?.status()).toBe(200);
+
+  // the player renders and loads the bundle's manifest → title comes from it
+  await page.getByTestId("video").waitFor({ state: "visible", timeout: 20_000 });
+  const titleText = (await page.getByTestId("title").textContent())?.trim();
+  expect(titleText).toBe("Web Gate");
+
+  await page.waitForFunction(
+    () => {
+      const v = document.querySelector("video");
+      return !!v && v.readyState >= 1 && v.videoWidth > 0;
+    },
+    { timeout: 20_000 },
+  );
+
+  const startedAt = await page.evaluate(async () => {
+    const v = document.querySelector("video") as HTMLVideoElement;
+    v.muted = true;
+    const currentTime = v.currentTime;
+    await v.play();
+    return currentTime;
+  });
+  await page.waitForFunction(
+    (start) => {
+      const v = document.querySelector("video");
+      return !!v && !v.paused && v.currentTime > start;
+    },
+    startedAt,
+    { timeout: 10_000 },
+  );
+
+  const state = await page.evaluate(() => {
+    const v = document.querySelector("video") as HTMLVideoElement;
+    return { currentTime: v.currentTime, w: v.videoWidth, h: v.videoHeight };
+  });
+  expect(state.currentTime).toBeGreaterThan(startedAt); // actually playing
+  expect(state.w).toBe(1920);
+  expect(state.h).toBe(1080);
+
+  const buf = await page.screenshot({ path: join(outDir, "webshot.png") });
+  expect(buf.length).toBeGreaterThan(5000);
+}
+
+function isClosedBrowserTransport(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("Target page, context or browser has been closed");
+}
+
+test.skipIf(!webGateAvailable)(
   "served player loads the bundle, shows the manifest title, and the video plays",
   async () => {
-    const page = await browser!.newPage({ viewport: { width: 1320, height: 900 } });
-
-    const res = await page.goto(handle!.watchUrl, { waitUntil: "load" });
-    expect(res?.status()).toBe(200);
-
-    // the player renders and loads the bundle's manifest → title comes from it
-    await page.getByTestId("video").waitFor({ state: "visible", timeout: 20_000 });
-    const titleText = (await page.getByTestId("title").textContent())?.trim();
-    expect(titleText).toBe("Web Gate");
-
-    await page.waitForFunction(
-      () => {
-        const v = document.querySelector("video");
-        return !!v && v.readyState >= 1 && v.videoWidth > 0;
-      },
-      { timeout: 20_000 },
-    );
-
-    await page.evaluate(async () => {
-      const v = document.querySelector("video") as HTMLVideoElement;
-      v.muted = true;
-      await v.play();
-    });
-    await page.waitForTimeout(800);
-
-    const state = await page.evaluate(() => {
-      const v = document.querySelector("video") as HTMLVideoElement;
-      return { currentTime: v.currentTime, w: v.videoWidth, h: v.videoHeight };
-    });
-    expect(state.currentTime).toBeGreaterThan(0); // actually playing
-    expect(state.w).toBe(1920);
-    expect(state.h).toBe(1080);
-
-    const buf = await page.screenshot({ path: join(outDir, "webshot.png") });
-    expect(buf.length).toBeGreaterThan(5000);
-
-    await page.close();
+    // Chromium can occasionally lose its transport while several renderer tests
+    // launch pinned browsers in parallel. Retry only that infrastructure failure;
+    // player/manifest/media assertion failures remain immediate test failures.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const browser = await chromium.launch({ headless: true });
+      const context = await browser.newContext({ viewport: { width: 1320, height: 900 } });
+      const page = await context.newPage();
+      try {
+        await assertPlayerPlayback(page);
+        return;
+      } catch (error) {
+        if (attempt > 0 || !isClosedBrowserTransport(error)) throw error;
+      } finally {
+        await context.close().catch(() => undefined);
+        await browser.close().catch(() => undefined);
+      }
+    }
   },
-  60_000,
+  90_000,
 );

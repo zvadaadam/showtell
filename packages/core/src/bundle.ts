@@ -1,27 +1,31 @@
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { z } from "zod";
-import { readFileAtRef, repoRelativeFile, resolveDiff } from "./repo.ts";
-import { AspectRatio, TtsConfig } from "./spec.ts";
+import { repoRelativeFile, resolveCodeRef, resolveDiff } from "./repo.ts";
+import { AspectRatio, ScreencapPlayback, TtsConfig } from "./spec.ts";
 import { parseBundleTimePointRef, parseBundleTimeSpanRef, type BundleTimeSpanValue } from "./bundle-time.ts";
 import { Theme, validateThemeContrast } from "./bundle-theme.ts";
-import { validateHyperframeSource } from "./hyperframe-lint.ts";
+import { validateWebSource } from "./web-lint.ts";
+import { parseWebDocument, type WebDocument } from "./web-document.ts";
 import { ID_PATTERN } from "./id.ts";
 import { SafeFileError, safeExistingFileInRoot } from "./safe-files.ts";
-import {
-  loadHyperframeContractFromSource,
-  validateJsonSchemaValue,
-  type BundleHyperframeInput,
-  type HyperframeContract,
-} from "./hyperframe-contract.ts";
+import { validateJsonSchemaValue } from "./props-schema.ts";
+import { loadWebManifestFromSource, WebManifestError, type WebManifest } from "./web-manifest.ts";
 
 const Id = z
   .string()
   .regex(new RegExp(`^${ID_PATTERN}$`), "Use 1-64 chars: letters, digits, underscore, hyphen; start with a letter.");
 
-const Duration = z.literal("auto");
+const Duration = z
+  .union([z.literal("auto"), z.number().positive()])
+  .describe('Seconds, or "auto" to derive the scene timing from measured narration audio.');
 export type { BundleTheme, BundleThemeMode, BundleThemePreset, ResolvedBundleTheme } from "./bundle-theme.ts";
-export { resolveBundleTheme, themePresetManifest, THEME_PRESET_GUIDE } from "./bundle-theme.ts";
+export {
+  resolveBundleTheme,
+  themePresetManifest,
+  THEME_PRESET_GUIDE,
+  REGISTERED_FONT_FAMILIES,
+} from "./bundle-theme.ts";
 
 const Asset = z.discriminatedUnion("type", [
   z.object({ type: z.literal("audio"), src: z.string().min(1) }).strict(),
@@ -96,27 +100,37 @@ const Anchor = z.object({ id: Id, at: z.string().min(1) }).strict();
 const Range = z.union([z.string().min(1), z.object({ from: z.string().min(1), to: z.string().min(1) }).strict()]);
 const VisualInputValue = Range;
 
-const Visual = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("hyperframe"),
-      src: z.string().min(1),
-      export: z.literal("default").default("default"),
-      props: z.record(z.unknown()).default({}),
-      inputs: z.record(Id, VisualInputValue).default({}),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("builtin"),
-      name: z.enum(["title", "code", "diff", "talking-points", "chart", "screencap"]),
-      ref: Id.optional(),
-      props: z.record(z.unknown()).default({}),
-    })
-    .strict(),
-]);
+const WebVisual = z
+  .object({
+    kind: z.literal("web"),
+    src: z.string().min(1),
+    name: z.never().optional(),
+    ref: z.never().optional(),
+    props: z.record(z.unknown()).default({}),
+    inputs: z.record(Id, VisualInputValue).default({}),
+  })
+  .strict();
 
-const Scene = z
+const ScreencapVisual = z
+  .object({
+    kind: z.literal("screencap"),
+    sessionRef: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,64}$/, "A capture session id (letters/digits/_/-, max 64); not a path."),
+    clip: z
+      .object({ start: z.number().min(0), end: z.number().positive() })
+      .strict()
+      .refine((clip) => clip.end > clip.start, {
+        message: "clip.end must be greater than clip.start.",
+      })
+      .optional(),
+    playback: ScreencapPlayback.optional(),
+  })
+  .strict();
+
+const BundleVisual = z.discriminatedUnion("kind", [WebVisual, ScreencapVisual]);
+
+const SceneBase = z
   .object({
     id: Id,
     duration: Duration.default("auto"),
@@ -125,49 +139,59 @@ const Scene = z
     beats: z.array(Beat).default([]),
     anchors: z.array(Anchor).default([]),
     ranges: z.record(Id, Range).default({}),
-    visual: Visual,
   })
   .strict();
 
-export const BundleSpec = z
+const BundleSceneSchema = SceneBase.extend({ visual: BundleVisual }).strict();
+
+const BundleMeta = z
   .object({
-    $schema: z.string().optional(),
-    version: z.literal(2),
-    meta: z
-      .object({
-        title: z.string().min(1),
-        fps: z.number().int().min(1).max(120).default(30),
-        aspectRatios: z.array(AspectRatio).min(1).default(["16:9"]),
-        theme: Theme.optional(),
-        presenter: Presenter.optional(),
-        repo: z
-          .object({ path: z.string().default(".."), baseRef: z.string().optional(), headRef: z.string().optional() })
-          .strict()
-          .default({ path: ".." }),
-      })
-      .strict(),
-    assets: z.record(Id, Asset).default({}),
-    audio: z
-      .object({
-        tts: TtsConfig.default({ provider: "say" }),
-        captions: Captions.default({ mode: "off", source: "narration" }),
-        music: z.array(Music).default([]),
-      })
+    title: z.string().min(1),
+    fps: z.number().int().min(1).max(120).default(30),
+    aspectRatios: z.array(AspectRatio).min(1).default(["16:9"]),
+    theme: Theme.optional(),
+    presenter: Presenter.optional(),
+    repo: z
+      .object({ path: z.string().default(".."), baseRef: z.string().optional(), headRef: z.string().optional() })
       .strict()
-      .default({ tts: { provider: "say" }, captions: { mode: "off", source: "narration" }, music: [] }),
-    scenes: z.array(Scene).min(1),
+      .default({ path: ".." }),
   })
   .strict();
+
+const BundleAudio = z
+  .object({
+    tts: TtsConfig.default({ provider: "say" }),
+    captions: Captions.default({ mode: "off", source: "narration" }),
+    music: z.array(Music).default([]),
+  })
+  .strict()
+  .default({ tts: { provider: "say" }, captions: { mode: "off", source: "narration" }, music: [] });
+
+const BundleSpecBase = z
+  .object({
+    $schema: z.string().optional(),
+    meta: BundleMeta,
+    assets: z.record(Id, Asset).default({}),
+    audio: BundleAudio,
+  })
+  .strict();
+
+export const BundleSpec = BundleSpecBase.extend({
+  version: z.literal(3),
+  scenes: z.array(BundleSceneSchema).min(1),
+}).strict();
 
 export type BundleSpec = z.infer<typeof BundleSpec>;
 export type BundlePresenter = z.infer<typeof Presenter>;
-export type BundleScene = z.infer<typeof Scene>;
+export type BundleScene = z.infer<typeof BundleSceneSchema>;
 export type BundleRepoRef = z.infer<typeof RepoRef>;
 export type BundleAsset = z.infer<typeof Asset>;
 export type BundleMusic = z.infer<typeof Music>;
 export type BundleBeat = z.infer<typeof Beat>;
 export type BundleVisualInputValue = z.infer<typeof VisualInputValue>;
-export type { BundleHyperframeInput, HyperframeContract };
+export type BundleWebVisual = z.infer<typeof WebVisual>;
+export type BundleScreencapVisual = z.infer<typeof ScreencapVisual>;
+export type { WebManifest };
 
 export interface BundleError {
   code: string;
@@ -194,14 +218,14 @@ const MAX_ASSET_BYTES: Record<BundleAsset["type"], number> = {
   image: 50 * 1024 * 1024,
 };
 
-const MAX_HYPERFRAME_BYTES = 1024 * 1024;
+const MAX_WEB_BYTES = 2 * 1024 * 1024;
 
 export function bundleAssetFile(bundleDir: string, asset: BundleAsset): { path: string; bytes: number } {
   return safeExistingFileInRoot(bundleDir, asset.src, { maxBytes: MAX_ASSET_BYTES[asset.type] });
 }
 
-export function bundleHyperframeFile(bundleDir: string, src: string): { path: string; bytes: number } {
-  return safeExistingFileInRoot(bundleDir, src, { maxBytes: MAX_HYPERFRAME_BYTES });
+export function bundleWebFile(bundleDir: string, src: string): { path: string; bytes: number } {
+  return safeExistingFileInRoot(bundleDir, src, { maxBytes: MAX_WEB_BYTES });
 }
 
 export function bundlePresenterImageFile(bundleDir: string, src: string): { path: string; bytes: number } {
@@ -377,86 +401,57 @@ function validateTimeRefs(scene: BundleScene, sceneIndex: number, scenes: Bundle
   });
 }
 
-function validateHyperframeContractShape(
-  text: string,
-  path: string,
-  errors: BundleError[],
-): HyperframeContract | undefined {
-  try {
-    return loadHyperframeContractFromSource(text);
-  } catch (e) {
-    errors.push(
-      err(
-        "INVALID_HYPERFRAME_CONTRACT",
-        path,
-        `Invalid hyperframe contract: ${(e as Error).message}`,
-        "Declare literal const propsSchema and inputs objects in the hyperframe module.",
-      ),
-    );
-    return undefined;
-  }
-}
-
-function validateHyperframeInputs(
+function validateWebInputs(
   scene: BundleScene,
   sceneIndex: number,
-  contract: HyperframeContract,
+  manifest: WebManifest,
   assets: BundleSpec["assets"],
   scenes: BundleScene[],
   errors: BundleError[],
 ): void {
-  if (scene.visual.kind !== "hyperframe") return;
-
+  if (scene.visual.kind !== "web") return;
+  const { props, inputs: inputValues } = scene.visual;
   for (const issue of validateJsonSchemaValue(
-    contract.propsSchema,
-    scene.visual.props,
+    manifest.propsSchema,
+    props,
     `scenes.${sceneIndex}.visual.props`,
     `scenes.${sceneIndex}.visual.src.propsSchema`,
   )) {
-    if (issue.kind === "schema") {
-      errors.push(
-        err(
-          "BAD_HYPERFRAME_SCHEMA",
-          `scenes.${sceneIndex}.visual.src`,
-          `Invalid hyperframe propsSchema at ${issue.path}: ${issue.message}`,
-          "Fix the hyperframe module's literal propsSchema.",
-        ),
-      );
-    } else {
-      errors.push(
-        err(
-          "BAD_HYPERFRAME_PROPS",
-          issue.path,
-          issue.message,
-          "Fix visual.props to match the hyperframe's propsSchema.",
-        ),
-      );
-    }
+    errors.push(
+      issue.kind === "schema"
+        ? err(
+            "BAD_WEB_SCHEMA",
+            `scenes.${sceneIndex}.visual.src`,
+            `Invalid web propsSchema at ${issue.path}: ${issue.message}`,
+            "Fix the web manifest's propsSchema.",
+          )
+        : err("BAD_WEB_PROPS", issue.path, issue.message, "Fix visual.props to match the web manifest's propsSchema."),
+    );
   }
 
-  for (const input of Object.keys(scene.visual.inputs)) {
-    if (!Object.prototype.hasOwnProperty.call(contract.inputs, input)) {
+  for (const input of Object.keys(inputValues)) {
+    if (!Object.prototype.hasOwnProperty.call(manifest.inputs, input)) {
       errors.push(
         err(
-          "UNKNOWN_HYPERFRAME_INPUT",
+          "UNKNOWN_WEB_INPUT",
           `scenes.${sceneIndex}.visual.inputs.${input}`,
-          `Hyperframe does not declare input "${input}".`,
-          "Use an input name from the hyperframe's literal inputs object or remove this mapping.",
+          `Web manifest does not declare input "${input}".`,
+          "Use an input name from the web manifest's inputs object or remove this mapping.",
         ),
       );
     }
   }
 
-  for (const [input, binding] of Object.entries(contract.inputs)) {
-    const value = scene.visual.inputs[input];
+  for (const [input, binding] of Object.entries(manifest.inputs)) {
+    const value = inputValues[input];
     const path = `scenes.${sceneIndex}.visual.inputs.${input}`;
     if (value === undefined) {
       if (binding.optional) continue;
       errors.push(
         err(
-          "MISSING_HYPERFRAME_INPUT",
+          "MISSING_WEB_INPUT",
           path,
-          `Missing required hyperframe input "${input}".`,
+          `Missing required web input "${input}".`,
           "Map this input to a scene ref, top-level asset, named range, or time span.",
         ),
       );
@@ -467,7 +462,7 @@ function validateHyperframeInputs(
       if (typeof value !== "string") {
         errors.push(
           err(
-            "BAD_HYPERFRAME_INPUT",
+            "BAD_WEB_INPUT",
             path,
             `Repo input "${input}" must be a string ref id.`,
             "Point this input at a key in the scene's refs object.",
@@ -491,15 +486,18 @@ function validateHyperframeInputs(
             "WRONG_REPO_REF_KIND",
             path,
             `Expected "${value}" to be a ${binding.refKind} ref.`,
-            "Use the requested ref kind or change the hyperframe input contract.",
+            "Use the requested ref kind or change the web input contract.",
           ),
         );
       }
-    } else if (binding.kind === "asset") {
+      continue;
+    }
+
+    if (binding.kind === "asset") {
       if (typeof value !== "string") {
         errors.push(
           err(
-            "BAD_HYPERFRAME_INPUT",
+            "BAD_WEB_INPUT",
             path,
             `Asset input "${input}" must be a string asset id.`,
             "Point this input at a key in the top-level assets object.",
@@ -523,15 +521,47 @@ function validateHyperframeInputs(
             "WRONG_ASSET_TYPE",
             path,
             `Expected "${value}" to be a ${binding.assetType} asset.`,
-            "Use the requested asset type or change the hyperframe input contract.",
+            "Use the requested asset type or change the web input contract.",
           ),
         );
       }
-    } else if (typeof value === "string" && Object.prototype.hasOwnProperty.call(scene.ranges, value)) {
       continue;
-    } else {
-      checkSpanValue(value, path, scene, scenes, errors);
     }
+
+    if (typeof value === "string" && Object.prototype.hasOwnProperty.call(scene.ranges, value)) continue;
+    checkSpanValue(value, path, scene, scenes, errors);
+  }
+}
+
+function validateWebManifestShape(
+  text: string,
+  path: string,
+  errors: BundleError[],
+  document: WebDocument,
+): WebManifest | undefined {
+  try {
+    return loadWebManifestFromSource(text, document);
+  } catch (e) {
+    if (e instanceof WebManifestError) {
+      errors.push(
+        err(
+          e.code,
+          path,
+          e.message,
+          'Add exactly one <script type="application/showtell+json"> manifest with schemaVersion 3, propsSchema, and inputs.',
+        ),
+      );
+      return undefined;
+    }
+    errors.push(
+      err(
+        "INVALID_WEB_MANIFEST",
+        path,
+        `Invalid web manifest: ${(e as Error).message}`,
+        'Add exactly one <script type="application/showtell+json"> manifest with schemaVersion 3, propsSchema, and inputs.',
+      ),
+    );
+    return undefined;
   }
 }
 
@@ -553,7 +583,7 @@ export function validateBundle(bundleDirInput: string): BundleValidationResult {
           "MISSING_SPEC",
           "spec.json",
           "Bundle is missing spec.json.",
-          "Pass a bundle directory that contains a v2 spec.json.",
+          "Pass a bundle directory that contains spec.json.",
         ),
       ],
       warnings,
@@ -571,12 +601,60 @@ export function validateBundle(bundleDirInput: string): BundleValidationResult {
     };
   }
 
+  const rawVersion =
+    data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>).version : undefined;
+  if (typeof rawVersion === "number" && rawVersion !== 3) {
+    return {
+      ok: false,
+      errors: [
+        err(
+          "UNSUPPORTED_BUNDLE_VERSION",
+          "version",
+          `Bundle version ${rawVersion} is not supported; Showtell accepts version 3 bundles only.`,
+          rawVersion === 2
+            ? 'Migrate to version 3: replace TSX with a bundle-local HTML file, set visual.kind="web", add its application/showtell+json manifest, and author one paused GSAP timeline.'
+            : 'Set version to 3 and use visual.kind="web" for designed visuals or visual.kind="screencap" for recorded media.',
+        ),
+      ],
+      warnings,
+    };
+  }
+
+  const rawScenes =
+    data && typeof data === "object" && !Array.isArray(data) && Array.isArray((data as Record<string, unknown>).scenes)
+      ? ((data as Record<string, unknown>).scenes as unknown[])
+      : [];
+  const builtinSceneIndex = rawScenes.findIndex((scene) => {
+    if (!scene || typeof scene !== "object" || Array.isArray(scene)) return false;
+    const visual = (scene as Record<string, unknown>).visual;
+    return (
+      visual !== null &&
+      typeof visual === "object" &&
+      !Array.isArray(visual) &&
+      (visual as Record<string, unknown>).kind === "builtin"
+    );
+  });
+  if (builtinSceneIndex >= 0) {
+    return {
+      ok: false,
+      errors: [
+        err(
+          "UNSUPPORTED_VISUAL_KIND",
+          `scenes.${builtinSceneIndex}.visual.kind`,
+          'Bundle visual kind "builtin" has been removed; browser HyperFrames are the only designed visual runtime.',
+          'Set visual.kind="web" and use <st-code>, <st-diff>, or <st-chart>, or run `showtell bundle templates` for a complete browser HyperFrame. Use visual.kind="screencap" only for recorded media.',
+        ),
+      ],
+      warnings,
+    };
+  }
+
   const parsed = BundleSpec.safeParse(data);
   if (!parsed.success) {
     return {
       ok: false,
       errors: parsed.error.issues.map((issue) =>
-        err("SCHEMA_ERROR", issuePath(issue.path), issue.message, "Fix the field to match docs/bundle-v2.md."),
+        err("SCHEMA_ERROR", issuePath(issue.path), issue.message, "Fix the field to match bundle.schema.json."),
       ),
       warnings,
     };
@@ -670,6 +748,19 @@ export function validateBundle(bundleDirInput: string): BundleValidationResult {
   });
 
   spec.scenes.forEach((scene, sceneIndex) => {
+    if (scene.duration !== "auto") {
+      const minimumDuration = scene.narration.lines.length / spec.meta.fps;
+      if (scene.duration + 1e-9 < minimumDuration) {
+        errors.push(
+          err(
+            "BAD_EXPLICIT_DURATION",
+            `scenes.${sceneIndex}.duration`,
+            `Explicit duration ${scene.duration}s is too short for ${scene.narration.lines.length} narration line(s) at ${spec.meta.fps}fps.`,
+            `Use at least ${minimumDuration.toFixed(3)}s, or set duration to "auto".`,
+          ),
+        );
+      }
+    }
     checkUnique(
       scene.narration.lines.map((l) => l.id),
       `scenes.${sceneIndex}.narration.lines`,
@@ -690,22 +781,11 @@ export function validateBundle(bundleDirInput: string): BundleValidationResult {
     );
     validateTimeRefs(scene, sceneIndex, spec.scenes, errors);
 
-    if (scene.visual.kind === "builtin" && scene.visual.name === "screencap") {
-      warnings.push(
-        err(
-          "UNSUPPORTED_BUNDLE_BUILTIN",
-          `scenes.${sceneIndex}.visual.name`,
-          'Builtin "screencap" is not renderable in bundles yet; it renders a placeholder card.',
-          "Use a simple spec.json with a screencap scene for screen recordings, or author a hyperframe visual.",
-        ),
-      );
-    }
-
     Object.entries(scene.refs).forEach(([id, ref]) => {
       try {
         repoRelativeFile(ref.file);
         if (repoPath && existsSync(repoPath)) {
-          if (ref.kind === "code") readFileAtRef(repoPath, ref.file, ref.ref);
+          if (ref.kind === "code") resolveCodeRef(repoPath, ref);
           else resolveDiff(repoPath, { file: ref.file, ref: ref.ref, animation: "magic-move" });
         }
       } catch (e) {
@@ -714,43 +794,46 @@ export function validateBundle(bundleDirInput: string): BundleValidationResult {
             "BAD_REPO_REF",
             `scenes.${sceneIndex}.refs.${id}`,
             `Could not resolve ${ref.kind} ref: ${(e as Error).message}`,
-            "Use a repo-relative file path and a valid git ref/range.",
+            ref.kind === "code"
+              ? "Use a repo-relative file path, valid line range, and valid git ref."
+              : "Use a repo-relative file path and a valid git ref/range.",
           ),
         );
       }
     });
 
-    if (scene.visual.kind === "hyperframe") {
+    if (scene.visual.kind === "web") {
       try {
-        let hyperframePath: string | undefined;
+        let webPath: string | undefined;
         try {
-          hyperframePath = bundleHyperframeFile(bundleDir, scene.visual.src).path;
+          webPath = bundleWebFile(bundleDir, scene.visual.src).path;
         } catch (e) {
-          const code = safeFileErrorCode(e) === "MISSING_FILE" ? "MISSING_HYPERFRAME" : "BAD_HYPERFRAME_PATH";
+          const code = safeFileErrorCode(e) === "MISSING_FILE" ? "MISSING_WEB" : "BAD_WEB_PATH";
           errors.push(
             err(
               code,
               `scenes.${sceneIndex}.visual.src`,
               (e as Error).message,
-              code === "MISSING_HYPERFRAME"
-                ? "Create the hyperframe file under the bundle."
-                : "Hyperframe paths must be bundle-relative regular files and stay inside the bundle.",
+              code === "MISSING_WEB"
+                ? "Create the web source file under the bundle."
+                : "Web source paths must be bundle-relative regular files and stay inside the bundle.",
             ),
           );
         }
-        if (hyperframePath) {
-          const text = readFileSync(hyperframePath, "utf-8");
-          validateHyperframeSource(text, `scenes.${sceneIndex}.visual.src`, errors);
-          const contract = validateHyperframeContractShape(text, `scenes.${sceneIndex}.visual.src`, errors);
-          if (contract) validateHyperframeInputs(scene, sceneIndex, contract, spec.assets, spec.scenes, errors);
+        if (webPath) {
+          const text = readFileSync(webPath, "utf-8");
+          const document = parseWebDocument(text);
+          validateWebSource(text, `scenes.${sceneIndex}.visual.src`, errors, document);
+          const manifest = validateWebManifestShape(text, `scenes.${sceneIndex}.visual.src`, errors, document);
+          if (manifest) validateWebInputs(scene, sceneIndex, manifest, spec.assets, spec.scenes, errors);
         }
       } catch (e) {
         errors.push(
           err(
-            "BAD_HYPERFRAME_PATH",
+            "BAD_WEB_PATH",
             `scenes.${sceneIndex}.visual.src`,
-            `Bad hyperframe path: ${(e as Error).message}`,
-            "Hyperframe paths must be bundle-relative and stay inside the bundle.",
+            `Bad web source path: ${(e as Error).message}`,
+            "Web source paths must be bundle-relative and stay inside the bundle.",
           ),
         );
       }

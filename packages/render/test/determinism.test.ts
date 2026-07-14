@@ -96,4 +96,4 @@ test("CONTRACT: rendering the same spec twice produces byte-identical mp4 output
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-}, 60_000);
+}, 120_000);

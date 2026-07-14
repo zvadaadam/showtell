@@ -1,0 +1,57 @@
+{
+  "$schema": "../../packages/core/bundle.schema.json",
+  "version": 3,
+  "meta": {
+    "title": "Live bytes, exact frames",
+    "fps": 30,
+    "aspectRatios": ["16:9", "9:16"],
+    "theme": {
+      "preset": "ink"
+    },
+    "repo": {
+      "path": "../.."
+    }
+  },
+  "audio": {
+    "tts": {
+      "provider": "say"
+    },
+    "captions": {
+      "mode": "burn-in",
+      "source": "narration"
+    }
+  },
+  "scenes": [
+    {
+      "id": "live-proof",
+      "narration": {
+        "lines": [
+          {
+            "id": "l1",
+            "text": "Showtell reads the live browser runtime contract and seeks this visual at every exact measured frame."
+          }
+        ]
+      },
+      "refs": {
+        "source": {
+          "kind": "code",
+          "file": "packages/render/src/web-authoring.ts",
+          "lineStart": 27,
+          "lineEnd": 52,
+          "focus": [33, 38, 39, 40]
+        }
+      },
+      "visual": {
+        "kind": "web",
+        "src": "hyperframes/live-proof.html",
+        "props": {
+          "title": "Live bytes. Exact frames."
+        },
+        "inputs": {
+          "source": "source",
+          "reveal": "line:l1"
+        }
+      }
+    }
+  ]
+}

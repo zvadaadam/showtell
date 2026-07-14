@@ -18,9 +18,9 @@ import {
   validateBundle,
   IMPLEMENTED_SCENE_KINDS,
   specContentId,
-  bundleHyperframeFile,
+  bundleWebFile,
   effectiveBeats,
-  loadHyperframeContractFromSource,
+  loadWebManifestFromSource,
   themePresetManifest,
   type VideoSpec,
   type AspectRatio,
@@ -34,11 +34,17 @@ import {
   compileBundle,
   renderBundle,
   BundleCompileError,
+  reviewBundle,
+  BundleReviewError,
+  MAX_REVIEW_SAMPLES_PER_LINE,
   renderBundleWorkshop,
-  renderWorkshop,
   startWorkshopServer,
+  webComponentManifest,
+  webCssVariables,
+  webRuntimeManifest,
+  webStarterTemplates,
+  checkWebRuntime,
 } from "@showtell/render";
-import { hyperframeComponents, hyperframeTemplates } from "@showtell/hyperframes";
 import {
   recordScreen,
   ensureCapturesDir,
@@ -55,11 +61,29 @@ import {
   type CaptureEventType,
 } from "@showtell/capture";
 
-import cliManifest from "../package.json" with { type: "json" };
+import rootManifest from "../../../package.json" with { type: "json" };
 import showtellSkill from "../../../skills/showtell/SKILL.md" with { type: "text" };
 
-const VERSION: string = cliManifest.version;
-const BOOLEAN_FLAGS = new Set(["frames-only", "no-import", "help", "stills"]);
+const VERSION: string = rootManifest.version;
+// Keep the removed legacy flag boolean-shaped so parsing it cannot consume a positional;
+// bundle components/templates reject it explicitly below.
+const BOOLEAN_FLAGS = new Set(["frames-only", "no-import", "help", "legacy", "stills"]);
+const BUNDLE_SUBCOMMANDS = [
+  "validate",
+  "inspect",
+  "compile",
+  "render",
+  "review",
+  "workshop",
+  "components",
+  "templates",
+  "themes",
+  "runtime",
+  "schema",
+] as const;
+const BUNDLE_COMMAND_LIST = BUNDLE_SUBCOMMANDS.join("|");
+const BUNDLE_USAGE = `showtell bundle <${BUNDLE_COMMAND_LIST}> [bundle-dir] [--flags]`;
+const BUNDLE_COMMAND_HINT = `Run \`showtell bundle help\`. Commands: ${BUNDLE_SUBCOMMANDS.join(", ")}.`;
 
 // ---------------------------------------------------------------------------
 // Output helpers — everything an agent consumes is JSON.
@@ -224,7 +248,7 @@ async function cmdRender(args: Args): Promise<never> {
       stage: "video",
       outDir,
       manifestPath: result.manifestPath,
-      durationSec: result.manifest.durationSec,
+      durationMs: Math.round(result.manifest.durationSec * 1000),
       outputs: result.outputs,
       scenes: result.scenes,
       resolvedCode: result.resolvedCode,
@@ -293,7 +317,7 @@ async function cmdPreview(args: Args): Promise<void> {
   try {
     playerDir = resolvePlayerDist();
   } catch (e) {
-    fail((e as Error).message, "Build the player once, then re-run preview.");
+    fail((e as Error).message, "Reinstall Showtell. Source contributors can run `bun run build:player`.");
   }
 
   let result;
@@ -521,23 +545,31 @@ async function cmdBundle(args: Args): Promise<never> {
   const subcommand = args.positional[0] ?? "help";
   const bundleDir = args.positional[1];
 
+  if (Object.prototype.hasOwnProperty.call(args.flags, "legacy")) {
+    fail(
+      "The --legacy flag is no longer supported.",
+      "Use version 3 browser visuals and migrate TSX visuals to bundle-local HTML with one paused GSAP timeline.",
+    );
+  }
+
   if (subcommand === "schema") {
     ok(bundleSpecJsonSchema());
   }
   if (subcommand === "help" || args.flags.help) {
     ok({
       ok: true,
-      usage:
-        "showtell bundle <validate|inspect|compile|render|workshop|components|templates|themes|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
+      usage: BUNDLE_USAGE,
       examples: [
-        "showtell bundle validate examples/bundle-v2",
-        "showtell bundle inspect examples/bundle-v2",
+        "showtell bundle validate examples/bundle-v3",
+        "showtell bundle inspect examples/bundle-v3",
         "showtell bundle components",
         "showtell bundle themes",
         "showtell bundle templates",
-        "showtell bundle workshop examples/bundle-v2 --out .showtell/workshop --aspect 16:9",
-        "showtell bundle compile examples/bundle-v2",
-        "showtell bundle render examples/bundle-v2 --out .showtell/bundle-v2 --aspect 16:9",
+        "showtell bundle runtime",
+        "showtell bundle review examples/bundle-v3 --out .showtell/review --aspect 16:9,9:16 --samples 5",
+        "showtell bundle workshop examples/bundle-v3 --out .showtell/workshop --aspect 16:9,9:16",
+        "showtell bundle compile examples/bundle-v3",
+        "showtell bundle render examples/bundle-v3 --out .showtell/bundle-v3 --aspect 16:9,9:16",
       ],
     });
   }
@@ -545,10 +577,11 @@ async function cmdBundle(args: Args): Promise<never> {
     ok({
       ok: true,
       stage: "bundle-templates",
-      package: "@showtell/hyperframes",
-      templates: hyperframeTemplates,
+      sourceVersion: 3,
+      runtime: webRuntimeManifest,
+      templates: webStarterTemplates,
       usage:
-        "Use templates as complete examples. Prefer reusable components for common patterns; run `showtell bundle components`.",
+        "Write the selected HTML source to the listed bundle-local file, map its literal input ports in spec.json, then validate and review.",
     });
   }
   if (subcommand === "themes") {
@@ -564,18 +597,28 @@ async function cmdBundle(args: Args): Promise<never> {
     ok({
       ok: true,
       stage: "bundle-components",
-      package: "@showtell/hyperframes",
-      components: hyperframeComponents,
+      sourceVersion: 3,
+      runtime: webRuntimeManifest,
+      components: webComponentManifest,
+      cssVariables: webCssVariables,
       usage:
-        'Import components from "@showtell/hyperframes" inside hyperframes/*.tsx; use the requiredProps/commonProps/example fields, then compose with ctx.props, ctx.repo(), ctx.asset(), ctx.range(), and ctx.scene.lineIndex.',
+        "Author normal HTML/CSS plus one paused GSAP timeline. Renderer-owned web components are the path for declared repo and asset inputs.",
     });
+  }
+  if (subcommand === "runtime") {
+    try {
+      const result = await checkWebRuntime();
+      ok({ stage: "bundle-runtime", ...result });
+    } catch (error) {
+      fail(
+        `Bundle browser runtime check failed: ${(error as Error).message}`,
+        "Reinstall the Showtell platform package, or run `bunx playwright install chromium` when developing from source.",
+      );
+    }
   }
 
   if (!bundleDir) {
-    fail(
-      "Missing bundle directory.",
-      "Usage: showtell bundle <validate|inspect|compile|render|workshop|components|templates|themes|schema> <bundle-dir> [--out DIR] [--aspect 16:9,9:16]",
-    );
+    fail("Missing bundle directory.", `Usage: ${BUNDLE_USAGE}`);
   }
 
   if (subcommand === "validate") {
@@ -591,11 +634,14 @@ async function cmdBundle(args: Args): Promise<never> {
       stage: "bundle-validate",
       bundleDir: result.bundleDir,
       repoPath: result.repoPath,
+      sourceVersion: result.spec.version,
       sceneCount: result.spec.scenes.length,
       assetCount: Object.keys(result.spec.assets).length,
-      hyperframes: result.spec.scenes
-        .filter((scene) => scene.visual.kind === "hyperframe")
-        .map((scene) => ({ scene: scene.id, src: scene.visual.kind === "hyperframe" ? scene.visual.src : undefined })),
+      visuals: result.spec.scenes.map((scene) => ({
+        scene: scene.id,
+        runtime: scene.visual.kind,
+        src: scene.visual.kind === "web" ? scene.visual.src : undefined,
+      })),
       warnings: result.warnings,
     });
   }
@@ -614,6 +660,7 @@ async function cmdBundle(args: Args): Promise<never> {
       bundleDir: result.bundleDir,
       repoPath: result.repoPath,
       meta: {
+        sourceVersion: result.spec.version,
         title: result.spec.meta.title,
         fps: result.spec.meta.fps,
         aspectRatios: result.spec.meta.aspectRatios,
@@ -641,13 +688,13 @@ async function cmdBundle(args: Args): Promise<never> {
         })),
         ranges: scene.ranges,
         visual:
-          scene.visual.kind === "hyperframe"
-            ? inspectHyperframeVisual(bundleDir, scene.visual)
+          scene.visual.kind === "web"
+            ? inspectWebVisual(bundleDir, scene.visual)
             : {
                 kind: scene.visual.kind,
-                name: scene.visual.name,
-                ref: scene.visual.ref,
-                propsKeys: Object.keys(scene.visual.props),
+                sessionRef: scene.visual.sessionRef,
+                clip: scene.visual.clip,
+                playback: scene.visual.playback,
               },
       })),
       warnings: result.warnings,
@@ -679,7 +726,7 @@ async function cmdBundle(args: Args): Promise<never> {
         outDir,
         aspectRatios,
         cacheDir,
-        motion: args.flags.stills !== true,
+        motion: !flagEnabled(args.flags.stills),
       });
       ok({
         ok: true,
@@ -691,6 +738,27 @@ async function cmdBundle(args: Args): Promise<never> {
         resolvedCode: result.resolvedCode,
         warnings: result.warnings,
       });
+    }
+    if (subcommand === "review") {
+      const rawSamples = args.flags.samples;
+      if (rawSamples !== undefined && (typeof rawSamples !== "string" || !/^-?\d+$/.test(rawSamples))) {
+        fail(
+          `Invalid --samples: ${String(rawSamples)}`,
+          `Pass --samples as an integer between 2 and ${MAX_REVIEW_SAMPLES_PER_LINE}.`,
+        );
+      }
+      const samplesPerLine = rawSamples === undefined ? 5 : Number(rawSamples);
+      if (samplesPerLine < 2 || samplesPerLine > MAX_REVIEW_SAMPLES_PER_LINE) {
+        fail("Invalid --samples.", `Pass --samples as an integer between 2 and ${MAX_REVIEW_SAMPLES_PER_LINE}.`);
+      }
+      const result = await reviewBundle(bundleDir, {
+        outDir,
+        aspectRatios,
+        cacheDir,
+        sceneId: stringFlag(args.flags, "scene"),
+        samplesPerLine,
+      });
+      ok(result as unknown as Record<string, unknown>);
     }
     if (subcommand === "workshop") {
       const serveSeconds = integerFlag(args.flags, "serve-seconds");
@@ -716,57 +784,38 @@ async function cmdBundle(args: Args): Promise<never> {
         warnings: e.warnings,
       });
     }
+    if (e instanceof BundleReviewError) {
+      fail(e.message, e.hint, e.extra);
+    }
     fail(
       `Bundle ${subcommand} failed: ${(e as Error).message}`,
       "Run `showtell bundle validate <bundle-dir>` first, then check ffmpeg/TTS prerequisites.",
     );
   }
 
-  fail(
-    `Unknown bundle command: '${subcommand}'`,
-    "Run `showtell bundle help`. Commands: validate, inspect, compile, render, workshop, components, templates, themes, schema.",
-  );
+  fail(`Unknown bundle command: '${subcommand}'`, BUNDLE_COMMAND_HINT);
 }
 
-async function cmdWorkshop(args: Args): Promise<never> {
-  const subcommand = args.positional[0] ?? "render";
-  const aspectRatios = parseAspectRatios(args);
-  const outDir = typeof args.flags.out === "string" ? args.flags.out : undefined;
-  if (subcommand !== "render") {
-    fail(
-      "Unknown workshop command.",
-      "Usage: showtell workshop render [--out DIR] [--aspect 16:9,9:16] [--serve-seconds N]",
-    );
-  }
-  const serveSeconds = integerFlag(args.flags, "serve-seconds");
-  const result = await renderWorkshop({ outDir, aspectRatios });
-  if (serveSeconds !== undefined) {
-    const handle = startWorkshopServer({ outDir: result.outDir });
-    await emitAndServe({ ...result, url: handle.url, port: handle.port }, handle, serveSeconds);
-  }
-  ok(result as unknown as Record<string, unknown>);
-}
-
-function inspectHyperframeVisual(
+function inspectWebVisual(
   bundleDir: string,
   visual: {
-    kind: "hyperframe";
+    kind: "web";
     src: string;
-    export: "default";
     props: Record<string, unknown>;
     inputs: Record<string, unknown>;
   },
 ): Record<string, unknown> {
-  const source = readFileSync(bundleHyperframeFile(bundleDir, visual.src).path, "utf-8");
-  const contract = loadHyperframeContractFromSource(source);
+  const source = readFileSync(bundleWebFile(bundleDir, visual.src).path, "utf-8");
+  const manifest = loadWebManifestFromSource(source);
   return {
-    kind: "hyperframe",
+    kind: "web",
+    runtime: webRuntimeManifest.identity,
     src: visual.src,
-    export: visual.export,
-    sourceSha256: contract.sourceSha256,
+    manifestVersion: manifest.schemaVersion,
+    sourceSha256: manifest.sourceSha256,
     propsKeys: Object.keys(visual.props),
-    propsSchema: contract.propsSchema,
-    inputs: Object.entries(contract.inputs).map(([name, input]) => ({
+    propsSchema: manifest.propsSchema,
+    inputs: Object.entries(manifest.inputs).map(([name, input]) => ({
       name,
       kind: input.kind,
       optional: input.optional,
@@ -858,7 +907,8 @@ COMMANDS
                          errors include a 'hint' for each fix.
   render <spec.json>     Render the spec to mp4 (both ratios). Flags: --out DIR,
                          --repo PATH, --aspect 16:9,9:16, --frames-only
-                         (--frames-only = PNG per scene, skips TTS + mux).
+                         (--frames-only = held browser PNGs; compiles narration timing,
+                         skips video encoding and screencap media).
   preview <spec.json>    Render, then serve the web player at a localhost watch
                          URL (the bundle is served too). Flags: --port N,
                          --serve-seconds N. (Build the player once first.)
@@ -880,14 +930,15 @@ COMMANDS
   capture stop-external  Stop external tracking, optionally running a stop command,
                          then import the raw recording. Example:
                          capture stop-external --id demo -- agent-browser record stop
-  bundle validate DIR    Validate a v2 bundle directory (spec.json + assets +
-                         hyperframes). Structured errors include hints.
-  bundle inspect DIR     Print scenes, refs, ranges, hyperframe ports, props
-                         schemas, and warnings for agent planning.
-  bundle templates       List reusable hyperframe starter templates from
-                         @showtell/hyperframes.
-  bundle components      List reusable hyperframe components from
-                         @showtell/hyperframes.
+  bundle validate DIR    Validate a version 3 browser/screencap bundle. Errors
+                         include actionable migration and repair hints.
+  bundle inspect DIR     Print scenes, refs, ranges, visual ports, props schemas,
+                         runtime/source hashes, and warnings for agent planning.
+  bundle templates       Return copyable bundle-v3 HTML/CSS/GSAP starter source.
+  bundle components      List renderer-owned web components, CSS variables, and
+                         deterministic runtime APIs.
+  bundle runtime         Launch the pinned/bundled Chromium runtime and capture a
+                         smoke-test frame. Returns the exact runtime identity.
   bundle themes          List theme presets (colors, typography, guidance) for
                          meta.theme.
   bundle workshop DIR    Render every bundle scene/line/aspect as PNGs in a
@@ -895,13 +946,14 @@ COMMANDS
                          --serve-seconds N.
   bundle compile DIR     TTS + measure + resolve refs/assets/ranges, then write
                          compiled-plan.json. Flags: --cache DIR.
-  bundle render DIR      Compile and render the v2 bundle to MP4. Hyperframe
-                         scenes render per-frame with motion; pass --stills to
-                         hold one frame per line. Flags: --out DIR,
+  bundle review DIR      Sample exact video timestamps per narration line and
+                         write review-manifest.json plus an HTML filmstrip
+                         gallery. Flags: --out DIR, --aspect, --cache DIR,
+                         --scene ID, --samples N.
+  bundle render DIR      Compile and render browser visuals and screencap media to
+                         MP4, seeking every custom frame exactly; pass --stills
+                         to hold one frame per line. Flags: --out DIR,
                          --aspect 16:9,9:16, --cache DIR, --stills.
-  workshop render        Render the built-in component workshop gallery.
-                         Flags: --out DIR, --aspect 16:9,9:16,
-                         --serve-seconds N.
   skill install          Install the bundled Showtell agent skill. Flag:
                          --dir DIR (default: ~/.claude/skills).
   eval                   Self-test: render the golden example (or --spec PATH) in
@@ -925,9 +977,12 @@ EXAMPLES
   showtell capture stop-external --id demo -- agent-browser record stop
   showtell capture analyze --id demo
   showtell bundle components
+  showtell bundle templates
+  showtell bundle runtime
   showtell skill install
-  showtell bundle workshop examples/bundle-v2 --out .showtell/workshop --aspect 16:9
-  showtell bundle render examples/bundle-v2 --out .showtell/bundle-v2 --aspect 16:9
+  showtell bundle review examples/bundle-v3 --out .showtell/review --aspect 16:9,9:16 --samples 5
+  showtell bundle workshop examples/bundle-v3 --out .showtell/workshop --aspect 16:9,9:16
+  showtell bundle render examples/bundle-v3 --out .showtell/bundle-v3 --aspect 16:9,9:16
 
   Minimal spec:
   {
@@ -972,9 +1027,6 @@ async function main(): Promise<void> {
     case "bundle":
       await cmdBundle(args);
       break;
-    case "workshop":
-      await cmdWorkshop(args);
-      break;
     case "eval":
       await cmdEval(args);
       break;
@@ -992,7 +1044,7 @@ async function main(): Promise<void> {
     default:
       fail(
         `Unknown command: '${args.command}'`,
-        "Run `showtell help`. Commands: validate, render, preview, capture, bundle, workshop, skill, eval, schema, help, version.",
+        "Run `showtell help`. Commands: validate, render, preview, capture, bundle, skill, eval, schema, help, version.",
       );
   }
 }
