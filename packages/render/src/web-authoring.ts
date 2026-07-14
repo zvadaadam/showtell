@@ -6,7 +6,10 @@ import { webComponentsSource } from "./web-components.ts";
 export const webRuntimeIdentity = Object.freeze({
   engine: "chromium",
   distribution: "headless-shell",
-  browserVersion: "149.0.7827.55",
+  // Chromium build prefix for the pinned revision: platform builds of the same
+  // revision report different patch components (e.g. .55 on macOS, .0 on Linux),
+  // so the exact binary is pinned by chromiumRevision + playwright version.
+  browserVersion: "149.0.7827",
   chromiumRevision: "1228",
   playwright: "1.61.1",
   gsap: "3.14.2",

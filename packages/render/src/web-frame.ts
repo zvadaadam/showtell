@@ -165,9 +165,9 @@ function resolveChromiumExecutable(): string | undefined {
 /** Reject an override or damaged package whose executable is not the compiled runtime. */
 export function assertPinnedBrowserVersion(actual: string): void {
   const version = actual.match(/\d+\.\d+\.\d+\.\d+/)?.[0];
-  if (version !== webRuntimeIdentity.browserVersion) {
+  if (!version || !version.startsWith(`${webRuntimeIdentity.browserVersion}.`)) {
     throw new PinnedBrowserVersionError(
-      `Chromium runtime version mismatch: expected ${webRuntimeIdentity.browserVersion}, received ${actual || "unknown"}.`,
+      `Chromium runtime version mismatch: expected ${webRuntimeIdentity.browserVersion}.x, received ${actual || "unknown"}.`,
     );
   }
 }

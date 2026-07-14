@@ -19,7 +19,9 @@ const tinyPng = Buffer.from(
 
 test("pinned browser identity rejects a mismatched executable", () => {
   expect(() => assertPinnedBrowserVersion("149.0.7827.55")).not.toThrow();
-  expect(() => assertPinnedBrowserVersion("HeadlessChrome/149.0.7827.198")).toThrow("expected 149.0.7827.55");
+  expect(() => assertPinnedBrowserVersion("HeadlessChrome/149.0.7827.0")).not.toThrow();
+  expect(() => assertPinnedBrowserVersion("HeadlessChrome/149.0.7828.0")).toThrow("expected 149.0.7827.x");
+  expect(() => assertPinnedBrowserVersion("150.0.7827.55")).toThrow("expected 149.0.7827.x");
 });
 
 test("web runtime identity stays aligned with pinned render dependencies", () => {
