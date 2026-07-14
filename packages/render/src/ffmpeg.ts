@@ -122,6 +122,33 @@ export function concatClips(clips: string[], outPath: string, workDir: string): 
   ]);
 }
 
+/** Concatenate narration WAVs after normalizing their sample layout. */
+export function concatAudio(inputs: string[], outPath: string): void {
+  if (inputs.length === 0) throw new Error("concatAudio needs at least one input.");
+  if (inputs.length === 1) {
+    copyFileSync(inputs[0]!, outPath);
+    return;
+  }
+  const normalized = inputs.map(
+    (_input, index) => `[${index}:a]aresample=44100,aformat=sample_fmts=s16:channel_layouts=mono[a${index}]`,
+  );
+  const streams = inputs.map((_input, index) => `[a${index}]`).join("");
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    ...inputs.flatMap((input) => ["-i", input]),
+    "-filter_complex",
+    `${normalized.join(";")};${streams}concat=n=${inputs.length}:v=0:a=1[a]`,
+    "-map",
+    "[a]",
+    "-c:a",
+    "pcm_s16le",
+    ...DETERMINISTIC_CONTAINER_ARGS,
+    outPath,
+  ]);
+}
+
 export interface MusicMixTrack {
   file: string;
   startSec: number;
@@ -227,6 +254,24 @@ export function normalizeVideoDuration(videoPath: string, outPath: string, durat
     ...DETERMINISTIC_VIDEO_ARGS,
     ...DETERMINISTIC_AUDIO_ARGS,
     ...FASTSTART_ARGS,
+    ...DETERMINISTIC_CONTAINER_ARGS,
+    outPath,
+  ]);
+}
+
+/** Fit a narration wav to its scheduled span: pad with silence, or trim the tail. */
+export function fitAudioToDuration(input: string, outPath: string, durationSec: number): void {
+  const duration = durationSec.toFixed(3);
+  execFileSync("ffmpeg", [
+    "-y",
+    "-loglevel",
+    "error",
+    "-i",
+    input,
+    "-af",
+    `aresample=44100,aformat=sample_fmts=s16:channel_layouts=mono,apad=whole_dur=${duration},atrim=end=${duration}`,
+    "-c:a",
+    "pcm_s16le",
     ...DETERMINISTIC_CONTAINER_ARGS,
     outPath,
   ]);

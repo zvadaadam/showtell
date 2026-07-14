@@ -6,6 +6,7 @@ bun.lock
 packages/core/schema.json
 packages/core/bundle.schema.json
 packages/core/manifest.schema.json
+**/compiled-plan.json
 
 # the player is a self-contained sub-app with its own toolchain (Vite/TanStack)
 packages/player

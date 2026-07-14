@@ -4,9 +4,12 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { chromium } from "playwright";
+import rootManifest from "../../../package.json" with { type: "json" };
 
 const CLI = join(import.meta.dir, "..", "src", "index.ts");
 const ROOT = join(import.meta.dir, "..", "..", "..");
+const browserAvailable = existsSync(chromium.executablePath());
 type BundleSpecForTest = {
   audio?: { tts?: { provider?: string; voice?: string; model?: string } };
   scenes: { narration: { lines: { text: string }[] } }[];
@@ -27,7 +30,7 @@ function run(args: string[]): { code: number; out: unknown; err: unknown } {
 
 function tempBundle(): string {
   const dir = mkdtempSync(join(tmpdir(), "av-cli-bundle-"));
-  cpSync(join(ROOT, "examples", "bundle-v2"), dir, { recursive: true });
+  cpSync(join(ROOT, "examples", "bundle-v3"), dir, { recursive: true });
   rmSync(join(dir, ".showtell"), { recursive: true, force: true });
   rmSync(join(dir, "compiled-plan.json"), { force: true });
   const specPath = join(dir, "spec.json");
@@ -63,31 +66,29 @@ function seedSayTtsCache(bundleDir: string, spec: BundleSpecForTest): void {
   }
 }
 
-function miniHyperframeBundle(): string {
-  const dir = mkdtempSync(join(tmpdir(), "av-cli-workshop-"));
+function miniWebBundle(): string {
+  const dir = mkdtempSync(join(tmpdir(), "av-cli-web-"));
   mkdirSync(join(dir, "hyperframes"), { recursive: true });
   writeFileSync(
-    join(dir, "hyperframes", "frame.tsx"),
+    join(dir, "hyperframes", "frame.html"),
     [
-      "/* @jsx h */",
-      'import { Stage, Text, h, defineHyperframe } from "@showtell/hyperframes";',
-      'const propsSchema = { type: "object", additionalProperties: false, required: ["title"], properties: { title: { type: "string" } } };',
-      "const inputs = {};",
-      "function render(ctx) {",
-      '  return <Stage tone="dark" padding="xl"><Text variant="title">{ctx.props.title}</Text></Stage>;',
-      "}",
-      "export default defineHyperframe({ schemaVersion: 1, propsSchema, inputs, render });",
-    ].join("\n"),
+      "<!doctype html><html><head>",
+      '<script type="application/showtell+json">{"schemaVersion":3,"inputs":{"reveal":{"kind":"range"}}}</script>',
+      "<style>body{margin:0;background:var(--st-bg);color:var(--st-fg)}</style>",
+      "</head><body><main>Web motion</main>",
+      '<script>const r=window.__showtell.inputs.reveal;const tl=gsap.timeline({paused:true});tl.fromTo("main",{opacity:0},{opacity:1,duration:r.durationSec},r.startSec);window.__showtell.timeline=tl;</script>',
+      "</body></html>",
+    ].join(""),
   );
   const spec = {
     audio: { tts: { provider: "say" } },
-    version: 2,
-    meta: { title: "Workshop mini", repo: { path: ROOT }, aspectRatios: ["16:9"] },
+    version: 3,
+    meta: { title: "Web mini", repo: { path: ROOT }, aspectRatios: ["16:9"] },
     scenes: [
       {
         id: "intro",
-        narration: { lines: [{ id: "l1", text: "This workshop frame renders one line." }] },
-        visual: { kind: "hyperframe", src: "hyperframes/frame.tsx", props: { title: "Workshop mini" } },
+        narration: { lines: [{ id: "l1", text: "This web visual follows one measured line." }] },
+        visual: { kind: "web", src: "hyperframes/frame.html", inputs: { reveal: "line:l1" } },
       },
     ],
   };
@@ -105,19 +106,20 @@ test("schema → JSON Schema on stdout, exit 0", () => {
 test("version → structured JSON, exit 0", () => {
   const { code, out } = run(["version"]);
   expect(code).toBe(0);
-  expect(out).toMatchObject({ name: "showtell" });
+  expect(out).toEqual({ name: "showtell", version: rootManifest.version });
 });
 
 test("help and component discovery use the Showtell public surface", () => {
   const components = run(["bundle", "components"]);
   expect(components.code).toBe(0);
-  expect(components.out).toMatchObject({ package: "@showtell/hyperframes" });
+  expect(components.out).toMatchObject({ runtime: { kind: "web", bundleVersion: 3 } });
 
   const help = run(["help"]);
   expect(help.code).toBe(0);
   expect(help.out).toContain("showtell — A motion engine for agents.");
   expect(help.out).toContain("showtell <command>");
-  expect(help.out).toContain("@showtell/hyperframes");
+  expect(help.out).toContain("version 3 browser/screencap bundle");
+  expect(help.out).not.toContain("TSX compatibility");
   expect(help.out).toContain(".showtell/workshop");
 });
 
@@ -147,75 +149,134 @@ test("bundle schema → JSON Schema on stdout, exit 0", () => {
   expect(out).toHaveProperty("definitions");
 });
 
-test("bundle validate → ok:true with hyperframes", () => {
-  const { code, out } = run(["bundle", "validate", "examples/bundle-v2"]);
-  expect(code).toBe(0);
-  const o = out as { ok: boolean; hyperframes: unknown[] };
-  expect(o.ok).toBe(true);
-  expect(o.hyperframes.length).toBeGreaterThan(0);
+test("bundle validate reports the version 2 migration error as structured JSON", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-cli-old-bundle-"));
+  writeFileSync(
+    join(dir, "spec.json"),
+    JSON.stringify({
+      version: 2,
+      meta: { title: "Old", repo: { path: ROOT } },
+      scenes: [
+        {
+          id: "intro",
+          narration: { lines: [{ id: "l1", text: "Old." }] },
+          visual: { kind: "builtin", name: "title" },
+        },
+      ],
+    }),
+  );
+
+  const result = run(["bundle", "validate", dir]);
+  expect(result.code).toBe(1);
+  expect(result.err).toMatchObject({
+    ok: false,
+    errors: [
+      {
+        code: "UNSUPPORTED_BUNDLE_VERSION",
+        path: "version",
+        hint: expect.stringContaining('visual.kind="web"'),
+      },
+    ],
+  });
 });
 
-test("bundle inspect → hyperframe contracts and implicit beats", () => {
-  const { code, out } = run(["bundle", "inspect", "examples/bundle-v2"]);
-  expect(code).toBe(0);
-  const o = out as {
-    ok: boolean;
-    stage: string;
+test("bundle v3 validate and inspect expose the browser runtime contract", () => {
+  const dir = miniWebBundle();
+  const validated = run(["bundle", "validate", dir]);
+  expect(validated.code).toBe(0);
+  expect(validated.out).toMatchObject({
+    ok: true,
+    sourceVersion: 3,
+    visuals: [{ scene: "intro", runtime: "web", src: "hyperframes/frame.html" }],
+  });
+
+  const inspected = run(["bundle", "inspect", dir]);
+  expect(inspected.code).toBe(0);
+  const output = inspected.out as {
+    meta: { sourceVersion: number };
     scenes: {
       beats: { source: string; items: { id: string }[] };
       visual: {
         kind: string;
-        inputs: { name: string; kind: string; required: boolean; value: unknown }[];
+        runtime: { engine: string; chromiumRevision: string; gsap: string };
+        manifestVersion: number;
+        inputs: { name: string }[];
       };
     }[];
   };
-  expect(o).toMatchObject({ ok: true, stage: "bundle-inspect" });
-  expect(o.scenes[0]!.beats.source).toBe("implicit-per-line");
-  expect(o.scenes[0]!.beats.items.map((beat) => beat.id)).toContain("l1");
-  expect(o.scenes[0]!.visual.kind).toBe("hyperframe");
-  expect(o.scenes[0]!.visual.inputs.find((input) => input.name === "source")).toMatchObject({
-    kind: "repo",
-    required: true,
-    value: "contract",
+  expect(output.meta.sourceVersion).toBe(3);
+  expect(output.scenes[0]!.beats.source).toBe("implicit-per-line");
+  expect(output.scenes[0]!.beats.items.map((beat) => beat.id)).toEqual(["l1"]);
+  expect(output.scenes[0]!.visual).toMatchObject({
+    kind: "web",
+    runtime: { engine: "chromium", chromiumRevision: "1228", gsap: "3.14.2" },
+    manifestVersion: 3,
   });
-  expect(o.scenes[0]!.visual.inputs.find((input) => input.name === "metrics")).toMatchObject({
-    kind: "asset",
-    required: true,
-    value: "metrics",
-  });
-  expect(o.scenes[0]!.visual.inputs.find((input) => input.name === "reveal")).toMatchObject({
-    kind: "range",
-    required: true,
-    value: "line:l2",
-  });
+  expect(output.scenes[0]!.visual.inputs).toContainEqual(expect.objectContaining({ name: "reveal" }));
 });
 
-test("bundle templates → reusable hyperframe starter list", () => {
+test("bundle templates → focused v3 browser starter source", () => {
   const { code, out } = run(["bundle", "templates"]);
   expect(code).toBe(0);
   const o = out as {
     ok: boolean;
     stage: string;
-    package: string;
-    templates: { id: string; path: string; visualCaption?: boolean }[];
+    sourceVersion: number;
+    runtime: { kind: string; bundleVersion: number };
+    templates: { id: string; file: string; source: string }[];
   };
-  expect(o).toMatchObject({ ok: true, stage: "bundle-templates", package: "@showtell/hyperframes" });
-  expect(o.templates.map((template) => template.id)).toContain("code-kinetic-caption");
-  expect(o.templates.some((template) => template.visualCaption)).toBe(true);
+  expect(o).toMatchObject({
+    ok: true,
+    stage: "bundle-templates",
+    sourceVersion: 3,
+    runtime: { kind: "web", bundleVersion: 3 },
+  });
+  expect(o.templates.map((template) => template.id)).toContain("motion-world");
+  expect(o.templates[0]!.source).toContain("gsap.timeline({ paused: true })");
 });
 
-test("bundle components → reusable hyperframe component kit", () => {
+test("bundle components → focused v3 web runtime discovery", () => {
   const { code, out } = run(["bundle", "components"]);
   expect(code).toBe(0);
   const o = out as {
     ok: boolean;
     stage: string;
-    package: string;
-    components: { importName: string; layer: string }[];
+    sourceVersion: number;
+    runtime: { kind: string; bundleVersion: number };
+    components: { tag: string }[];
+    cssVariables: string[];
   };
-  expect(o).toMatchObject({ ok: true, stage: "bundle-components", package: "@showtell/hyperframes" });
-  expect(o.components).toContainEqual(expect.objectContaining({ importName: "DecisionGrid", layer: "story" }));
-  expect(o.components).toContainEqual(expect.objectContaining({ importName: "CodeRef", layer: "media" }));
+  expect(o).toMatchObject({
+    ok: true,
+    stage: "bundle-components",
+    sourceVersion: 3,
+    runtime: { kind: "web", bundleVersion: 3 },
+  });
+  expect(o.components).toContainEqual(expect.objectContaining({ tag: "st-code" }));
+  expect(o.cssVariables).toContain("--st-accent");
+});
+
+test("removed bundle legacy flag fails uniformly with a migration hint", () => {
+  for (const command of ["schema", "templates", "components", "validate"]) {
+    const result = run(["bundle", command, "--legacy"]);
+    expect(result.code).toBe(1);
+    expect(result.err).toMatchObject({
+      ok: false,
+      error: "The --legacy flag is no longer supported.",
+      hint: expect.stringContaining("version 3"),
+    });
+  }
+});
+
+test.skipIf(!browserAvailable)("bundle runtime → pinned Chromium launches and captures a frame", () => {
+  const { code, out } = run(["bundle", "runtime"]);
+  expect(code).toBe(0);
+  expect(out).toMatchObject({
+    ok: true,
+    stage: "bundle-runtime",
+    identity: { engine: "chromium", chromiumRevision: "1228", gsap: "3.14.2" },
+  });
+  expect((out as { captureBytes: number }).captureBytes).toBeGreaterThan(100);
 });
 
 test("bundle compile → measured plan and refs", () => {
@@ -229,7 +290,7 @@ test("bundle compile → measured plan and refs", () => {
 }, 30_000);
 
 test("bundle workshop → static rendered frame gallery", () => {
-  const dir = miniHyperframeBundle();
+  const dir = miniWebBundle();
   const outDir = mkdtempSync(join(tmpdir(), "av-cli-workshop-out-"));
   const { code, out } = run(["bundle", "workshop", dir, "--out", outDir, "--aspect", "16:9"]);
   expect(code).toBe(0);
@@ -239,14 +300,79 @@ test("bundle workshop → static rendered frame gallery", () => {
   expect(o.frames[0]).toMatchObject({ sceneId: "intro", lineId: "l1" });
 }, 30_000);
 
-test("workshop render → built-in component gallery", () => {
-  const outDir = mkdtempSync(join(tmpdir(), "av-cli-component-workshop-"));
-  const { code, out } = run(["workshop", "render", "--out", outDir, "--aspect", "16:9"]);
+test("bundle review → exact timestamp filmstrip gallery and manifest", () => {
+  const dir = miniWebBundle();
+  const outDir = mkdtempSync(join(tmpdir(), "av-cli-review-out-"));
+  const { code, out } = run([
+    "bundle",
+    "review",
+    dir,
+    "--out",
+    outDir,
+    "--aspect",
+    "16:9",
+    "--samples",
+    "3",
+    "--scene",
+    "intro",
+  ]);
   expect(code).toBe(0);
-  const o = out as { ok: boolean; stage: string; frames: { id: string }[] };
-  expect(o).toMatchObject({ ok: true, stage: "workshop-render" });
-  expect(o.frames.map((frame) => frame.id)).toContain("signal-wall");
+  const o = out as {
+    ok: boolean;
+    stage: string;
+    indexPath: string;
+    manifestPath: string;
+    samplesPerLine: number;
+    scenes: { id: string; lines: { samples: { timeMs: number; frame: number; path: string; sha256: string }[] }[] }[];
+  };
+  expect(o).toMatchObject({ ok: true, stage: "bundle-review", samplesPerLine: 3 });
+  expect(existsSync(o.indexPath)).toBe(true);
+  expect(existsSync(o.manifestPath)).toBe(true);
+  expect(o.scenes.map((scene) => scene.id)).toEqual(["intro"]);
+  expect(o.scenes[0]!.lines[0]!.samples).toHaveLength(3);
+  expect(o.scenes[0]!.lines[0]!.samples.every((sample) => existsSync(sample.path))).toBe(true);
+  const sampleTimes = o.scenes[0]!.lines[0]!.samples.map((sample) => sample.timeMs);
+  expect(sampleTimes).toEqual([...sampleTimes].sort((a, b) => a - b));
 }, 30_000);
+
+test("bundle review rejects invalid samples with a repair hint", () => {
+  const dir = miniWebBundle();
+  const { code, err } = run(["bundle", "review", dir, "--samples", "1"]);
+  expect(code).toBe(1);
+  expect(err).toMatchObject({ ok: false, hint: "Pass --samples as an integer between 2 and 60." });
+
+  const tooMany = run(["bundle", "review", join(dir, "missing"), "--samples", "61"]);
+  expect(tooMany.code).toBe(1);
+  expect(tooMany.err).toMatchObject({ ok: false, hint: "Pass --samples as an integer between 2 and 60." });
+});
+
+test("bundle review unknown scene reports valid scene ids", () => {
+  const dir = miniWebBundle();
+  const { code, err } = run(["bundle", "review", dir, "--scene", "missing"]);
+  expect(code).toBe(1);
+  expect(err).toMatchObject({ ok: false });
+  expect((err as { hint?: string }).hint).toContain("intro");
+});
+
+test("bundle help mentions review without removed legacy flags", () => {
+  const help = run(["bundle", "help"]);
+  expect(help.code).toBe(0);
+  const helpJson = JSON.stringify(help.out);
+  expect(helpJson).toContain("review");
+  expect(helpJson).not.toContain("--legacy");
+});
+
+test("bundle review without a directory returns review guidance", () => {
+  const missing = run(["bundle", "review"]);
+  expect(missing.code).toBe(1);
+  expect(JSON.stringify(missing.err)).toContain("review");
+});
+
+test("unknown bundle commands return bundle guidance", () => {
+  const unknown = run(["bundle", "frobnicate"]);
+  expect(unknown.code).toBe(1);
+  expect(JSON.stringify(unknown.err)).toContain("review");
+});
 
 test("bundle render → mp4 output and compiled plan", () => {
   const dir = tempBundle();

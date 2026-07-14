@@ -1,7 +1,0 @@
-[
-  { "stage": "author", "role": "intent", "weight": 4 },
-  { "stage": "validate", "role": "schema", "weight": 3 },
-  { "stage": "compile", "role": "timing", "weight": 5 },
-  { "stage": "render", "role": "media", "weight": 5 },
-  { "stage": "verify", "role": "proof", "weight": 4 }
-]

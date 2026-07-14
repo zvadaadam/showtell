@@ -15,25 +15,33 @@ jobs:
     # capture is macOS-only (avfoundation) + ffmpeg is needed for render tests
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: latest
+          bun-version: 1.3.14
       - name: Install ffmpeg
         run: brew install ffmpeg
       - run: bun install --frozen-lockfile
-      - run: bun run lint
-      - run: bun run format:check
-      - run: bun run typecheck
-      - run: bun test
-      - run: bun run gen:schema && git diff --exit-code packages/core/schema.json packages/core/bundle.schema.json packages/core/manifest.schema.json packages/render/src/hyperframes-sdk.source.txt
+      - run: bunx playwright install chromium
+      - run: bun run check
       - name: Build the standalone binary + smoke test
         run: |
           bun run build:cli
           ./dist/showtell version
           bun run build:npm
+          test -f dist/npm/showtell-darwin-arm64/browser/runtime.json
+          ./dist/npm/showtell-darwin-arm64/bin/showtell bundle runtime > /dev/null
+          ./dist/npm/showtell-darwin-arm64/bin/showtell bundle render examples/bundle-v3 --out dist/npm/v3-smoke-a --aspect 16:9 > /dev/null
+          ./dist/npm/showtell-darwin-arm64/bin/showtell bundle render examples/bundle-v3 --out dist/npm/v3-smoke-b --aspect 16:9 > /dev/null
+          V3_OUTPUT=$(find dist/npm/v3-smoke-a -type f -name '*.mp4' | head -1)
+          V3_REPEAT=$(find dist/npm/v3-smoke-b -type f -name '*.mp4' | head -1)
+          test -n "$V3_OUTPUT"
+          test -n "$V3_REPEAT"
+          cmp "$V3_OUTPUT" "$V3_REPEAT"
+          ffprobe -v error -select_streams v:0 -show_entries stream=codec_type -of csv=p=0 "$V3_OUTPUT" | grep -qx video
+          ffprobe -v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0 "$V3_OUTPUT" | grep -qx audio
           npm publish ./dist/npm/showtell --dry-run
           npm publish ./dist/npm/showtell-darwin-arm64 --dry-run
 
@@ -48,18 +56,42 @@ jobs:
             target: linux-arm64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: latest
+          bun-version: 1.3.14
       - name: Install render prerequisites
         run: sudo apt-get update && sudo apt-get install -y ffmpeg espeak-ng
       - run: bun install --frozen-lockfile
+      - run: bunx playwright install --with-deps chromium
       - name: Build and exercise the native package
         run: |
           bun scripts/build-npm-package.ts --target ${{ matrix.target }}
           ./dist/npm/showtell-${{ matrix.target }}/bin/showtell version
-          ./dist/npm/showtell-${{ matrix.target }}/bin/showtell render examples/hello.spec.json --frames-only --aspect 16:9 --out .showtell/linux-smoke
+          test -f dist/npm/showtell-${{ matrix.target }}/browser/runtime.json
+          ./dist/npm/showtell-${{ matrix.target }}/bin/showtell bundle runtime > /dev/null
           npm publish ./dist/npm/showtell-${{ matrix.target }} --dry-run
+          VERSION=$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')
+          npm pack ./dist/npm/showtell --pack-destination dist/npm
+          npm pack ./dist/npm/showtell-${{ matrix.target }} --pack-destination dist/npm
+          mkdir -p dist/npm/install
+          npm install --prefix dist/npm/install ./dist/npm/showtell-$VERSION.tgz ./dist/npm/showtell-${{ matrix.target }}-$VERSION.tgz --ignore-scripts
+          bun -e 'await Bun.write("dist/npm/install/smoke.spec.json", JSON.stringify({meta:{title:"Linux smoke",aspectRatios:["16:9"],repo:{path:"."},tts:{provider:"say"}},scenes:[{kind:"title",content:{heading:"Linux smoke"},narration:"Showtell renders video and narration on Linux.",duration:"auto"}]}))'
+          cd dist/npm/install
+          ./node_modules/.bin/showtell render smoke.spec.json --out out
+          OUTPUT=$(find out -type f -name '*.mp4' | head -1)
+          test -n "$OUTPUT"
+          ffprobe -v error -select_streams v:0 -show_entries stream=codec_type -of csv=p=0 "$OUTPUT" | grep -qx video
+          ffprobe -v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0 "$OUTPUT" | grep -qx audio
+          cd ../../..
+          ./dist/npm/install/node_modules/.bin/showtell bundle render examples/bundle-v3 --out dist/npm/v3-smoke-${{ matrix.target }} --aspect 16:9 > /dev/null
+          ./dist/npm/install/node_modules/.bin/showtell bundle render examples/bundle-v3 --out dist/npm/v3-smoke-${{ matrix.target }}-repeat --aspect 16:9 > /dev/null
+          V3_OUTPUT=$(find dist/npm/v3-smoke-${{ matrix.target }} -type f -name '*.mp4' | head -1)
+          V3_REPEAT=$(find dist/npm/v3-smoke-${{ matrix.target }}-repeat -type f -name '*.mp4' | head -1)
+          test -n "$V3_OUTPUT"
+          test -n "$V3_REPEAT"
+          cmp "$V3_OUTPUT" "$V3_REPEAT"
+          ffprobe -v error -select_streams v:0 -show_entries stream=codec_type -of csv=p=0 "$V3_OUTPUT" | grep -qx video
+          ffprobe -v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0 "$V3_OUTPUT" | grep -qx audio

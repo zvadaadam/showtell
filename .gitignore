@@ -6,6 +6,7 @@ dist/
 # render artifacts
 .video/
 .showtell/
+**/compiled-plan.json
 *.mp4
 *.wav
 !examples/**/*.mp4

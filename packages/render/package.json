@@ -12,7 +12,12 @@
     "@showtell/capture": "workspace:*",
     "@showtell/compose": "workspace:*",
     "@showtell/core": "workspace:*",
-    "@showtell/hyperframes": "workspace:*",
-    "@showtell/providers": "workspace:*"
+    "@showtell/providers": "workspace:*",
+    "@fontsource/inter": "5.2.8",
+    "@fontsource/jetbrains-mono": "5.2.8",
+    "@fontsource/league-gothic": "5.2.8",
+    "@fontsource/space-mono": "5.2.8",
+    "gsap": "3.14.2",
+    "playwright": "1.61.1"
   }
 }

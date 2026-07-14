@@ -6,20 +6,13 @@ import { resolveBundleTheme, validateBundle } from "../src/index.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 
-test("bundle v2 example validates with assets, refs, and hyperframes", () => {
-  const result = validateBundle(join(ROOT, "examples", "bundle-v2"));
+test("bundle v3 example validates with live refs and a web visual", () => {
+  const result = validateBundle(join(ROOT, "examples", "bundle-v3"));
   expect(result.ok).toBe(true);
   if (result.ok) {
-    expect(result.spec.version).toBe(2);
-    expect(result.spec.scenes).toHaveLength(5);
-    expect(result.spec.scenes.map((scene) => scene.id)).toEqual([
-      "overview",
-      "authoring",
-      "compile",
-      "render",
-      "proof",
-    ]);
-    expect(Object.keys(result.spec.assets)).toContain("metrics");
+    expect(result.spec.version).toBe(3);
+    expect(result.spec.scenes).toHaveLength(1);
+    expect(result.spec.scenes[0]!.visual.kind).toBe("web");
     expect(result.warnings).toHaveLength(0);
   }
 });
@@ -29,14 +22,14 @@ test("bundle validation reports actionable missing asset errors", () => {
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: { title: "Bad", repo: { path: ROOT } },
       assets: { missing: { type: "data", src: "assets/missing.json" } },
       scenes: [
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Hello." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Hi" } },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -55,19 +48,19 @@ test("bundle validation accepts documented cross-scene time refs", () => {
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: { title: "Time refs", repo: { path: ROOT } },
       scenes: [
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Intro" } },
+          visual: screencapVisual(),
         },
         {
           id: "proof",
           narration: { lines: [{ id: "l1", text: "Proof." }] },
           ranges: { full: { from: "scene:intro@start", to: "scene:proof@end" } },
-          visual: { kind: "builtin", name: "title", props: { title: "Proof" } },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -77,18 +70,35 @@ test("bundle validation accepts documented cross-scene time refs", () => {
   expect(result.ok).toBe(true);
 });
 
-test("bundle validation warns when screencap builtin is used", () => {
-  const dir = mkdtempSync(join(tmpdir(), "av-bundle-screencap-warning-"));
+test("bundle validation accepts screencap playback and clip semantics", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-bundle-screencap-"));
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: { title: "Screencap", repo: { path: ROOT } },
       scenes: [
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: { kind: "builtin", name: "screencap" },
+          visual: {
+            kind: "screencap",
+            sessionRef: "recording_01",
+            clip: { start: 1.25, end: 4.5 },
+            playback: {
+              mode: "smart",
+              preActionPaddingMs: 120,
+              postActionPaddingMs: 240,
+              targetGapOutputMs: 500,
+              maxGapOutputMs: 800,
+              maxPlaybackRate: 8,
+              minGapToSpeedUpMs: 250,
+              camera: "follow",
+              actionEffects: "tap-glow",
+              visualSampleFps: 4,
+              visualMinScore: 0.7,
+            },
+          },
         },
       ],
     }),
@@ -97,7 +107,13 @@ test("bundle validation warns when screencap builtin is used", () => {
   const result = validateBundle(dir);
   expect(result.ok).toBe(true);
   if (result.ok) {
-    expect(result.warnings).toContainEqual(expect.objectContaining({ code: "UNSUPPORTED_BUNDLE_BUILTIN" }));
+    expect(result.spec.scenes[0]!.visual).toMatchObject({
+      kind: "screencap",
+      sessionRef: "recording_01",
+      clip: { start: 1.25, end: 4.5 },
+      playback: { mode: "smart", camera: "follow", actionEffects: "tap-glow" },
+    });
+    expect(result.warnings).toHaveLength(0);
   }
 });
 
@@ -106,7 +122,7 @@ test("bundle validation accepts semantic theme presets and partial overrides", (
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: {
         title: "Theme",
         repo: { path: ROOT },
@@ -124,7 +140,7 @@ test("bundle validation accepts semantic theme presets and partial overrides", (
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Intro" } },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -139,49 +155,32 @@ test("bundle validation accepts semantic theme presets and partial overrides", (
   }
 });
 
-test("bundle validation still accepts a full explicit semantic theme", () => {
-  const dir = mkdtempSync(join(tmpdir(), "av-bundle-full-theme-"));
+test("bundle validation rejects the removed authored theme mode alias", () => {
+  const dir = mkdtempSync(join(tmpdir(), "av-bundle-theme-mode-"));
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: {
-        title: "Full theme",
+        title: "Theme mode",
         repo: { path: ROOT },
-        theme: {
-          mode: "paper",
-          colors: {
-            fg: "#191b29",
-            bg: "#f7f4ec",
-            subtle: "#5d6275",
-            accent: "#2563eb",
-            success: "#2ea043",
-            warning: "#b45309",
-            surface: "#ffffff",
-            border: "#d0d7de",
-            captionBg: "#111827",
-            captionFg: "#f8fafc",
-          },
-          typography: {
-            display: "Inter Bold",
-            body: "Inter",
-            mono: "JetBrains Mono",
-          },
-        },
+        theme: { mode: "paper" },
       },
       scenes: [
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Intro" } },
+          visual: screencapVisual(),
         },
       ],
     }),
   );
 
   const result = validateBundle(dir);
-  expect(result.ok).toBe(true);
-  if (result.ok) expect(result.spec.meta.theme?.mode).toBe("paper");
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "SCHEMA_ERROR", path: "meta.theme" }));
+  }
 });
 
 test("bundle validation rejects non-hex theme colors and CSS font stacks", () => {
@@ -189,12 +188,12 @@ test("bundle validation rejects non-hex theme colors and CSS font stacks", () =>
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: {
         title: "Bad theme",
         repo: { path: ROOT },
         theme: {
-          preset: "agent-dark",
+          preset: "ink",
           colors: {
             bg: "purple",
           },
@@ -207,7 +206,7 @@ test("bundle validation rejects non-hex theme colors and CSS font stacks", () =>
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Intro" } },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -230,7 +229,7 @@ test("bundle validation rejects unreadable theme contrast and warns on weak acce
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: {
         title: "Bad contrast",
         repo: { path: ROOT },
@@ -247,7 +246,7 @@ test("bundle validation rejects unreadable theme contrast and warns on weak acce
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Intro" } },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -261,48 +260,22 @@ test("bundle validation rejects unreadable theme contrast and warns on weak acce
   }
 });
 
-test("bundle validation rejects conflicting preset and mode", () => {
-  const dir = mkdtempSync(join(tmpdir(), "av-bundle-theme-conflict-"));
-  writeFileSync(
-    join(dir, "spec.json"),
-    JSON.stringify({
-      version: 2,
-      meta: {
-        title: "Theme conflict",
-        repo: { path: ROOT },
-        theme: { preset: "paper", mode: "dark" },
-      },
-      scenes: [
-        {
-          id: "intro",
-          narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Intro" } },
-        },
-      ],
-    }),
-  );
-
-  const result = validateBundle(dir);
-  expect(result.ok).toBe(false);
-  if (!result.ok) expect(result.errors).toContainEqual(expect.objectContaining({ code: "CONFLICTING_THEME_MODE" }));
-});
-
 test("bundle validation warns on unregistered theme fonts", () => {
   const dir = mkdtempSync(join(tmpdir(), "av-bundle-theme-font-warning-"));
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: {
         title: "Theme font",
         repo: { path: ROOT },
-        theme: { preset: "agent-dark", typography: { body: "Aptos" } },
+        theme: { preset: "ink", typography: { body: "Aptos" } },
       },
       scenes: [
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Intro" } },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -341,7 +314,8 @@ test("published bundle schema exposes preset and partial color overrides", () =>
   const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as { definitions?: Record<string, unknown> };
   const text = JSON.stringify(schema);
   expect(text).toContain('"preset"');
-  expect(text).toContain('"agent-dark"');
+  expect(text).toContain('"ink"');
+  expect(text).not.toContain('"agent-dark"');
   expect(text).toContain('"accent"');
   expect(text).toContain("#[0-9a-fA-F]{6}");
 });
@@ -353,7 +327,7 @@ test("bundle validation catches bad music ranges before compile", () => {
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: { title: "Bad music range", repo: { path: ROOT } },
       assets: { bed: { type: "audio", src: "assets/bed.wav" } },
       audio: { music: [{ id: "bed", asset: "bed", range: "scene:nope" }] },
@@ -361,7 +335,7 @@ test("bundle validation catches bad music ranges before compile", () => {
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Intro" } },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -381,14 +355,14 @@ test("bundle validation rejects git-option diff refs before compile", () => {
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: { title: "Git option", repo: { path: ROOT } },
       scenes: [
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
           refs: { diff: { kind: "diff", file: "README.md", ref: "--output=/tmp/showtell-pwned" } },
-          visual: { kind: "builtin", name: "diff", ref: "diff" },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -408,14 +382,14 @@ test("bundle validation rejects working-tree code symlinks", () => {
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: { title: "Code symlink", repo: { path: repo } },
       scenes: [
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
           refs: { source: { kind: "code", file: "leak.ts" } },
-          visual: { kind: "builtin", name: "code", ref: "source" },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -430,6 +404,50 @@ test("bundle validation rejects working-tree code symlinks", () => {
   }
 });
 
+test("bundle validation rejects code line ranges that cannot be compiled", () => {
+  const repo = mkdtempSync(join(tmpdir(), "av-bundle-code-range-repo-"));
+  writeFileSync(join(repo, "source.ts"), "export const first = 1;\nexport const second = 2;\n");
+  const dir = mkdtempSync(join(tmpdir(), "av-bundle-code-range-"));
+  writeFileSync(
+    join(dir, "spec.json"),
+    JSON.stringify({
+      version: 3,
+      meta: { title: "Code ranges", repo: { path: repo } },
+      scenes: [
+        {
+          id: "intro",
+          narration: { lines: [{ id: "l1", text: "Intro." }] },
+          refs: {
+            backwards: { kind: "code", file: "source.ts", lineStart: 2, lineEnd: 1 },
+            pastEnd: { kind: "code", file: "source.ts", lineStart: 3, lineEnd: 4 },
+          },
+          visual: screencapVisual(),
+        },
+      ],
+    }),
+  );
+
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        code: "BAD_REPO_REF",
+        path: "scenes.0.refs.backwards",
+        message: expect.stringContaining("Invalid line range 2-1"),
+        hint: expect.stringContaining("valid line range"),
+      }),
+    );
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        code: "BAD_REPO_REF",
+        path: "scenes.0.refs.pastEnd",
+        message: expect.stringContaining("starts past end"),
+      }),
+    );
+  }
+});
+
 test("bundle validation rejects asset parent symlink escapes and directories", () => {
   const dir = mkdtempSync(join(tmpdir(), "av-bundle-asset-safety-"));
   mkdirSync(join(dir, "assets"), { recursive: true });
@@ -438,7 +456,7 @@ test("bundle validation rejects asset parent symlink escapes and directories", (
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: { title: "Asset safety", repo: { path: ROOT } },
       assets: {
         escaped: { type: "data", src: "assets/outside/hosts" },
@@ -448,7 +466,7 @@ test("bundle validation rejects asset parent symlink escapes and directories", (
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Intro" } },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -471,13 +489,13 @@ test("line caption is rejected because subtitles come from narration text", () =
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: { title: "Caption reject", repo: { path: ROOT } },
       scenes: [
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Exact spoken line.", caption: "Short visual label." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Intro" } },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -495,36 +513,21 @@ test("line caption is rejected because subtitles come from narration text", () =
   }
 });
 
-test("hyperframe inputs come from the module contract, not copied JSON bindings", () => {
-  const dir = mkdtempSync(join(tmpdir(), "av-bundle-binding-"));
-  mkdirSync(join(dir, "hyperframes"), { recursive: true });
+test("web propsSchema array constraints do not require item schemas", () => {
+  const dir = writeBundle({
+    version: 3,
+    meta: { title: "Array props", repo: { path: ROOT } },
+    scenes: [sceneWithVisual({ kind: "web", src: "web/app.html", props: { steps: [] } })],
+  });
+  mkdirSync(join(dir, "web"), { recursive: true });
   writeFileSync(
-    join(dir, "hyperframes", "source.tsx"),
-    [
-      'const propsSchema = { type: "object", properties: { source: { type: "string" } } };',
-      'const inputs = { source: { kind: "repo", refKind: "code" } };',
-      "function render() { return null; }",
-      "export default { schemaVersion: 1, propsSchema, inputs, render };",
-    ].join("\n"),
-  );
-  writeFileSync(
-    join(dir, "spec.json"),
-    JSON.stringify({
-      version: 2,
-      meta: { title: "Explicit inputs", repo: { path: ROOT } },
-      scenes: [
-        {
-          id: "intro",
-          narration: { lines: [{ id: "l1", text: "Intro." }] },
-          refs: {},
-          visual: {
-            kind: "hyperframe",
-            src: "hyperframes/source.tsx",
-            inputs: { source: "missing" },
-            props: { source: "not a ref" },
-          },
-        },
-      ],
+    join(dir, "web", "app.html"),
+    webHtml({
+      propsSchema: {
+        type: "object",
+        properties: { steps: { type: "array", minItems: 1 } },
+      },
+      inputs: {},
     }),
   );
 
@@ -532,39 +535,26 @@ test("hyperframe inputs come from the module contract, not copied JSON bindings"
   expect(result.ok).toBe(false);
   if (!result.ok) {
     expect(result.errors).toContainEqual(
-      expect.objectContaining({ code: "UNKNOWN_REPO_REF", path: "scenes.0.visual.inputs.source" }),
+      expect.objectContaining({ code: "BAD_WEB_PROPS", path: "scenes.0.visual.props.steps" }),
     );
   }
 });
 
-test("hyperframe propsSchema supported constraints are enforced", () => {
-  const dir = mkdtempSync(join(tmpdir(), "av-bundle-props-schema-"));
-  mkdirSync(join(dir, "hyperframes"), { recursive: true });
+test("web propsSchema dialect errors point at the HTML visual", () => {
+  const dir = writeBundle({
+    version: 3,
+    meta: { title: "Props dialect", repo: { path: ROOT } },
+    scenes: [sceneWithVisual({ kind: "web", src: "web/app.html", props: { title: "hello" } })],
+  });
+  mkdirSync(join(dir, "web"), { recursive: true });
   writeFileSync(
-    join(dir, "hyperframes", "source.tsx"),
-    [
-      'const propsSchema = { type: "object", required: ["title"], properties: { title: { type: "string", minLength: 5 } } };',
-      "const inputs = {};",
-      "function render() { return null; }",
-      "export default { schemaVersion: 1, propsSchema, inputs, render };",
-    ].join("\n"),
-  );
-  writeFileSync(
-    join(dir, "spec.json"),
-    JSON.stringify({
-      version: 2,
-      meta: { title: "Props schema", repo: { path: ROOT } },
-      scenes: [
-        {
-          id: "intro",
-          narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: {
-            kind: "hyperframe",
-            src: "hyperframes/source.tsx",
-            props: { title: "x" },
-          },
-        },
-      ],
+    join(dir, "web", "app.html"),
+    webHtml({
+      propsSchema: {
+        type: "object",
+        properties: { title: { type: "string", format: "email" } },
+      },
+      inputs: {},
     }),
   );
 
@@ -572,231 +562,57 @@ test("hyperframe propsSchema supported constraints are enforced", () => {
   expect(result.ok).toBe(false);
   if (!result.ok) {
     expect(result.errors).toContainEqual(
-      expect.objectContaining({ code: "BAD_HYPERFRAME_PROPS", path: "scenes.0.visual.props.title" }),
+      expect.objectContaining({ code: "BAD_WEB_SCHEMA", path: "scenes.0.visual.src" }),
     );
   }
 });
 
-test("hyperframe propsSchema array length constraints do not require item schemas", () => {
-  const dir = mkdtempSync(join(tmpdir(), "av-bundle-props-array-schema-"));
-  mkdirSync(join(dir, "hyperframes"), { recursive: true });
-  writeFileSync(
-    join(dir, "hyperframes", "source.tsx"),
-    [
-      'const propsSchema = { type: "object", properties: { steps: { type: "array", minItems: 1 } } };',
-      "const inputs = {};",
-      "function render() { return null; }",
-      "export default { schemaVersion: 1, propsSchema, inputs, render };",
-    ].join("\n"),
-  );
-  writeFileSync(
-    join(dir, "spec.json"),
-    JSON.stringify({
-      version: 2,
-      meta: { title: "Props schema", repo: { path: ROOT } },
-      scenes: [
-        {
-          id: "intro",
-          narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: {
-            kind: "hyperframe",
-            src: "hyperframes/source.tsx",
-            props: { steps: [] },
-          },
-        },
-      ],
-    }),
-  );
+test("web propsSchema rejects unknown types and non-schema child nodes", () => {
+  for (const [name, propsSchema] of [
+    ["unknown-type", { type: "banana" }],
+    ["bad-child", { type: "object", properties: { title: "not-a-schema" } }],
+  ] as const) {
+    const dir = writeBundle({
+      version: 3,
+      meta: { title: name, repo: { path: ROOT } },
+      scenes: [sceneWithVisual({ kind: "web", src: "web/app.html", props: { title: "hello" } })],
+    });
+    mkdirSync(join(dir, "web"), { recursive: true });
+    writeFileSync(join(dir, "web", "app.html"), webHtml({ propsSchema, inputs: {} }));
 
-  const result = validateBundle(dir);
-  expect(result.ok).toBe(false);
-  if (!result.ok) {
-    expect(result.errors).toContainEqual(
-      expect.objectContaining({ code: "BAD_HYPERFRAME_PROPS", path: "scenes.0.visual.props.steps" }),
-    );
+    const result = validateBundle(dir);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ code: "BAD_WEB_SCHEMA", path: "scenes.0.visual.src" }),
+      );
+    }
   }
 });
 
-test("hyperframe propsSchema dialect errors point at the hyperframe module", () => {
-  const dir = mkdtempSync(join(tmpdir(), "av-bundle-props-schema-dialect-"));
-  mkdirSync(join(dir, "hyperframes"), { recursive: true });
+test("web policy lint ignores banned-looking strings and comments", () => {
+  const dir = writeBundle({
+    version: 3,
+    meta: { title: "Safe web source", repo: { path: ROOT } },
+    scenes: [sceneWithVisual({ kind: "web", src: "web/app.html" })],
+  });
+  mkdirSync(join(dir, "web"), { recursive: true });
   writeFileSync(
-    join(dir, "hyperframes", "source.tsx"),
+    join(dir, "web", "app.html"),
     [
-      'const propsSchema = { type: "object", properties: { title: { type: "string", format: "email" } } };',
-      "const inputs = {};",
-      "function render() { return null; }",
-      "export default { schemaVersion: 1, propsSchema, inputs, render };",
+      "<!doctype html><html><body>",
+      '<script type="application/showtell+json">{"schemaVersion":3,"inputs":{}}</script>',
+      "<script>",
+      "// Date.now and Math.random are documentation text.",
+      'const label = "fetch( process.cwd Date.now Math.random";',
+      "const timeline = gsap.timeline({ paused: true });",
+      "window.__showtell.timeline = timeline;",
+      "</script></body></html>",
     ].join("\n"),
-  );
-  writeFileSync(
-    join(dir, "spec.json"),
-    JSON.stringify({
-      version: 2,
-      meta: { title: "Props schema", repo: { path: ROOT } },
-      scenes: [
-        {
-          id: "intro",
-          narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: {
-            kind: "hyperframe",
-            src: "hyperframes/source.tsx",
-            props: { title: "hello" },
-          },
-        },
-      ],
-    }),
-  );
-
-  const result = validateBundle(dir);
-  expect(result.ok).toBe(false);
-  if (!result.ok) {
-    expect(result.errors).toContainEqual(
-      expect.objectContaining({ code: "BAD_HYPERFRAME_SCHEMA", path: "scenes.0.visual.src" }),
-    );
-  }
-});
-
-test("hyperframe contract must come from the default export object", () => {
-  const dir = mkdtempSync(join(tmpdir(), "av-bundle-default-export-"));
-  mkdirSync(join(dir, "hyperframes"), { recursive: true });
-  writeFileSync(
-    join(dir, "hyperframes", "source.tsx"),
-    [
-      'const propsSchema = { type: "object", properties: { title: { type: "string" } } };',
-      "const inputs = {};",
-      "function render() { return null; }",
-      "export default null;",
-    ].join("\n"),
-  );
-  writeFileSync(
-    join(dir, "spec.json"),
-    JSON.stringify({
-      version: 2,
-      meta: { title: "Bad export", repo: { path: ROOT } },
-      scenes: [
-        {
-          id: "intro",
-          narration: { lines: [{ id: "l1", text: "Intro." }] },
-          visual: {
-            kind: "hyperframe",
-            src: "hyperframes/source.tsx",
-            props: { title: "Hello" },
-          },
-        },
-      ],
-    }),
-  );
-
-  const result = validateBundle(dir);
-  expect(result.ok).toBe(false);
-  if (!result.ok) {
-    expect(result.errors).toContainEqual(
-      expect.objectContaining({ code: "INVALID_HYPERFRAME_CONTRACT", path: "scenes.0.visual.src" }),
-    );
-  }
-});
-
-test("hyperframe policy lint rejects ambient APIs and unsupported imports", () => {
-  const dir = mkdtempSync(join(tmpdir(), "av-bundle-hyperframe-policy-"));
-  mkdirSync(join(dir, "hyperframes"), { recursive: true });
-  writeFileSync(
-    join(dir, "hyperframes", "unsafe.tsx"),
-    [
-      'import { readFileSync } from "node:fs";',
-      'const propsSchema = { type: "object", properties: { title: { type: "string" } } };',
-      "const inputs = {};",
-      "function render() {",
-      '  Date["now"]();',
-      '  process["cwd"]();',
-      "  readFileSync('/etc/hosts', 'utf-8');",
-      "  return null;",
-      "}",
-      "export default { schemaVersion: 1, propsSchema, inputs, render };",
-    ].join("\n"),
-  );
-  writeFileSync(
-    join(dir, "spec.json"),
-    JSON.stringify({
-      version: 2,
-      meta: { title: "Unsafe hyperframe", repo: { path: ROOT } },
-      scenes: [
-        {
-          id: "intro",
-          narration: { lines: [{ id: "l1", text: "Unsafe APIs should fail validation." }] },
-          visual: {
-            kind: "hyperframe",
-            src: "hyperframes/unsafe.tsx",
-            props: { title: "Unsafe" },
-          },
-        },
-      ],
-    }),
-  );
-
-  const result = validateBundle(dir);
-  expect(result.ok).toBe(false);
-  if (!result.ok) {
-    expect(result.errors).toContainEqual(
-      expect.objectContaining({ code: "BANNED_HYPERFRAME_IMPORT", path: "scenes.0.visual.src" }),
-    );
-    expect(result.errors).toContainEqual(
-      expect.objectContaining({
-        code: "BANNED_HYPERFRAME_API",
-        path: "scenes.0.visual.src",
-        message: expect.stringContaining("process."),
-      }),
-    );
-    expect(result.errors).toContainEqual(
-      expect.objectContaining({
-        code: "BANNED_HYPERFRAME_API",
-        path: "scenes.0.visual.src",
-        message: expect.stringContaining("Date.now"),
-      }),
-    );
-  }
-});
-
-test("hyperframe policy lint ignores banned-looking strings and comments", () => {
-  const dir = mkdtempSync(join(tmpdir(), "av-bundle-hyperframe-policy-clean-"));
-  mkdirSync(join(dir, "hyperframes"), { recursive: true });
-  writeFileSync(
-    join(dir, "hyperframes", "safe.tsx"),
-    [
-      'const propsSchema = { type: "object", properties: { title: { type: "string" } } };',
-      "const inputs = {};",
-      "function render() {",
-      "  // Date.now and Math.random are only mentioned in documentation text.",
-      '  const label = "fetch( process.cwd Date.now Math.random";',
-      "  return label;",
-      "}",
-      "export default { schemaVersion: 1, propsSchema, inputs, render };",
-    ].join("\n"),
-  );
-  writeFileSync(
-    join(dir, "spec.json"),
-    JSON.stringify({
-      version: 2,
-      meta: { title: "Safe hyperframe", repo: { path: ROOT } },
-      scenes: [
-        {
-          id: "intro",
-          narration: { lines: [{ id: "l1", text: "Unsafe API names in strings should not fail validation." }] },
-          visual: {
-            kind: "hyperframe",
-            src: "hyperframes/safe.tsx",
-            props: { title: "Safe" },
-          },
-        },
-      ],
-    }),
   );
 
   const result = validateBundle(dir);
   expect(result.ok).toBe(true);
-  if (result.ok) {
-    expect(result.warnings).toHaveLength(0);
-  }
 });
 
 function presenterSpec(presenter: Record<string, unknown>): string {
@@ -804,13 +620,13 @@ function presenterSpec(presenter: Record<string, unknown>): string {
   writeFileSync(
     join(dir, "spec.json"),
     JSON.stringify({
-      version: 2,
+      version: 3,
       meta: { title: "Presenter", presenter, repo: { path: ROOT } },
       scenes: [
         {
           id: "intro",
           narration: { lines: [{ id: "l1", text: "Hello." }] },
-          visual: { kind: "builtin", name: "title", props: { title: "Hi" } },
+          visual: screencapVisual(),
         },
       ],
     }),
@@ -861,3 +677,346 @@ test("disabled presenter skips image checks; escaping paths are rejected", () =>
     expect(result.errors.some((item) => item.code === "BAD_PRESENTER_IMAGE_PATH")).toBe(true);
   }
 });
+
+test("bundle validation reports an actionable migration error for version 2", () => {
+  const dir = writeBundle({
+    version: 2,
+    meta: { title: "Old bundle", repo: { path: ROOT } },
+    scenes: [sceneWithVisual({ kind: "builtin", name: "title", props: { title: "Old" } })],
+  });
+
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        code: "UNSUPPORTED_BUNDLE_VERSION",
+        path: "version",
+        hint: expect.stringContaining('visual.kind="web"'),
+      }),
+    );
+  }
+});
+
+test("bundle v3 rejects removed builtins with an actionable browser migration", () => {
+  const builtin = writeBundle({
+    version: 3,
+    meta: { title: "Builtin", repo: { path: ROOT } },
+    scenes: [sceneWithVisual({ kind: "builtin", name: "title", props: { title: "Hello" } })],
+  });
+
+  const result = validateBundle(builtin);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors).toEqual([
+      expect.objectContaining({
+        code: "UNSUPPORTED_VISUAL_KIND",
+        path: "scenes.0.visual.kind",
+        hint: expect.stringMatching(/<st-code>.*<st-diff>.*<st-chart>.*bundle templates/),
+      }),
+    ]);
+  }
+});
+
+test("bundle v3 accepts web as its only designed visual runtime", () => {
+  const web = writeBundle({
+    version: 3,
+    meta: { title: "Web", repo: { path: ROOT } },
+    scenes: [sceneWithVisual({ kind: "web", src: "web/app.html" })],
+  });
+  mkdirSync(join(web, "web"), { recursive: true });
+  writeFileSync(join(web, "web", "app.html"), webHtml({ inputs: {} }));
+  expect(validateBundle(web).ok).toBe(true);
+});
+
+test("bundle v3 web visuals must assign the paused showtell timeline", () => {
+  const dir = writeBundle({
+    version: 3,
+    meta: { title: "No timeline", repo: { path: ROOT } },
+    scenes: [sceneWithVisual({ kind: "web", src: "web/app.html" })],
+  });
+  mkdirSync(join(dir, "web"), { recursive: true });
+  const html = webHtml({ inputs: {} }).replace(
+    "<script>window.__showtell.timeline = gsap.timeline({ paused: true });</script>",
+    "",
+  );
+  writeFileSync(join(dir, "web", "app.html"), html);
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "MISSING_WEB_TIMELINE" }));
+  }
+});
+
+test("bundle v3 screencap keeps simple-spec validation semantics", () => {
+  for (const visual of [
+    { kind: "screencap", sessionRef: "../recording" },
+    { kind: "screencap", sessionRef: "recording", clip: { start: 2, end: 1 } },
+    { kind: "screencap", sessionRef: "recording", playback: { mode: "warp-speed" } },
+  ]) {
+    const dir = writeBundle({
+      version: 3,
+      meta: { title: "Bad screencap", repo: { path: ROOT } },
+      scenes: [sceneWithVisual(visual)],
+    });
+    const result = validateBundle(dir);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ code: "SCHEMA_ERROR", path: expect.stringContaining("scenes.0.visual") }),
+      );
+    }
+  }
+});
+
+test("bundle v3 web inputs accept repo, asset, and range bindings", () => {
+  const dir = writeBundle({
+    version: 3,
+    meta: { title: "v3 bindings", repo: { path: ROOT } },
+    assets: { metrics: { type: "data", src: "assets/metrics.json" } },
+    scenes: [
+      {
+        id: "intro",
+        narration: { lines: [{ id: "l1", text: "Intro." }] },
+        refs: { source: { kind: "code", file: "README.md", lineStart: 1, lineEnd: 3 } },
+        ranges: { reveal: "line:l1" },
+        visual: {
+          kind: "web",
+          src: "web/app.html",
+          props: { title: "Repo proof" },
+          inputs: { source: "source", metrics: "metrics", reveal: "reveal" },
+        },
+      },
+    ],
+  });
+  mkdirSync(join(dir, "assets"), { recursive: true });
+  mkdirSync(join(dir, "web"), { recursive: true });
+  writeFileSync(join(dir, "assets", "metrics.json"), "{}");
+  writeFileSync(
+    join(dir, "web", "app.html"),
+    webHtml({
+      propsSchema: {
+        type: "object",
+        required: ["title"],
+        properties: { title: { type: "string", minLength: 3 } },
+      },
+      inputs: {
+        source: { kind: "repo", refKind: "code" },
+        metrics: { kind: "asset", assetType: "data" },
+        reveal: { kind: "range" },
+      },
+    }),
+  );
+
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(true);
+});
+
+test("bundle v3 web manifest errors are precise for missing duplicate malformed and wrong-version manifests", () => {
+  const cases: Array<[string, string, string]> = [
+    ["missing", "<main>No manifest</main>", "MISSING_WEB_MANIFEST"],
+    [
+      "duplicate",
+      `${webHtml({ inputs: {} })}<script type="application/showtell+json">{"schemaVersion":3}</script>`,
+      "DUPLICATE_WEB_MANIFEST",
+    ],
+    ["malformed", '<script type="application/showtell+json">{"schemaVersion":3,</script>', "INVALID_WEB_MANIFEST_JSON"],
+    ["wrong-version", webHtml({ schemaVersion: 2, inputs: {} }), "WRONG_WEB_MANIFEST_VERSION"],
+  ];
+
+  for (const [name, html, code] of cases) {
+    const dir = writeBundle({
+      version: 3,
+      meta: { title: name, repo: { path: ROOT } },
+      scenes: [sceneWithVisual({ kind: "web", src: "web/app.html" })],
+    });
+    mkdirSync(join(dir, "web"), { recursive: true });
+    writeFileSync(join(dir, "web", "app.html"), html);
+
+    const result = validateBundle(dir);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ code, path: "scenes.0.visual.src", hint: expect.any(String) }),
+      );
+    }
+  }
+});
+
+test("bundle v3 web validation rejects bad bindings and props", () => {
+  const dir = writeBundle({
+    version: 3,
+    meta: { title: "bad web", repo: { path: ROOT } },
+    assets: { logo: { type: "image", src: "assets/logo.png" } },
+    scenes: [
+      {
+        id: "intro",
+        narration: { lines: [{ id: "l1", text: "Intro." }] },
+        refs: { diff: { kind: "diff", file: "README.md", ref: "HEAD" } },
+        visual: {
+          kind: "web",
+          src: "web/app.html",
+          props: { title: "x" },
+          inputs: {
+            source: "diff",
+            metrics: "logo",
+            extra: "line:l1",
+          },
+        },
+      },
+    ],
+  });
+  mkdirSync(join(dir, "assets"), { recursive: true });
+  mkdirSync(join(dir, "web"), { recursive: true });
+  writeFileSync(join(dir, "assets", "logo.png"), "png");
+  writeFileSync(
+    join(dir, "web", "app.html"),
+    webHtml({
+      propsSchema: {
+        type: "object",
+        required: ["title"],
+        properties: { title: { type: "string", minLength: 3 } },
+      },
+      inputs: {
+        source: { kind: "repo", refKind: "code" },
+        metrics: { kind: "asset", assetType: "data" },
+        reveal: { kind: "range" },
+      },
+    }),
+  );
+
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "BAD_WEB_PROPS" }));
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "UNKNOWN_WEB_INPUT" }));
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "MISSING_WEB_INPUT" }));
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "WRONG_REPO_REF_KIND" }));
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "WRONG_ASSET_TYPE" }));
+  }
+});
+
+test("bundle v3 web policy rejects ambient motion, network resources, and nondeterministic APIs", () => {
+  const dir = writeBundle({
+    version: 3,
+    meta: { title: "unsafe web", repo: { path: ROOT } },
+    scenes: [sceneWithVisual({ kind: "web", src: "web/app.html" })],
+  });
+  mkdirSync(join(dir, "web"), { recursive: true });
+  writeFileSync(
+    join(dir, "web", "app.html"),
+    [
+      "<!doctype html><html><head>",
+      '<script type="application/showtell+json">{"schemaVersion":3,"inputs":{}}</script>',
+      "<style>.orb{animation:pulse 1s infinite;background:url(https://example.com/bg.png)}</style>",
+      '<script src="https://example.com/ambient.js"></script>',
+      "</head><body>",
+      '<img src="https://example.com/photo.png" onclick="fetch(\'https://example.com\')">',
+      '<svg><animateMotion dur="1s" repeatCount="indefinite"></animateMotion></svg>',
+      "<script>const n = Math.random(); setTimeout(() => n, 10); crypto.getRandomValues(new Uint8Array(1)); crypto.randomUUID(); document.body.animate([], {duration: 1000});</script>",
+      "</body></html>",
+    ].join(""),
+  );
+
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "BANNED_WEB_RESOURCE" }));
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "BANNED_WEB_HANDLER" }));
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "BANNED_WEB_CSS" }));
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: "BANNED_WEB_API", message: expect.stringContaining("Math.random") }),
+    );
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: "BANNED_WEB_API", message: expect.stringContaining("setTimeout") }),
+    );
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: "BANNED_WEB_API", message: expect.stringContaining("crypto.getRandomValues") }),
+    );
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: "BANNED_WEB_API", message: expect.stringContaining("crypto.randomUUID") }),
+    );
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: "BANNED_WEB_API", message: expect.stringContaining("Element.animate") }),
+    );
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "BANNED_WEB_ANIMATION" }));
+  }
+});
+
+test("explicit scene duration validates against the minimum frame budget", () => {
+  const valid = writeBundle({
+    version: 3,
+    meta: { title: "Exact media", fps: 30, repo: { path: ROOT } },
+    scenes: [
+      {
+        id: "capture",
+        duration: 0.5,
+        narration: { lines: [{ id: "l1", text: "Exact." }] },
+        visual: screencapVisual(),
+      },
+    ],
+  });
+  expect(validateBundle(valid).ok).toBe(true);
+
+  const tooShort = writeBundle({
+    version: 3,
+    meta: { title: "Too short", fps: 30, repo: { path: ROOT } },
+    scenes: [
+      {
+        id: "capture",
+        duration: 0.01,
+        narration: { lines: [{ id: "l1", text: "Exact." }] },
+        visual: screencapVisual(),
+      },
+    ],
+  });
+  const result = validateBundle(tooShort);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: "BAD_EXPLICIT_DURATION", path: "scenes.0.duration" }),
+    );
+  }
+});
+
+test("published bundle schema exposes v3 web visuals and screencap media only", () => {
+  const schemaPath = join(ROOT, "packages", "core", "bundle.schema.json");
+  const schema = JSON.parse(readFileSync(schemaPath, "utf-8"));
+  const text = JSON.stringify(schema);
+  expect(text).toContain('"version"');
+  expect(text).toContain('"const":3');
+  expect(text).toContain('"web"');
+  expect(text).toContain('"screencap"');
+  expect(text).toContain('"sessionRef"');
+  expect(text).toContain('"playback"');
+  expect(text).not.toContain('"builtin"');
+  expect(text).not.toContain('"const":2');
+  expect(text).not.toContain('"hyperframe"');
+});
+
+function writeBundle(spec: Record<string, unknown>): string {
+  const dir = mkdtempSync(join(tmpdir(), "av-bundle-v3-"));
+  writeFileSync(join(dir, "spec.json"), JSON.stringify(spec));
+  return dir;
+}
+
+function sceneWithVisual(visual: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: "intro",
+    narration: { lines: [{ id: "l1", text: "Intro." }] },
+    visual,
+  };
+}
+
+function screencapVisual(): Record<string, unknown> {
+  return { kind: "screencap", sessionRef: "fixture" };
+}
+
+function webHtml(manifest: Record<string, unknown>): string {
+  return [
+    '<!doctype html><html><body><div id="root"></div>',
+    `<script type="application/showtell+json">${JSON.stringify({ schemaVersion: 3, ...manifest })}</script>`,
+    "<script>window.__showtell.timeline = gsap.timeline({ paused: true });</script>",
+    "</body></html>",
+  ].join("");
+}

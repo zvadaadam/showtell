@@ -35,7 +35,7 @@ test("renders all scenes × aspect ratios to real PNG files", async () => {
   const tall = r.frames.find((f) => f.aspectRatio === "9:16")!;
   expect([wide.width, wide.height]).toEqual([1920, 1080]);
   expect([tall.width, tall.height]).toEqual([1080, 1920]);
-});
+}, 60_000);
 
 test("CONTRACT: rendered code == live source bytes", async () => {
   const r = await renderFrames(spec, { repoPath: ".", outDir });
@@ -43,7 +43,7 @@ test("CONTRACT: rendered code == live source bytes", async () => {
   const lines = readFileSync("packages/core/src/spec.ts", "utf-8").split("\n");
   const independent = createHash("sha256").update(lines.slice(0, 5).join("\n")).digest("hex");
   expect(code.sha256).toBe(independent);
-});
+}, 60_000);
 
 test("not-yet-composable kinds are reported in `skipped`, not rendered", async () => {
   const r = await renderFrames(

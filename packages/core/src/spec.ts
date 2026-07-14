@@ -99,8 +99,8 @@ export const ChartScene = z
       .object({
         chartType: z.enum(["bar", "line", "pie"]),
         title: z.string().optional(),
-        x: z.string().optional().describe("Optional label/category field. Hyperframe Chart requires this."),
-        y: z.string().optional().describe("Optional numeric value field. Hyperframe Chart requires this."),
+        x: z.string().optional().describe("Optional label/category field used by the built-in chart renderer."),
+        y: z.string().optional().describe("Optional numeric value field used by the built-in chart renderer."),
         data: z.array(z.record(z.union([z.string(), z.number()]))).min(1),
       })
       .strict(),

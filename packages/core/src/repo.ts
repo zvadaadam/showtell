@@ -220,7 +220,10 @@ export interface RepoMeta {
 export function readRepoMeta(repoPath: string): RepoMeta {
   const git = (args: string[]): string | undefined => {
     try {
-      const out = execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf-8" }).trim();
+      const out = execFileSync("git", ["-C", repoPath, ...args], {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
       return out || undefined;
     } catch {
       return undefined;

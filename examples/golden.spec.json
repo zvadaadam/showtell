@@ -31,12 +31,12 @@
         "chartType": "bar",
         "title": "Scene kinds shipped",
         "data": [
-          { "phase": "built-ins", "kinds": 4 },
+          { "phase": "designed scenes", "kinds": 4 },
           { "phase": "capture", "kinds": 1 },
           { "phase": "bundle", "kinds": 1 }
         ]
       },
-      "narration": "Built-in visuals, screen capture, and bundle hyperframes cover the video formats we need.",
+      "narration": "Designed scenes, screen capture, and bundle hyperframes cover the video formats we need.",
       "duration": "auto"
     },
     {

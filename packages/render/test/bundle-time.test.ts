@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import type { BundleScene } from "@showtell/core";
-import type { CompiledBundleScene } from "../src/bundle.ts";
+import { exactBundleFrameAt, lineSampleFractions, lineSampleTimeMs, type CompiledBundleScene } from "../src/bundle.ts";
 import { resolveBundlePoint, resolveBundleRange, resolveBundleSpan } from "../src/bundle-time.ts";
 
 const totalMs = 2_200;
@@ -19,7 +19,7 @@ function specScene(id: string, ranges: BundleScene["ranges"] = {}, anchors: Bund
     beats: [],
     anchors,
     ranges,
-    visual: { kind: "builtin", name: "title", props: { title: id } },
+    visual: { kind: "screencap", sessionRef: "fixture" },
   };
 }
 
@@ -42,6 +42,7 @@ function compiledScene(id: string, index: number, startMs: number): CompiledBund
           startMs: firstLineStart,
           endMs: firstLineEnd,
           durationMs: 400,
+          audioDurationMs: 400,
           ttsCached: false,
         },
         {
@@ -50,6 +51,7 @@ function compiledScene(id: string, index: number, startMs: number): CompiledBund
           startMs: secondLineStart,
           endMs: secondLineEnd,
           durationMs: 400,
+          audioDurationMs: 400,
           ttsCached: false,
         },
       ],
@@ -61,7 +63,8 @@ function compiledScene(id: string, index: number, startMs: number): CompiledBund
     anchors: {},
     ranges: {},
     refs: {},
-    visual: { kind: "builtin", name: "title", props: { title: id } },
+    visual: { kind: "screencap", sessionRef: "fixture" },
+    program: { kind: "screencap" },
   };
 }
 
@@ -165,4 +168,89 @@ test("unknown range refs echo the original range ref", () => {
   expect(() => resolveBundleSpan("range:missing", "sceneA", compiled, specs, totalMs)).toThrow(
     'Unknown range "sceneA/missing" (from ref "range:missing").',
   );
+});
+
+test("exactBundleFrameAt derives line, progress, and frame from one timestamp", () => {
+  const scene = compiledScene("sceneA", 0, 0);
+  const boundary = exactBundleFrameAt(scene, 500, 30);
+  expect(boundary.lineIndex).toBe(1);
+  expect(boundary.lineId).toBe("lx");
+  expect(boundary.lineActive).toBe(true);
+  expect(boundary.sceneProgress).toBe(0.5);
+  expect(boundary).toMatchObject({
+    timeMs: 500,
+    frame: 15,
+    lineIndex: 1,
+    lineId: "lx",
+    lineActive: true,
+  });
+
+  const midpoint = exactBundleFrameAt(scene, 700, 30);
+  expect(midpoint.lineIndex).toBe(1);
+  expect(midpoint.lineMs).toBe(200);
+  expect(midpoint.frame).toBe(21);
+
+  const tail = exactBundleFrameAt(scene, 950, 30);
+  expect(tail.lineIndex).toBe(1);
+  expect(tail.lineActive).toBe(false);
+  expect(tail.lineMs).toBe(450);
+});
+
+test("exactBundleFrameAt is deterministic for identical timestamps", () => {
+  const scene = compiledScene("sceneA", 0, 0);
+  expect(exactBundleFrameAt(scene, 733.333, 30)).toEqual(exactBundleFrameAt(scene, 733.333, 30));
+});
+
+test("lineSampleTimeMs selects evenly distributed frames from the final render schedule", () => {
+  const line = compiledScene("sceneA", 0, 0).narration.lines[0]!;
+  const fps = 30;
+  const frameCount = Math.max(1, Math.round((line.durationMs / 1000) * fps));
+  const fractions = lineSampleFractions(5);
+  const samples = fractions.map((fraction) => lineSampleTimeMs(line, fraction, fps));
+  const expectedFrameIndices = fractions.map((fraction) => Math.round(fraction * (frameCount - 1)));
+  expect(samples).toHaveLength(5);
+  expect(expectedFrameIndices).toEqual([0, 3, 6, 8, 11]);
+  expect(samples).toEqual(expectedFrameIndices.map((frameIndex) => line.startMs + ((frameIndex + 0.5) / fps) * 1000));
+  for (const timeMs of samples) {
+    const lineLocalFrameIndex = ((timeMs - line.startMs) * fps) / 1000 - 0.5;
+    expect(lineLocalFrameIndex).toBeCloseTo(Math.round(lineLocalFrameIndex), 8);
+  }
+  expect(samples).toEqual([...samples].sort((a, b) => a - b));
+});
+
+test("exactBundleFrameAt preserves scheduled line identity at a line end boundary", () => {
+  const scene = compiledScene("sceneA", 0, 0);
+  const boundary = exactBundleFrameAt(scene, { timeMs: 400, preferredLineIndex: 0 }, 30);
+  expect(boundary.timeMs).toBe(400);
+  expect(boundary.lineIndex).toBe(0);
+  expect(boundary.lineId).toBe("l1");
+  expect(boundary.lineActive).toBe(true);
+  expect(boundary.lineMs).toBe(400);
+});
+
+test("exactBundleFrameAt keeps final render timestamps on the old half-frame schedule", () => {
+  const scene = compiledScene("sceneA", 0, 0);
+  const line = scene.narration.lines[0]!;
+  const frameCount = Math.max(1, Math.round((line.durationMs / 1000) * 30));
+  expect(frameCount).toBe(12);
+  const lastScheduledTimeMs = line.startMs + ((frameCount - 1 + 0.5) / 30) * 1000;
+  const exact = exactBundleFrameAt(scene, { timeMs: lastScheduledTimeMs, preferredLineIndex: 0 }, 30);
+  expect(exact.timeMs).toBeCloseTo(383.3333333333, 8);
+  expect(exact.lineIndex).toBe(0);
+  expect(exact.timeMs).toBe(lastScheduledTimeMs);
+});
+
+test("exactBundleFrameAt keeps tail timestamps exact while clearing line activity", () => {
+  const scene = compiledScene("sceneA", 0, 0);
+  const tailTimeMs = scene.endMs + 500 / 30;
+  const exact = exactBundleFrameAt(
+    scene,
+    { timeMs: tailTimeMs, preferredLineIndex: scene.narration.lines.length - 1, lineActive: false },
+    30,
+  );
+  expect(exact.timeMs).toBe(tailTimeMs);
+  expect(exact.timeMs).toBe(tailTimeMs);
+  expect(exact.sceneProgress).toBe(1);
+  expect(exact.lineIndex).toBe(1);
+  expect(exact.lineActive).toBe(false);
 });

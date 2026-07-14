@@ -1,0 +1,44 @@
+name: Bug report
+description: Report reproducible Showtell behavior that is incorrect.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Please do not report security vulnerabilities here; use the private process in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Showtell version
+      description: Paste the output of `showtell version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS arm64
+        - Linux x64 (glibc)
+        - Linux arm64 (glibc)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include the command, structured error output, and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide a minimal spec or bundle, removing secrets and private source.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment details
+      description: Include ffmpeg, Git, and espeak-ng versions when relevant.

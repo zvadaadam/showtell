@@ -1,7 +1,7 @@
 # @showtell/capture
 
 Mode A: macOS screen recording (avfoundation) composited into the timeline as a
-`screencap` scene. Adapted from [@deus/screen-studio](https://github.com/) (MIT).
+`screencap` scene. Adapted from `@deus/screen-studio` (MIT; see the root NOTICE file).
 
 - `recordScreen(opts)` — record the screen for a fixed duration (needs Screen Recording permission).
 - `sessions.ts` — sandbox-safe session store (`.showtell/captures/<id>.mp4`); rejects path traversal.

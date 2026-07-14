@@ -1,6 +1,6 @@
 import type { BundleScene, BundleTimeSpanValue } from "@showtell/core";
 import { parseBundleTimePointRef, parseBundleTimeSpanRef } from "@showtell/core";
-import type { CompiledBundleScene, CompiledBundleSpan } from "./bundle.ts";
+import type { CompiledBundleSceneTiming, CompiledBundleSpan } from "./bundle.ts";
 
 interface BundleTimeResolveState {
   ranges: Set<string>;
@@ -14,7 +14,7 @@ function initialState(state?: BundleTimeResolveState): BundleTimeResolveState {
 export function resolveBundlePoint(
   ref: string,
   currentScene: string,
-  scenes: CompiledBundleScene[],
+  scenes: CompiledBundleSceneTiming[],
   sceneSpecs: BundleScene[],
   totalMs: number,
   state?: BundleTimeResolveState,
@@ -72,7 +72,7 @@ export function resolveBundlePoint(
 export function resolveBundleSpan(
   ref: BundleTimeSpanValue,
   currentScene: string,
-  scenes: CompiledBundleScene[],
+  scenes: CompiledBundleSceneTiming[],
   sceneSpecs: BundleScene[],
   totalMs: number,
   state?: BundleTimeResolveState,
@@ -113,7 +113,7 @@ export function resolveBundleSpan(
 export function resolveBundleRange(
   sceneId: string,
   rangeId: string,
-  scenes: CompiledBundleScene[],
+  scenes: CompiledBundleSceneTiming[],
   sceneSpecs: BundleScene[],
   totalMs: number,
   state?: BundleTimeResolveState,

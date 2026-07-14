@@ -1,4 +1,4 @@
-/** Bundle v2 theme defaults and validation. */
+/** Bundle theme defaults and validation. */
 import { z } from "zod";
 import type { BundleError } from "./bundle.ts";
 
@@ -8,14 +8,24 @@ const FontFamily = z
   .min(1)
   .max(80)
   .regex(/^[A-Za-z0-9_. -]+$/, "Use one plain font family name, not CSS, quotes, commas, or a URL.");
-const ThemePreset = z.enum(["ink", "aurora", "ember", "orchid", "graphite", "agent-dark", "paper", "neutral"]);
+const ThemePreset = z.enum(["ink", "aurora", "ember", "orchid", "graphite", "paper", "neutral"]);
 const ThemeMode = z.enum(["dark", "paper", "neutral"]);
-const REGISTERED_FONTS = new Set(["Inter", "Inter Medium", "Inter SemiBold", "Inter Bold", "JetBrains Mono"]);
+/** Font families the render chrome registers for @napi-rs/canvas; themes may only use these. */
+export const REGISTERED_FONT_FAMILIES = [
+  "Inter",
+  "Inter Medium",
+  "Inter SemiBold",
+  "Inter Bold",
+  "JetBrains Mono",
+  "League Gothic",
+  "Space Mono",
+] as const;
+
+const REGISTERED_FONTS = new Set<string>(REGISTERED_FONT_FAMILIES);
 
 export const Theme = z
   .object({
     preset: ThemePreset.optional(),
-    mode: ThemeMode.optional(),
     colors: z
       .object({
         fg: Color.optional(),
@@ -84,7 +94,6 @@ export const THEME_PRESET_GUIDE: Record<BundleThemePreset, string> = {
   ember: "Warm charcoal with an amber accent — energetic, launch-video warmth.",
   orchid: "Plum black with a magenta accent — bold, creator-tool energy.",
   graphite: "Pure monochrome with a near-white accent — austere, editorial.",
-  "agent-dark": "Legacy navy-and-periwinkle default; kept for existing bundles.",
   paper: "Light warm paper with a cobalt accent — docs-like, daylight-friendly.",
   neutral: "Quiet gray-blue dark with a sky accent — product-walkthrough neutral.",
 };
@@ -185,25 +194,6 @@ const THEME_PRESETS: Record<BundleThemePreset, ResolvedBundleTheme> = {
     typography: DEFAULT_TYPOGRAPHY,
     chart: ["#e2e8f0", "#94a3b8", "#64748b", "#cbd5e1", "#f4f5f7"],
   },
-  "agent-dark": {
-    preset: "agent-dark",
-    mode: "dark",
-    colors: {
-      bg: "#0f0f23",
-      fg: "#e8e8f2",
-      subtle: "#9aa0b4",
-      accent: "#7c8cff",
-      accent2: "#7c8cff",
-      success: "#7ee787",
-      warning: "#ffb86c",
-      surface: "#17182f",
-      border: "#343852",
-      captionBg: "#070a12",
-      captionFg: "#ffffff",
-    },
-    typography: DEFAULT_TYPOGRAPHY,
-    chart: ["#7c8cff", "#56d4bc", "#ffb86c", "#ff7b9c", "#79c0ff"],
-  },
   paper: {
     preset: "paper",
     mode: "paper",
@@ -261,18 +251,8 @@ function err(code: string, path: string, message: string, hint: string): BundleE
 
 const DEFAULT_PRESET: BundleThemePreset = "ink";
 
-function presetForMode(mode: BundleThemeMode | undefined): BundleThemePreset {
-  if (mode === "paper") return "paper";
-  if (mode === "neutral") return "neutral";
-  return DEFAULT_PRESET;
-}
-
-function modeForPreset(preset: BundleThemePreset): BundleThemeMode {
-  return THEME_PRESETS[preset].mode;
-}
-
 export function resolveBundleTheme(theme?: BundleTheme): ResolvedBundleTheme {
-  const preset = theme?.preset ?? presetForMode(theme?.mode);
+  const preset = theme?.preset ?? DEFAULT_PRESET;
   const base = THEME_PRESETS[preset];
   return {
     preset,
@@ -312,20 +292,6 @@ export function validateThemeContrast(
   errors: BundleError[],
   warnings: BundleError[],
 ): void {
-  if (
-    spec.meta.theme?.preset &&
-    spec.meta.theme.mode &&
-    spec.meta.theme.mode !== modeForPreset(spec.meta.theme.preset)
-  ) {
-    errors.push(
-      err(
-        "CONFLICTING_THEME_MODE",
-        "meta.theme.mode",
-        `Theme preset "${spec.meta.theme.preset}" conflicts with mode "${spec.meta.theme.mode}".`,
-        "Remove mode or set it to the preset's matching mode; prefer authoring with preset only.",
-      ),
-    );
-  }
   for (const [role, family] of Object.entries(spec.meta.theme?.typography ?? {})) {
     if (family && !REGISTERED_FONTS.has(family)) {
       warnings.push(
@@ -333,7 +299,7 @@ export function validateThemeContrast(
           "UNKNOWN_THEME_FONT",
           `meta.theme.typography.${role}`,
           `Font family "${family}" is not one of the renderer's registered deterministic fonts.`,
-          'Use "Inter", "Inter Bold", or "JetBrains Mono", or ensure the renderer registers this font before render.',
+          'Use "Inter", "Inter Bold", "League Gothic", "JetBrains Mono", or "Space Mono", or register the font before render.',
         ),
       );
     }

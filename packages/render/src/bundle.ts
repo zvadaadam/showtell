@@ -1,5 +1,14 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type {
   AspectRatio,
@@ -8,16 +17,17 @@ import type {
   BundleRepoRef,
   BundleScene,
   BundleSpec,
+  BundleVisualInputValue,
   ResolvedBundleTheme,
-  Scene,
+  VisualInputDescriptor,
 } from "@showtell/core";
 import {
   assertSafeOutputPath,
   bundleAssetFile,
-  bundleHyperframeFile,
+  bundleWebFile,
   bundlePresenterImageFile,
   effectiveBeats,
-  loadHyperframeContractFromSource,
+  loadWebManifestFromSource,
   readRepoMeta,
   resolveBundleTheme,
   resolveCodeRef,
@@ -26,22 +36,19 @@ import {
 } from "@showtell/core";
 import {
   probeImageInfo,
-  canvasTheme,
   dimsFor,
-  drawCaptionOverlay,
   loadPresenterOverlay,
-  renderCaptionedFrame,
+  renderCaptionPng,
+  renderPresenterPng,
+  renderWatermarkPng,
   resolveAgentLogo,
-  renderHyperframeElementToRgba,
-  renderHyperframeElementToPng,
-  renderPresenterFrame,
-  renderSceneToPng,
   type LoadedPresenter,
-  type RenderedScene,
 } from "@showtell/compose";
 import { probeDurationMs, synthesize } from "@showtell/providers";
 import {
+  concatAudio,
   concatClips,
+  fitAudioToDuration,
   imageAudioToClip,
   mixMusicTracks,
   normalizeVideoDuration,
@@ -51,7 +58,10 @@ import {
 } from "./ffmpeg.ts";
 import { amplitudeAt, extractAmplitudeEnvelope } from "./envelope.ts";
 import { resolveBundlePoint, resolveBundleRange, resolveBundleSpan } from "./bundle-time.ts";
-import { executeHyperframe, hyperframeThemeFromSpec } from "./hyperframe-runtime.ts";
+import { createBundleFrameProducer } from "./frame-producer.ts";
+import { renderScreencapClip, type ScreencapPresentationCache } from "./screencap.ts";
+import type { ScreencapOverlay } from "@showtell/capture";
+import { webRuntimeIdentity, type WebRuntimeIdentity } from "./web-authoring.ts";
 
 const TAIL_MS = 600;
 
@@ -71,7 +81,10 @@ export interface CompiledBundleLine {
   text: string;
   startMs: number;
   endMs: number;
+  /** Scheduled visual/caption span on the compiled timeline. */
   durationMs: number;
+  /** Measured source narration length before an explicit scene-duration fit. */
+  audioDurationMs: number;
   ttsCached: boolean;
   /** Normalized loudness per envelope window; present when the presenter bubble is on. */
   envelope?: number[];
@@ -83,7 +96,7 @@ export interface CompiledBundleSpan {
   durationMs: number;
 }
 
-export interface CompiledBundleScene {
+export interface CompiledBundleSceneTiming {
   index: number;
   id: string;
   startMs: number;
@@ -95,17 +108,25 @@ export interface CompiledBundleScene {
   ranges: Record<string, CompiledBundleSpan>;
   refs: Record<string, CompiledBundleRef>;
   visual: BundleScene["visual"];
-  hyperframe?: CompiledBundleHyperframe;
 }
 
-export interface CompiledBundleHyperframe {
+export interface CompiledBundleScene extends CompiledBundleSceneTiming {
+  program: CompiledBundleProgram;
+}
+
+export interface CompiledBundleWeb {
   src: string;
   sourceSha256: string;
   propsSha256: string;
-  inputs: Record<string, CompiledBundleHyperframeInput>;
+  manifestVersion: 3;
+  runtime: WebRuntimeIdentity;
+  inputs: Record<string, CompiledBundleVisualInput>;
 }
 
-export type CompiledBundleHyperframeInput =
+/** Designed pixels are always browser-rendered; screencap is a timed media source. */
+export type CompiledBundleProgram = { kind: "screencap" } | ({ kind: "web" } & CompiledBundleWeb);
+
+export type CompiledBundleVisualInput =
   | { kind: "repo"; refKind?: "code" | "diff"; target: string }
   | { kind: "asset"; assetType?: "audio" | "data" | "image"; target: string }
   | { kind: "range"; target: string; startMs: number; endMs: number; durationMs: number };
@@ -151,7 +172,7 @@ export interface CompiledBundlePresenter {
   /** Bundle-local badge logo, when the spec declares one. */
   logo?: CompiledBundlePresenterImage;
   /** Renderer-shipped mark resolved from `model` when no bundle logo is set. */
-  builtinLogo?: string;
+  rendererLogo?: string;
   model?: string;
   position: NonNullable<BundleSpec["meta"]["presenter"]>["position"];
   size: NonNullable<BundleSpec["meta"]["presenter"]>["size"];
@@ -180,7 +201,7 @@ export interface CompiledBundleOutput {
 
 export interface CompiledBundlePlan {
   version: 1;
-  sourceVersion: 2;
+  sourceVersion: 3;
   specSha256: string;
   bundle: { dir: string; repoPath: string };
   meta: {
@@ -213,16 +234,6 @@ export interface BundleCompileRuntime {
   assetData: Map<string, unknown>;
   /** Preloaded presenter bubble images; absent when the presenter is off. */
   presenter?: LoadedPresenter;
-}
-
-export interface BundleVisualMoment {
-  sceneIndex: number;
-  lineIndex: number;
-  lineCount: number;
-  lineId: string;
-  progress: number;
-  /** Exact frame time (absolute ms) for animated renders; stills omit it. */
-  timeMs?: number;
 }
 
 export interface BundleCompileResult extends BundleCompileRuntime {
@@ -265,6 +276,27 @@ function alignMsToFrame(ms: number, fps: number): number {
   return Math.round((Math.ceil((ms * fps) / 1000 - 1e-9) * 1000) / fps);
 }
 
+function fitLineDurations(audioDurationsMs: number[], sceneDurationSec: number, fps: number): number[] {
+  const totalMs = sceneDurationSec * 1000;
+  const minLineMs = 1000 / fps;
+  const minimumMs = minLineMs * audioDurationsMs.length;
+  if (totalMs + 1e-6 < minimumMs) {
+    throw new Error(
+      `Explicit duration ${sceneDurationSec}s is too short for ${audioDurationsMs.length} narration line(s) at ${fps}fps; use at least ${(minimumMs / 1000).toFixed(3)}s.`,
+    );
+  }
+  const remainingMs = totalMs - minimumMs;
+  const audioTotalMs = audioDurationsMs.reduce((sum, value) => sum + value, 0);
+  let assignedMs = 0;
+  return audioDurationsMs.map((audioMs, index) => {
+    if (index === audioDurationsMs.length - 1) return totalMs - assignedMs;
+    const share = audioTotalMs > 0 ? audioMs / audioTotalMs : 1 / audioDurationsMs.length;
+    const durationMs = minLineMs + remainingMs * share;
+    assignedMs += durationMs;
+    return durationMs;
+  });
+}
+
 function readDataAsset(path: string): unknown {
   const text = readFileSync(path, "utf-8");
   if (path.endsWith(".json")) return JSON.parse(text);
@@ -283,105 +315,8 @@ function writePlanJson(bundleDir: string, planPath: string, plan: CompiledBundle
   }
 }
 
-function asChartRows(data: unknown): Record<string, string | number>[] | undefined {
-  if (!Array.isArray(data)) return undefined;
-  const rows: Record<string, string | number>[] = [];
-  for (const row of data) {
-    if (!row || typeof row !== "object" || Array.isArray(row)) return undefined;
-    const out: Record<string, string | number> = {};
-    for (const [key, value] of Object.entries(row)) {
-      if (typeof value === "string" || typeof value === "number") out[key] = value;
-    }
-    if (Object.keys(out).length > 0) rows.push(out);
-  }
-  return rows.length ? rows : undefined;
-}
-
 function hasOwnKey(record: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
-}
-
-function narrationText(scene: BundleScene): string {
-  return scene.narration.lines.map((line) => line.text).join(" ");
-}
-
-function repoRefToScene(ref: BundleRepoRef, narration: string): Scene {
-  if (ref.kind === "code") {
-    return {
-      kind: "code",
-      content: {
-        file: ref.file,
-        lineStart: ref.lineStart,
-        lineEnd: ref.lineEnd,
-        ref: ref.ref,
-        focus: ref.focus,
-        language: ref.language,
-      },
-      narration,
-      duration: "auto",
-    };
-  }
-  return {
-    kind: "diff",
-    content: { file: ref.file, ref: ref.ref, animation: "magic-move" },
-    narration,
-    duration: "auto",
-  };
-}
-
-function builtinToScene(scene: BundleScene, runtime: BundleCompileRuntime): Scene {
-  const visual = scene.visual;
-  const props = visual.props;
-  const title = typeof props.title === "string" ? props.title : scene.id;
-  if (visual.kind === "builtin" && visual.name === "title") {
-    return {
-      kind: "title",
-      content: {
-        heading: typeof props.heading === "string" ? props.heading : title,
-        subtitle: typeof props.subtitle === "string" ? props.subtitle : undefined,
-      },
-      narration: narrationText(scene),
-      duration: "auto",
-    };
-  }
-  if (visual.kind === "builtin" && visual.name === "talking-points") {
-    const points = Array.isArray(props.points)
-      ? props.points.filter((point): point is string => typeof point === "string")
-      : scene.narration.lines.map((line) => line.text);
-    return {
-      kind: "talking-points",
-      content: { heading: title, points: points.length ? points : [title] },
-      narration: narrationText(scene),
-      duration: "auto",
-    };
-  }
-  if (visual.kind === "builtin" && visual.name === "chart") {
-    const assetId = typeof props.asset === "string" ? props.asset : undefined;
-    const data = assetId ? asChartRows(runtime.assetData.get(assetId)) : asChartRows(props.data);
-    return {
-      kind: "chart",
-      content: {
-        chartType: props.chartType === "line" || props.chartType === "pie" ? props.chartType : "bar",
-        title,
-        data: data ?? [{ label: "No data", value: 0 }],
-      },
-      narration: narrationText(scene),
-      duration: "auto",
-    };
-  }
-  if (visual.kind === "builtin" && (visual.name === "code" || visual.name === "diff")) {
-    const refId = visual.ref ?? (typeof props.ref === "string" ? props.ref : undefined);
-    const ref = refId ? scene.refs[refId] : undefined;
-    if (!ref)
-      throw new Error(`builtin ${visual.name} scene "${scene.id}" needs a visual.ref that points at scene.refs.`);
-    return repoRefToScene(ref, narrationText(scene));
-  }
-  return {
-    kind: "title",
-    content: { heading: title, subtitle: "This bundle visual is not renderable yet." },
-    narration: narrationText(scene),
-    duration: "auto",
-  };
 }
 
 function compileRepoRef(repoPath: string, ref: BundleRepoRef): CompiledBundleRef {
@@ -418,37 +353,21 @@ function compileError(code: string, path: string, message: string, hint: string)
   return { code, path, message, hint };
 }
 
-function compileHyperframe(
-  bundleDir: string,
+function compileVisualInputs(
   scene: BundleScene,
   sceneIndex: number,
-  scenes: CompiledBundleScene[],
+  visualInputs: Record<string, BundleVisualInputValue>,
+  contract: Record<string, VisualInputDescriptor>,
+  scenes: CompiledBundleSceneTiming[],
   sceneSpecs: BundleScene[],
   totalMs: number,
   errors: BundleError[],
-): CompiledBundleHyperframe | undefined {
-  if (scene.visual.kind !== "hyperframe") return undefined;
-  let source: string;
-  let contract: ReturnType<typeof loadHyperframeContractFromSource>;
-  try {
-    source = readFileSync(bundleHyperframeFile(bundleDir, scene.visual.src).path, "utf-8");
-    contract = loadHyperframeContractFromSource(source);
-  } catch (e) {
-    errors.push(
-      compileError(
-        "HYPERFRAME_COMPILE_ERROR",
-        `scenes.${sceneIndex}.visual.src`,
-        `Could not compile hyperframe contract: ${(e as Error).message}`,
-        "Fix the hyperframe default export and literal propsSchema/inputs contract.",
-      ),
-    );
-    return undefined;
-  }
-  const inputs: Record<string, CompiledBundleHyperframeInput> = {};
+): Record<string, CompiledBundleVisualInput> {
+  const inputs: Record<string, CompiledBundleVisualInput> = {};
   const compiledScene = scenes.find((item) => item.id === scene.id);
 
-  for (const [name, binding] of Object.entries(contract.inputs)) {
-    const value = scene.visual.inputs[name];
+  for (const [name, binding] of Object.entries(contract)) {
+    const value = visualInputs[name];
     if (value === undefined) {
       if (binding.kind === "range" && binding.optional && compiledScene) {
         inputs[name] = {
@@ -464,40 +383,79 @@ function compileHyperframe(
 
     if (binding.kind === "repo") {
       inputs[name] = { kind: "repo", refKind: binding.refKind, target: value as string };
-    } else if (binding.kind === "asset") {
+      continue;
+    }
+    if (binding.kind === "asset") {
       inputs[name] = { kind: "asset", assetType: binding.assetType, target: value as string };
-    } else {
-      let span: CompiledBundleSpan;
-      try {
-        span =
-          typeof value === "string" && hasOwnKey(scene.ranges, value)
-            ? resolveBundleRange(scene.id, value, scenes, sceneSpecs, totalMs)
-            : resolveBundleSpan(value, scene.id, scenes, sceneSpecs, totalMs);
-      } catch (e) {
-        errors.push(
-          compileError(
-            "BAD_COMPILED_TIME_RANGE",
-            `scenes.${sceneIndex}.visual.inputs.${name}`,
-            `Could not resolve hyperframe input range "${name}": ${(e as Error).message}`,
-            "Use a forward-moving line, beat, scene, named range, or explicit { from, to } span.",
-          ),
-        );
-        continue;
-      }
+      continue;
+    }
+
+    try {
+      const span =
+        typeof value === "string" && hasOwnKey(scene.ranges, value)
+          ? resolveBundleRange(scene.id, value, scenes, sceneSpecs, totalMs)
+          : resolveBundleSpan(value, scene.id, scenes, sceneSpecs, totalMs);
       inputs[name] = {
         kind: "range",
         target: typeof value === "string" ? value : `${value.from}..${value.to}`,
         ...span,
       };
+    } catch (e) {
+      errors.push(
+        compileError(
+          "BAD_COMPILED_TIME_RANGE",
+          `scenes.${sceneIndex}.visual.inputs.${name}`,
+          `Could not resolve web visual input range "${name}": ${(e as Error).message}`,
+          "Use a forward-moving line, beat, scene, named range, or explicit { from, to } span.",
+        ),
+      );
     }
   }
 
-  return {
-    src: scene.visual.src,
-    sourceSha256: contract.sourceSha256,
-    propsSha256: sha256(JSON.stringify(scene.visual.props)),
-    inputs,
-  };
+  return inputs;
+}
+
+function compileWebVisual(
+  bundleDir: string,
+  scene: BundleScene,
+  sceneIndex: number,
+  scenes: CompiledBundleSceneTiming[],
+  sceneSpecs: BundleScene[],
+  totalMs: number,
+  errors: BundleError[],
+): CompiledBundleWeb | undefined {
+  if (scene.visual.kind !== "web") return undefined;
+  try {
+    const source = readFileSync(bundleWebFile(bundleDir, scene.visual.src).path, "utf-8");
+    const manifest = loadWebManifestFromSource(source);
+    return {
+      src: scene.visual.src,
+      sourceSha256: manifest.sourceSha256,
+      propsSha256: sha256(JSON.stringify(scene.visual.props)),
+      manifestVersion: 3,
+      runtime: webRuntimeIdentity,
+      inputs: compileVisualInputs(
+        scene,
+        sceneIndex,
+        scene.visual.inputs,
+        manifest.inputs,
+        scenes,
+        sceneSpecs,
+        totalMs,
+        errors,
+      ),
+    };
+  } catch (e) {
+    errors.push(
+      compileError(
+        "WEB_VISUAL_COMPILE_ERROR",
+        `scenes.${sceneIndex}.visual.src`,
+        `Could not compile web visual contract: ${(e as Error).message}`,
+        "Fix the bundle-local HTML source and its application/showtell+json manifest.",
+      ),
+    );
+    return undefined;
+  }
 }
 
 export async function compileBundle(
@@ -581,7 +539,7 @@ export async function compileBundle(
     presenter = {
       image: await compilePresenterImage("image", presenterSpec.image),
       logo: presenterSpec.logo ? await compilePresenterImage("logo", presenterSpec.logo) : undefined,
-      builtinLogo: presenterSpec.logo ? undefined : resolveAgentLogo(presenterSpec.model)?.id,
+      rendererLogo: presenterSpec.logo ? undefined : resolveAgentLogo(presenterSpec.model)?.id,
       model: presenterSpec.model,
       position: presenterSpec.position,
       size: presenterSpec.size,
@@ -599,7 +557,7 @@ export async function compileBundle(
   const voice = spec.audio.tts.voice;
   const model = spec.audio.tts.model;
   const lineAudio = new Map<string, string>();
-  const scenes: CompiledBundleScene[] = [];
+  const scenes: CompiledBundleSceneTiming[] = [];
   const compileErrors: BundleError[] = [];
   let cursorMs = 0;
 
@@ -607,25 +565,53 @@ export async function compileBundle(
     const scene = spec.scenes[sceneIndex]!;
     const sceneStartMs = cursorMs;
     const compiledLines: CompiledBundleLine[] = [];
+    const synthesized = [];
     for (const line of scene.narration.lines) {
       const syn = await synthesize({ text: line.text, voice, model }, { provider, cacheDir: join(cacheDir, "tts") });
+      synthesized.push({ line, syn });
+      lineAudio.set(lineKey(scene.id, line.id), syn.wavPath);
+    }
+    let scheduledDurations: number[];
+    try {
+      scheduledDurations =
+        scene.duration === "auto"
+          ? synthesized.map(({ syn }) => syn.durationMs)
+          : fitLineDurations(
+              synthesized.map(({ syn }) => syn.durationMs),
+              scene.duration,
+              spec.meta.fps,
+            );
+    } catch (error) {
+      compileErrors.push(
+        compileError(
+          "BAD_EXPLICIT_DURATION",
+          `scenes.${sceneIndex}.duration`,
+          (error as Error).message,
+          'Increase the duration or set it to "auto" so measured narration controls the scene clock.',
+        ),
+      );
+      scheduledDurations = synthesized.map(({ syn }) => syn.durationMs);
+    }
+    for (let lineIndex = 0; lineIndex < synthesized.length; lineIndex++) {
+      const { line, syn } = synthesized[lineIndex]!;
+      const durationMs = scheduledDurations[lineIndex]!;
       const startMs = cursorMs;
-      const endMs = startMs + syn.durationMs;
+      const endMs = startMs + durationMs;
       compiledLines.push({
         id: line.id,
         text: line.text,
         startMs,
         endMs,
-        durationMs: syn.durationMs,
+        durationMs,
+        audioDurationMs: syn.durationMs,
         ttsCached: syn.cached,
         envelope: loadedPresenter ? extractAmplitudeEnvelope(syn.wavPath) : undefined,
       });
-      lineAudio.set(lineKey(scene.id, line.id), syn.wavPath);
       cursorMs = endMs;
     }
     const narrationEndMs = cursorMs;
-    cursorMs += TAIL_MS;
-    const compiled: CompiledBundleScene = {
+    if (scene.duration === "auto") cursorMs += TAIL_MS;
+    const compiled: CompiledBundleSceneTiming = {
       index: sceneIndex,
       id: scene.id,
       startMs: sceneStartMs,
@@ -646,7 +632,18 @@ export async function compileBundle(
     }
     for (const [refId, ref] of Object.entries(scene.refs)) {
       try {
-        compiled.refs[refId] = compileRepoRef(repoPath, ref);
+        const compiledRef = compileRepoRef(repoPath, ref);
+        compiled.refs[refId] = compiledRef;
+        if (compiledRef.kind === "diff" && compiledRef.added === 0 && compiledRef.removed === 0) {
+          warnings.push(
+            compileError(
+              "EMPTY_DIFF",
+              `scenes.${sceneIndex}.refs.${refId}`,
+              `Diff ref "${refId}" for ${compiledRef.file} is EMPTY and resolves to no changes (+0 −0).`,
+              'If the file changed in the base commit, widen the git range; note that "A..B" excludes commit A.',
+            ),
+          );
+        }
       } catch (e) {
         compileErrors.push(
           compileError(
@@ -667,6 +664,7 @@ export async function compileBundle(
     lastScene.endMs = totalMs;
     lastScene.durationMs += totalMs - cursorMs;
   }
+  const programs: Array<CompiledBundleProgram | undefined> = [];
   for (let sceneIndex = 0; sceneIndex < spec.scenes.length; sceneIndex++) {
     const scene = spec.scenes[sceneIndex]!;
     const compiled = scenes.find((item) => item.id === scene.id)!;
@@ -701,7 +699,12 @@ export async function compileBundle(
         );
       }
     }
-    compiled.hyperframe = compileHyperframe(bundleDir, scene, sceneIndex, scenes, spec.scenes, totalMs, compileErrors);
+    if (scene.visual.kind === "screencap") {
+      programs[sceneIndex] = { kind: "screencap" };
+    } else {
+      const program = compileWebVisual(bundleDir, scene, sceneIndex, scenes, spec.scenes, totalMs, compileErrors);
+      if (program) programs[sceneIndex] = { kind: "web", ...program };
+    }
   }
 
   const music: CompiledBundleMusic[] = [];
@@ -736,9 +739,15 @@ export async function compileBundle(
 
   if (compileErrors.length > 0) throw new BundleCompileError(compileErrors, warnings);
 
+  const compiledScenes: CompiledBundleScene[] = scenes.map((scene, index) => {
+    const program = programs[index];
+    if (!program) throw new Error(`Internal error: scene "${scene.id}" has no compiled render program.`);
+    return { ...scene, program };
+  });
+
   const plan: CompiledBundlePlan = {
     version: 1,
-    sourceVersion: 2,
+    sourceVersion: 3,
     specSha256: sha256(rawSpec),
     bundle: { dir: ".", repoPath: rel(bundleDir, repoPath) },
     meta: {
@@ -754,7 +763,7 @@ export async function compileBundle(
     repo: { path: rel(bundleDir, repoPath), ...readRepoMeta(repoPath) },
     assets,
     audio: { tts: spec.audio.tts, captions: spec.audio.captions, music },
-    scenes,
+    scenes: compiledScenes,
     outputs: { videos: [] },
   };
 
@@ -785,43 +794,6 @@ export async function compileBundle(
     planPath,
     warnings,
   };
-}
-
-export async function renderBundleScene(
-  scene: BundleScene,
-  compiledScene: CompiledBundleScene,
-  runtime: BundleCompileResult,
-  aspectRatio: AspectRatio,
-  moment?: BundleVisualMoment,
-): Promise<RenderedScene> {
-  const theme = hyperframeThemeFromSpec(runtime.spec);
-  // Stills always show the presenter bubble at rest (amplitude 0 = end state).
-  const presenterAtRest = runtime.presenter ? { ...runtime.presenter, amplitude: 0 } : undefined;
-  if (scene.visual.kind === "hyperframe") {
-    const executed = await executeHyperframe({
-      scene,
-      compiledScene,
-      runtime,
-      aspectRatio,
-      moment,
-    });
-    return renderHyperframeElementToPng(executed.element, {
-      aspectRatio,
-      activeCue: executed.activeCue,
-      theme,
-      watermark: "showtell",
-      presenter: presenterAtRest,
-    });
-  }
-
-  const rendered = await renderSceneToPng(builtinToScene(scene, runtime), {
-    repoPath: runtime.repoPath,
-    aspectRatio,
-    watermark: "showtell",
-    theme,
-  });
-  if (!presenterAtRest) return rendered;
-  return { ...rendered, png: await renderPresenterFrame(rendered.png, aspectRatio, presenterAtRest, theme) };
 }
 
 function srtStamp(ms: number): string {
@@ -861,15 +833,83 @@ function musicMixTracks(compiled: BundleCompileResult): MusicMixTrack[] {
   });
 }
 
-export function lineMoment(planScene: CompiledBundleScene, lineIndex: number): BundleVisualMoment {
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function activeLineIndexAtTime(planScene: CompiledBundleScene, timeMs: number): number {
+  const lines = planScene.narration.lines;
+  if (lines.length <= 1) return 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (timeMs >= line.startMs && timeMs < line.endMs) return i;
+  }
+  if (timeMs < lines[0]!.startMs) return 0;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (timeMs >= lines[i]!.startMs) return i;
+  }
+  return 0;
+}
+
+export interface ExactBundleFrame {
+  timeMs: number;
+  frame: number;
+  lineIndex: number;
+  lineId: string;
+  lineActive: boolean;
+  sceneProgress: number;
+  lineMs: number;
+}
+
+export interface BundleFrameSample {
+  timeMs: number;
+  preferredLineIndex?: number;
+  lineActive?: boolean;
+}
+
+export function exactBundleFrameAt(
+  planScene: CompiledBundleScene,
+  sample: number | BundleFrameSample,
+  fps: number,
+): ExactBundleFrame {
+  const atMs = typeof sample === "number" ? sample : sample.timeMs;
+  const preferredLineIndex = typeof sample === "number" ? undefined : sample.preferredLineIndex;
+  const lineIndex =
+    preferredLineIndex !== undefined
+      ? Math.max(0, Math.min(planScene.narration.lines.length - 1, preferredLineIndex))
+      : activeLineIndexAtTime(planScene, atMs);
   const line = planScene.narration.lines[lineIndex]!;
+  const lineActive =
+    typeof sample === "number" || sample.lineActive === undefined
+      ? preferredLineIndex !== undefined
+        ? true
+        : atMs >= line.startMs && atMs < line.endMs
+      : sample.lineActive;
+  const sceneProgress = planScene.durationMs > 0 ? clamp01((atMs - planScene.startMs) / planScene.durationMs) : 1;
+  const lineMs = atMs - line.startMs;
+  const frame = Math.round((atMs * fps) / 1000);
   return {
-    sceneIndex: planScene.index,
+    timeMs: atMs,
+    frame,
     lineIndex,
-    lineCount: planScene.narration.lines.length,
     lineId: line.id,
-    progress: planScene.narration.lines.length === 1 ? 1 : lineIndex / (planScene.narration.lines.length - 1),
+    lineActive,
+    sceneProgress,
+    lineMs,
   };
+}
+
+export function lineSampleTimeMs(line: CompiledBundleLine, fraction: number, fps: number): number {
+  const frameCount = Math.max(1, Math.round((line.durationMs / 1000) * fps));
+  const frameIndex = frameCount === 1 ? 0 : Math.round(clamp01(fraction) * (frameCount - 1));
+  return line.startMs + ((frameIndex + 0.5) / fps) * 1000;
+}
+
+export function lineSampleFractions(samplesPerLine: number): number[] {
+  if (samplesPerLine < 2 || !Number.isInteger(samplesPerLine)) {
+    throw new Error("samplesPerLine must be an integer >= 2.");
+  }
+  return Array.from({ length: samplesPerLine }, (_unused, index) => index / (samplesPerLine - 1));
 }
 
 export function addUniqueWarning(list: BundleError[], seenKeys: Set<string>, warning: BundleError): void {
@@ -889,15 +929,66 @@ function renderWarning(sceneIndex: number, lineIndex: number, message: string): 
   };
 }
 
+function screencapNarrationAudio(
+  compiled: BundleCompileResult,
+  scene: BundleScene,
+  planScene: CompiledBundleScene,
+  workDir: string,
+): string {
+  const sceneTag = `s${String(planScene.index).padStart(3, "0")}`;
+  const output = join(workDir, `${sceneTag}-narration.wav`);
+  if (existsSync(output)) return output;
+
+  // Lay each line onto the compiled schedule: explicit scene durations stretch
+  // or compress line spans (fitLineDurations), and SRT/beat/range consumers all
+  // read those spans, so the audible bed must follow the same grid.
+  const parts: string[] = [];
+  let cursorMs = planScene.startMs;
+  for (const line of planScene.narration.lines) {
+    const audio = compiled.lineAudio.get(lineKey(scene.id, line.id));
+    if (!audio) throw new Error(`Narration audio is missing for ${scene.id}/${line.id}.`);
+    const gapMs = line.startMs - cursorMs;
+    if (gapMs > 1) {
+      const gap = join(workDir, `${sceneTag}-gap-${line.id}.wav`);
+      silentAudio(gap, gapMs / 1000);
+      parts.push(gap);
+    }
+    if (Math.abs(line.durationMs - line.audioDurationMs) <= 1) {
+      parts.push(audio);
+    } else {
+      const fitted = join(workDir, `${sceneTag}-line-${line.id}.wav`);
+      fitAudioToDuration(audio, fitted, line.durationMs / 1000);
+      parts.push(fitted);
+    }
+    cursorMs = line.endMs;
+  }
+  const tailMs = Math.max(0, planScene.endMs - cursorMs);
+  if (tailMs > 1) {
+    const tail = join(workDir, `${sceneTag}-tail.wav`);
+    silentAudio(tail, tailMs / 1000);
+    parts.push(tail);
+  }
+  concatAudio(parts, output);
+  return output;
+}
+
 export async function renderBundle(
   bundleDirInput: string,
-  opts: { outDir?: string; aspectRatios?: AspectRatio[]; cacheDir?: string; motion?: boolean } = {},
+  opts: {
+    outDir?: string;
+    aspectRatios?: AspectRatio[];
+    cacheDir?: string;
+    motion?: boolean;
+    baseName?: string;
+    watermark?: string | false;
+  } = {},
 ): Promise<BundleRenderResult> {
   const motionEnabled = opts.motion !== false;
   const compiled = await compileBundle(bundleDirInput, { cacheDir: opts.cacheDir });
   const outDir = opts.outDir ? resolve(opts.outDir) : join(compiled.bundleDir, "out");
   const ratios = opts.aspectRatios ?? compiled.spec.meta.aspectRatios;
-  const baseName = slug(compiled.spec.meta.title || basename(compiled.bundleDir));
+  const baseName = opts.baseName ?? slug(compiled.spec.meta.title || basename(compiled.bundleDir));
+  const watermark = opts.watermark ?? "showtell";
   const workDir = join(outDir, ".work");
   mkdirSync(outDir, { recursive: true });
   rmSync(workDir, { recursive: true, force: true });
@@ -908,21 +999,87 @@ export async function renderBundle(
   const warnings = [...compiled.warnings];
   const warningKeys = new Set(warnings.map((warning) => `${warning.path}:${warning.message}`));
   const outputs: CompiledBundleOutput[] = [];
-  const captionTheme = canvasTheme(hyperframeThemeFromSpec(compiled.spec));
+  const frameProducer = createBundleFrameProducer(compiled);
+  const screencaps: ScreencapPresentationCache = new Map();
   try {
     for (const aspectRatio of ratios) {
       const clips: string[] = [];
       const aspectTag = aspectRatio.replace(":", "x");
+      const dimensions = dimsFor(aspectRatio);
+      let watermarkPng: string | undefined;
+      if (watermark !== false) {
+        watermarkPng = join(workDir, `watermark-${aspectTag}.png`);
+        writeFileSync(watermarkPng, renderWatermarkPng(aspectRatio, watermark));
+      }
+      let presenterPng: string | undefined;
+      if (compiled.presenter) {
+        presenterPng = join(workDir, `presenter-${aspectTag}.png`);
+        writeFileSync(
+          presenterPng,
+          renderPresenterPng(aspectRatio, compiled.plan.meta.resolvedTheme, { ...compiled.presenter, amplitude: 0 }),
+        );
+      }
       const burnInCaptions =
         compiled.plan.audio.captions.mode === "burn-in" || compiled.plan.audio.captions.mode === "sidecar-and-burn-in";
       for (const scene of compiled.spec.scenes) {
         const planScene = compiled.plan.scenes.find((item) => item.id === scene.id)!;
         const tag = `s${String(planScene.index).padStart(3, "0")}-${aspectTag}`;
+        if (scene.visual.kind === "screencap") {
+          const clip = join(workDir, `${tag}-screencap.mp4`);
+          // Same chrome order as renderFrameChrome: watermark, presenter, caption.
+          const overlays: ScreencapOverlay[] = [];
+          if (watermarkPng) overlays.push({ png: watermarkPng });
+          if (presenterPng) overlays.push({ png: presenterPng });
+          if (burnInCaptions) {
+            for (const line of planScene.narration.lines) {
+              if (!line.text.trim()) continue;
+              const captionPng = join(workDir, `${tag}-caption-${line.id}.png`);
+              writeFileSync(captionPng, renderCaptionPng(aspectRatio, line.text, compiled.plan.meta.resolvedTheme));
+              overlays.push({
+                png: captionPng,
+                enableStartSec: (line.startMs - planScene.startMs) / 1000,
+                enableEndSec: (line.endMs - planScene.startMs) / 1000,
+              });
+            }
+          }
+          const screencapWarnings = renderScreencapClip(screencaps, {
+            sceneIndex: planScene.index,
+            capture: scene.visual,
+            repoPath: compiled.repoPath,
+            outPath: clip,
+            width: dimensions.width,
+            height: dimensions.height,
+            durationSec: planScene.durationMs / 1000,
+            fps: compiled.spec.meta.fps,
+            audio: screencapNarrationAudio(compiled, scene, planScene, workDir),
+            overlays: overlays.length > 0 ? overlays : undefined,
+          });
+          for (const message of screencapWarnings) {
+            addUniqueWarning(warnings, warningKeys, {
+              code: "SCREENCAP_WARNING",
+              path: `scenes.${planScene.index}.visual`,
+              message,
+              hint: "Inspect the capture session, clip range, and playback sidecar for this screencap scene.",
+            });
+          }
+          clips.push(clip);
+          continue;
+        }
         let tailPng: string | undefined;
         for (let lineIndex = 0; lineIndex < planScene.narration.lines.length; lineIndex++) {
           const line = planScene.narration.lines[lineIndex]!;
-          const moment = lineMoment(planScene, lineIndex);
-          const rendered = await renderBundleScene(scene, planScene, compiled, aspectRatio, moment);
+          const heldExact = exactBundleFrameAt(
+            planScene,
+            { timeMs: lineSampleTimeMs(line, 0.5, compiled.spec.meta.fps), preferredLineIndex: lineIndex },
+            compiled.spec.meta.fps,
+          );
+          const rendered = await frameProducer.render({
+            scene,
+            compiledScene: planScene,
+            aspectRatio,
+            exact: heldExact,
+            presentation: { watermark, presenterAmplitude: 0 },
+          });
           if (aspectRatio === ratios[0]) {
             for (const resolved of rendered.resolvedRefs) {
               const refSha = sha256(resolved.text);
@@ -951,54 +1108,50 @@ export async function renderBundle(
           }
 
           const lineClip = join(workDir, `${tag}-${line.id}.mp4`);
-          if (scene.visual.kind === "hyperframe" && motionEnabled) {
-            // Animated path: render every frame of the line so hyperframes move.
+          if (planScene.program.kind === "web" && motionEnabled) {
+            // Animated path: render every frame of browser-authored visuals.
             const fps = compiled.spec.meta.fps;
             const dims = dimsFor(aspectRatio);
             const frameCount = Math.max(1, Math.round((line.durationMs / 1000) * fps));
-            const theme = hyperframeThemeFromSpec(compiled.spec);
-            await framesAudioToClip({
-              width: dims.width,
-              height: dims.height,
+            const frameAt = async (frameIndex: number) => {
+              const timeMs = line.startMs + ((frameIndex + 0.5) / fps) * 1000;
+              const exact = exactBundleFrameAt(planScene, { timeMs, preferredLineIndex: lineIndex }, fps);
+              return frameProducer.render({
+                scene,
+                compiledScene: planScene,
+                aspectRatio,
+                exact,
+                presentation: {
+                  watermark,
+                  presenterAmplitude: amplitudeAt(line.envelope, exact.lineMs),
+                  caption: burnInCaptions ? line.text : undefined,
+                },
+              });
+            };
+            const common = {
               fps,
               frameCount,
               durationSec: line.durationMs / 1000,
               audio: compiled.lineAudio.get(lineKey(scene.id, line.id))!,
               outPath: lineClip,
-              frame: async (frameIndex) => {
-                const timeMs = line.startMs + ((frameIndex + 0.5) / fps) * 1000;
-                const executed = await executeHyperframe({
-                  scene,
-                  compiledScene: planScene,
-                  runtime: compiled,
-                  aspectRatio,
-                  moment: { ...moment, timeMs },
-                });
-                const frame = await renderHyperframeElementToRgba(executed.element, {
-                  aspectRatio,
-                  activeCue: executed.activeCue,
-                  theme,
-                  watermark: "showtell",
-                  motion: {
-                    absoluteMs: timeMs,
-                    sceneMs: timeMs - planScene.startMs,
-                    lineMs: timeMs - line.startMs,
-                    fps,
-                  },
-                  presenter: compiled.presenter
-                    ? { ...compiled.presenter, amplitude: amplitudeAt(line.envelope, timeMs - line.startMs) }
-                    : undefined,
-                  drawOverlay: burnInCaptions
-                    ? (frameCtx, frameDims) => drawCaptionOverlay(frameCtx, frameDims, line.text, captionTheme)
-                    : undefined,
-                });
-                return frame.rgba;
-              },
+            };
+            await framesAudioToClip({
+              ...common,
+              width: dims.width,
+              height: dims.height,
+              frame: async (frameIndex) => (await frameAt(frameIndex)).rgba,
             });
           } else {
             const visualPng = burnInCaptions ? join(workDir, `${tag}-${line.id}-caption.png`) : png;
             if (burnInCaptions) {
-              writeFileSync(visualPng, await renderCaptionedFrame(rendered.png, aspectRatio, line.text, captionTheme));
+              const captioned = await frameProducer.render({
+                scene,
+                compiledScene: planScene,
+                aspectRatio,
+                exact: heldExact,
+                presentation: { watermark, presenterAmplitude: 0, caption: line.text },
+              });
+              writeFileSync(visualPng, captioned.png);
             }
             imageAudioToClip({
               image: visualPng,
@@ -1017,48 +1170,43 @@ export async function renderBundle(
           const tailAudio = join(workDir, `${tag}-tail.wav`);
           const tailClip = join(workDir, `${tag}-tail.mp4`);
           silentAudio(tailAudio, tailMs / 1000);
-          if (scene.visual.kind === "hyperframe" && motionEnabled) {
+          if (planScene.program.kind === "web" && motionEnabled) {
             // Animated tail: keep the motion clock running past the last line so
             // the scene HOLDS its true end state (no snap back to a mid-line still).
             const fps = compiled.spec.meta.fps;
             const dims = dimsFor(aspectRatio);
             const frameCount = Math.max(1, Math.round((tailMs / 1000) * fps));
-            const theme = hyperframeThemeFromSpec(compiled.spec);
-            const moment = lineMoment(planScene, planScene.narration.lines.length - 1);
-            await framesAudioToClip({
-              width: dims.width,
-              height: dims.height,
+            const frameAt = async (frameIndex: number) => {
+              const timeMs = lastLine.endMs + ((frameIndex + 0.5) / fps) * 1000;
+              const exact = exactBundleFrameAt(
+                planScene,
+                {
+                  timeMs,
+                  preferredLineIndex: planScene.narration.lines.length - 1,
+                  lineActive: false,
+                },
+                fps,
+              );
+              return frameProducer.render({
+                scene,
+                compiledScene: planScene,
+                aspectRatio,
+                exact,
+                presentation: { watermark, presenterAmplitude: 0 },
+              });
+            };
+            const common = {
               fps,
               frameCount,
               durationSec: tailMs / 1000,
               audio: tailAudio,
               outPath: tailClip,
-              frame: async (frameIndex) => {
-                const timeMs = lastLine.endMs + ((frameIndex + 0.5) / fps) * 1000;
-                const executed = await executeHyperframe({
-                  scene,
-                  compiledScene: planScene,
-                  runtime: compiled,
-                  aspectRatio,
-                  moment: { ...moment, timeMs },
-                });
-                const frame = await renderHyperframeElementToRgba(executed.element, {
-                  aspectRatio,
-                  // Narration is over: kinetic captions clear during the hold.
-                  activeCue: undefined,
-                  theme,
-                  watermark: "showtell",
-                  motion: {
-                    absoluteMs: timeMs,
-                    sceneMs: timeMs - planScene.startMs,
-                    lineMs: timeMs - lastLine.startMs,
-                    fps,
-                  },
-                  // No narration during the hold: the bubble rests.
-                  presenter: compiled.presenter ? { ...compiled.presenter, amplitude: 0 } : undefined,
-                });
-                return frame.rgba;
-              },
+            };
+            await framesAudioToClip({
+              ...common,
+              width: dims.width,
+              height: dims.height,
+              frame: async (frameIndex) => (await frameAt(frameIndex)).rgba,
             });
             clips.push(tailClip);
           } else if (tailPng) {
@@ -1118,6 +1266,7 @@ export async function renderBundle(
       warnings,
     };
   } finally {
+    await frameProducer.close();
     rmSync(workDir, { recursive: true, force: true });
   }
 }

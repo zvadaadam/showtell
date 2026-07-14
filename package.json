@@ -1,7 +1,8 @@
 {
   "name": "showtell",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
+  "packageManager": "bun@1.3.14",
   "type": "module",
   "description": "Open-source motion engine for videos made by agents, for humans.",
   "homepage": "https://github.com/zvadaadam/showtell#readme",
@@ -12,7 +13,7 @@
   "scripts": {
     "validate": "bun packages/cli/src/index.ts validate",
     "showtell": "bun packages/cli/src/index.ts",
-    "build:cli": "bun build packages/cli/src/index.ts --compile --outfile dist/showtell",
+    "build:cli": "bun scripts/compile-cli.ts --outfile dist/showtell",
     "build:npm": "bun scripts/build-npm-package.ts",
     "publish:npm": "bun scripts/publish-npm.ts",
     "build:player": "cd packages/player && bun --bun run build",
@@ -22,6 +23,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "gen:schema": "bun scripts/gen-schema.ts",
+    "check:generated": "bun scripts/gen-schema.ts --check",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run check:generated && bun test",
     "prepare": "lefthook install",
     "build:release": "bun scripts/build-release.ts"
   },

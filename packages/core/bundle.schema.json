@@ -7,10 +7,6 @@
         "$schema": {
           "type": "string"
         },
-        "version": {
-          "type": "number",
-          "const": 2
-        },
         "meta": {
           "type": "object",
           "properties": {
@@ -50,15 +46,6 @@
                     "ember",
                     "orchid",
                     "graphite",
-                    "agent-dark",
-                    "paper",
-                    "neutral"
-                  ]
-                },
-                "mode": {
-                  "type": "string",
-                  "enum": [
-                    "dark",
                     "paper",
                     "neutral"
                   ]
@@ -428,6 +415,10 @@
             "music": []
           }
         },
+        "version": {
+          "type": "number",
+          "const": 3
+        },
         "scenes": {
           "type": "array",
           "items": {
@@ -438,8 +429,17 @@
                 "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
               },
               "duration": {
-                "type": "string",
-                "const": "auto",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "auto"
+                  },
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                ],
+                "description": "Seconds, or \"auto\" to derive the scene timing from measured narration audio.",
                 "default": "auto"
               },
               "narration": {
@@ -634,16 +634,17 @@
                     "properties": {
                       "kind": {
                         "type": "string",
-                        "const": "hyperframe"
+                        "const": "web"
                       },
                       "src": {
                         "type": "string",
                         "minLength": 1
                       },
-                      "export": {
-                        "type": "string",
-                        "const": "default",
-                        "default": "default"
+                      "name": {
+                        "not": {}
+                      },
+                      "ref": {
+                        "not": {}
                       },
                       "props": {
                         "type": "object",
@@ -695,32 +696,119 @@
                     "properties": {
                       "kind": {
                         "type": "string",
-                        "const": "builtin"
+                        "const": "screencap"
                       },
-                      "name": {
+                      "sessionRef": {
                         "type": "string",
-                        "enum": [
-                          "title",
-                          "code",
-                          "diff",
-                          "talking-points",
-                          "chart",
-                          "screencap"
-                        ]
+                        "pattern": "^[A-Za-z0-9_-]{1,64}$"
                       },
-                      "ref": {
-                        "type": "string",
-                        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
-                      },
-                      "props": {
+                      "clip": {
                         "type": "object",
-                        "additionalProperties": {},
-                        "default": {}
+                        "properties": {
+                          "start": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "end": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "playback": {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "realtime",
+                              "action-only",
+                              "smart"
+                            ],
+                            "default": "smart",
+                            "description": "\"realtime\" plays linearly; \"action-only\" trims from event sidecars; \"smart\" merges visual activity with event hints."
+                          },
+                          "preActionPaddingMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10000,
+                            "description": "Milliseconds of context to keep before each click/type/scroll/navigate event."
+                          },
+                          "postActionPaddingMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10000,
+                            "description": "Milliseconds of context to keep after each click/type/scroll/navigate event."
+                          },
+                          "targetGapOutputMs": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000,
+                            "description": "Preferred visible length for long gaps between action windows after compression."
+                          },
+                          "maxGapOutputMs": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000,
+                            "description": "Maximum visible length for any compressed gap between action windows."
+                          },
+                          "maxPlaybackRate": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 64,
+                            "description": "Maximum fast-forward rate used for compressed gaps before final narration fitting."
+                          },
+                          "minGapToSpeedUpMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10000,
+                            "description": "Gaps shorter than this stay at normal speed before final narration fitting."
+                          },
+                          "camera": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "follow",
+                              "none"
+                            ],
+                            "default": "auto",
+                            "description": "\"auto\" follows desktop/landscape actions but keeps portrait/mobile captures full-frame."
+                          },
+                          "actionEffects": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "tap-glow",
+                              "none"
+                            ],
+                            "default": "auto",
+                            "description": "\"auto\" adds touch/type feedback when the camera is not following the action."
+                          },
+                          "visualSampleFps": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 12,
+                            "description": "Frame samples per second for \"smart\" visual activity detection. Default: 4."
+                          },
+                          "visualMinScore": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 50,
+                            "description": "Minimum average grayscale frame-diff score for \"smart\" visual activity. Default: 0.7."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "How to play back a screencap recording."
                       }
                     },
                     "required": [
                       "kind",
-                      "name"
+                      "sessionRef"
                     ],
                     "additionalProperties": false
                   }
@@ -738,8 +826,8 @@
         }
       },
       "required": [
-        "version",
         "meta",
+        "version",
         "scenes"
       ],
       "additionalProperties": false

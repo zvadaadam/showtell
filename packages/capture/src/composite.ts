@@ -15,6 +15,15 @@ import {
 } from "./encode.ts";
 import type { PlaybackPlan } from "./playback.ts";
 
+export interface ScreencapOverlay {
+  /** Full-frame transparent PNG, sized to the output dimensions. */
+  png: string;
+  /** Show only from this output-clip time (seconds); omit to show from the start. */
+  enableStartSec?: number;
+  /** Hide after this output-clip time (seconds); omit to show until the end. */
+  enableEndSec?: number;
+}
+
 export interface CompositeOpts {
   source: string;
   /** Start reading the source recording at this offset. */
@@ -28,8 +37,8 @@ export interface CompositeOpts {
   fps: number;
   /** Narration wav to mux (optional). */
   audio?: string;
-  /** Full-frame transparent watermark PNG to overlay (optional). */
-  watermarkPng?: string;
+  /** Full-frame transparent chrome overlays (watermark, captions, presenter), composited in order. */
+  overlays?: ScreencapOverlay[];
   /** Pad/background color (0xRRGGBB). */
   bg?: string;
   /** Auto-zoom camera timeline + the recording's source dimensions (optional). */
@@ -139,15 +148,15 @@ export function compositeScreencap(o: CompositeOpts): void {
     inputs.push("-i", o.source);
     let nextIdx = 1;
     let audioIdx = -1;
-    let wmIdx = -1;
     if (o.audio) {
       inputs.push("-i", o.audio);
       audioIdx = nextIdx++;
     }
-    if (o.watermarkPng) {
-      inputs.push("-loop", "1", "-i", o.watermarkPng);
-      wmIdx = nextIdx++;
-    }
+    const overlays = o.overlays ?? [];
+    const overlayInputIdx = overlays.map((overlay) => {
+      inputs.push("-loop", "1", "-i", overlay.png);
+      return nextIdx++;
+    });
 
     // Optional auto-zoom: a sendcmd-driven crop following the event timeline.
     let camStage = "";
@@ -177,8 +186,19 @@ export function compositeScreencap(o: CompositeOpts): void {
       `scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
       `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=${bg},setsar=1,` +
       `tpad=stop_mode=clone:stop_duration=3600`;
-    if (wmIdx >= 0) vf += `[base];[base][${wmIdx}:v]overlay=0:0[v]`;
-    else vf += `[v]`;
+    if (overlays.length > 0) {
+      vf += `[base]`;
+      let current = "[base]";
+      overlays.forEach((overlay, index) => {
+        const out = index === overlays.length - 1 ? "[v]" : `[ov${index}]`;
+        const windowed = overlay.enableStartSec !== undefined || overlay.enableEndSec !== undefined;
+        const enable = windowed
+          ? `:enable='between(t,${(overlay.enableStartSec ?? 0).toFixed(3)},${(overlay.enableEndSec ?? o.durationSec).toFixed(3)})'`
+          : "";
+        vf += `;${current}[${overlayInputIdx[index]}:v]overlay=0:0${enable}${out}`;
+        current = out;
+      });
+    } else vf += `[v]`;
 
     const args = ["-y", "-loglevel", "error", ...inputs, "-filter_complex", vf, "-map", "[v]"];
     if (audioIdx >= 0) args.push("-map", `${audioIdx}:a`);

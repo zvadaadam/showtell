@@ -51,4 +51,4 @@ test("an empty diff scene renders but emits a warning", async () => {
   expect(r.outputs).toHaveLength(1); // still renders
   expect(r.warnings.length).toBeGreaterThan(0);
   expect(r.warnings[0]!.message).toContain("EMPTY");
-}, 30_000);
+}, 90_000);

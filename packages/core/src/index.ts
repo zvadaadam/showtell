@@ -6,5 +6,7 @@ export * from "./manifest.ts";
 export * from "./id.ts";
 export * from "./bundle.ts";
 export * from "./bundle-time.ts";
-export * from "./hyperframe-contract.ts";
+export * from "./visual-input-contract.ts";
+export * from "./web-manifest.ts";
+export * from "./web-lint.ts";
 export * from "./safe-files.ts";

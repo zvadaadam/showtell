@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <script type="application/showtell+json">
+      {
+        "schemaVersion": 3,
+        "propsSchema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title"],
+          "properties": { "title": { "type": "string", "minLength": 1 } }
+        },
+        "inputs": {
+          "source": { "kind": "repo", "refKind": "code" },
+          "reveal": { "kind": "range" }
+        }
+      }
+    </script>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        background: var(--st-bg);
+        color: var(--st-fg);
+        font-family: "Space Mono", monospace;
+      }
+
+      .world {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        isolation: isolate;
+      }
+
+      .grid {
+        position: absolute;
+        inset: 0;
+        opacity: 0.24;
+        background-image:
+          linear-gradient(color-mix(in srgb, var(--st-accent) 22%, transparent) 2px, transparent 2px),
+          linear-gradient(90deg, color-mix(in srgb, var(--st-accent) 22%, transparent) 2px, transparent 2px);
+        background-size: clamp(58px, 6vw, 104px) clamp(58px, 6vw, 104px);
+        mask-image: radial-gradient(circle at 40% 46%, black 12%, transparent 76%);
+      }
+
+      .glow {
+        position: absolute;
+        left: -16vw;
+        top: -30vh;
+        width: 70vw;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        opacity: 0.74;
+        filter: blur(92px);
+        background: radial-gradient(circle, color-mix(in srgb, var(--st-accent) 34%, transparent), transparent 68%);
+      }
+
+      .topline {
+        position: absolute;
+        z-index: 5;
+        top: max(5vh, var(--st-safe-top));
+        left: max(6vw, var(--st-safe-left));
+        right: max(6vw, var(--st-safe-right));
+        display: flex;
+        justify-content: space-between;
+        gap: 30px;
+        color: var(--st-subtle);
+        font-size: clamp(17px, 1.15vw, 22px);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .topline strong {
+        color: var(--st-fg);
+      }
+
+      .docked {
+        color: var(--st-accent);
+        opacity: 0;
+      }
+
+      .opener {
+        position: absolute;
+        z-index: 4;
+        top: 26vh;
+        left: max(6vw, var(--st-safe-left));
+        right: max(6vw, var(--st-safe-right));
+      }
+
+      h1 {
+        margin: 0;
+        font:
+          400 clamp(96px, 9.6vw, 176px) / 0.82 "League Gothic",
+          sans-serif;
+        letter-spacing: -0.018em;
+        text-transform: uppercase;
+        text-wrap: balance;
+      }
+
+      .rule {
+        width: min(22vw, 340px);
+        height: 5px;
+        margin-top: 32px;
+        background: var(--st-accent);
+        transform-origin: left center;
+      }
+
+      .beam {
+        position: absolute;
+        z-index: 3;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 3px;
+        background: linear-gradient(
+          180deg,
+          transparent,
+          color-mix(in srgb, var(--st-accent) 78%, transparent),
+          transparent
+        );
+        box-shadow: 0 0 28px color-mix(in srgb, var(--st-accent) 60%, transparent);
+        opacity: 0;
+      }
+
+      .code-shell {
+        position: absolute;
+        z-index: 4;
+        top: max(13vh, calc(var(--st-safe-top) + 6vh));
+        right: max(6vw, var(--st-safe-right));
+        bottom: calc(var(--st-safe-bottom) + 11vh);
+        left: max(6vw, var(--st-safe-left));
+        filter: drop-shadow(0 36px 76px rgba(0, 0, 0, 0.4));
+      }
+
+      st-code {
+        width: 100%;
+        height: 100%;
+      }
+
+      .signal {
+        position: absolute;
+        z-index: 5;
+        right: max(6vw, var(--st-safe-right));
+        bottom: calc(var(--st-safe-bottom) + 4.5vh);
+        left: max(6vw, var(--st-safe-left));
+        height: 7px;
+        border-radius: 99px;
+        background: color-mix(in srgb, var(--st-subtle) 28%, transparent);
+      }
+
+      .signal-fill {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: var(--st-accent);
+        transform: scaleX(0);
+        transform-origin: left center;
+        box-shadow: 0 0 24px color-mix(in srgb, var(--st-accent) 72%, transparent);
+      }
+
+      .node {
+        position: absolute;
+        top: 50%;
+        width: 22px;
+        height: 22px;
+        margin: -11px;
+        border: 4px solid var(--st-bg);
+        border-radius: 50%;
+        background: var(--st-subtle);
+      }
+
+      .node b {
+        position: absolute;
+        top: -44px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: var(--st-subtle);
+        font-weight: 400;
+        font-size: clamp(14px, 0.95vw, 18px);
+        letter-spacing: 0.14em;
+        white-space: nowrap;
+      }
+
+      .node-a {
+        left: 0;
+      }
+
+      .node-b {
+        left: 50%;
+      }
+
+      .node-c {
+        left: 100%;
+        background: var(--st-accent);
+      }
+
+      .node-a b {
+        transform: none;
+      }
+
+      .node-c b {
+        transform: translateX(-100%);
+      }
+
+      @media (max-aspect-ratio: 4 / 5) {
+        .grid {
+          background-size: 72px 72px;
+          mask-image: radial-gradient(circle at 50% 36%, black 8%, transparent 74%);
+        }
+
+        .glow {
+          top: -12vh;
+          left: -44vw;
+          width: 138vw;
+        }
+
+        .topline {
+          top: max(3vh, var(--st-safe-top));
+          left: max(7vw, var(--st-safe-left));
+          right: max(7vw, var(--st-safe-right));
+          font-size: 18px;
+        }
+
+        .opener {
+          top: max(24vh, calc(var(--st-safe-top) + 12vh));
+          left: max(7vw, var(--st-safe-left));
+          right: max(7vw, var(--st-safe-right));
+        }
+
+        h1 {
+          font-size: clamp(110px, 19vw, 190px);
+        }
+
+        .rule {
+          width: 40vw;
+        }
+
+        .code-shell {
+          top: auto;
+          right: max(7vw, var(--st-safe-right));
+          bottom: calc(var(--st-safe-bottom) + 11vh);
+          left: max(7vw, var(--st-safe-left));
+          height: 33vh;
+        }
+
+        .signal {
+          right: max(7vw, var(--st-safe-right));
+          left: max(7vw, var(--st-safe-left));
+        }
+
+        .node b {
+          font-size: 13px;
+          letter-spacing: 0.08em;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="world">
+      <div class="grid"></div>
+      <div class="glow"></div>
+      <div class="beam"></div>
+      <div class="topline">
+        <span><strong>SHOWTELL</strong> / LIVE PROOF</span><span class="docked"></span><span>V3 / EXACT TIME</span>
+      </div>
+      <section class="opener">
+        <h1></h1>
+        <div class="rule"></div>
+      </section>
+      <div class="code-shell"><st-code input="source" reveal-range="reveal" max-lines="18"></st-code></div>
+      <div class="signal">
+        <div class="signal-fill"></div>
+        <i class="node node-a"><b>REPO BYTES</b></i
+        ><i class="node node-b"><b>SEEK</b></i
+        ><i class="node node-c"><b>FRAME</b></i>
+      </div>
+    </main>
+    <script>
+      const st = window.__showtell;
+      const reveal = st.range("reveal");
+      const at = (fraction) => reveal.startSec + reveal.durationSec * fraction;
+      document.querySelector("h1").textContent = st.props.title;
+      document.querySelector(".docked").textContent = st.props.title;
+
+      const timeline = gsap.timeline({ paused: true });
+
+      // Opening beat: the title states the chapter, alone, full frame.
+      timeline.fromTo(
+        ".topline",
+        { opacity: 0, y: -34 },
+        { opacity: 1, y: 0, duration: 0.45, ease: "power4.out" },
+        reveal.startSec,
+      );
+      timeline.fromTo(
+        "h1",
+        { opacity: 0, y: 92, scale: 0.95 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.72, ease: "expo.out" },
+        at(0.02),
+      );
+      timeline.fromTo(".rule", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power2.out" }, at(0.06));
+      timeline.fromTo(".beam", { x: 0, opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power1.out" }, at(0.04));
+      timeline.to(".beam", { x: "99vw", duration: reveal.durationSec * 0.2, ease: "power2.inOut" }, at(0.06));
+      timeline.to(".beam", { opacity: 0, duration: 0.2, ease: "power1.in" }, at(0.24));
+
+      // The handoff: the title yields the frame; its echo docks into machine chrome.
+      timeline.to("h1", { opacity: 0, y: -96, scale: 0.97, duration: 0.55, ease: "power2.in" }, at(0.26));
+      timeline.to(".rule", { scaleX: 0, transformOrigin: "right center", duration: 0.4, ease: "power2.in" }, at(0.28));
+      timeline.to(".docked", { opacity: 1, duration: 0.45, ease: "power2.out" }, at(0.34));
+
+      // The evidence: live repo bytes take the whole frame while the reveal continues.
+      timeline.fromTo(
+        ".code-shell",
+        { opacity: 0, y: "14vh", scale: 0.97 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.75, ease: "power3.out" },
+        at(0.32),
+      );
+
+      // Persistent world: the signal rail runs the entire line.
+      timeline.fromTo(
+        ".signal-fill",
+        { scaleX: 0 },
+        { scaleX: 1, duration: reveal.durationSec, ease: "none" },
+        reveal.startSec,
+      );
+      timeline.fromTo(
+        ".node",
+        { opacity: 0, scale: 0.4 },
+        { opacity: 1, scale: 1, duration: 0.38, stagger: reveal.durationSec / 3, ease: "back.out(1.8)" },
+        at(0.04),
+      );
+      timeline.fromTo(
+        ".glow",
+        { x: "-6vw", y: "-6vh", scale: 0.78 },
+        { x: "46vw", y: "38vh", scale: 1.2, duration: reveal.durationSec, ease: "sine.inOut" },
+        reveal.startSec,
+      );
+
+      st.timeline = timeline;
+    </script>
+  </body>
+</html>
