@@ -18,6 +18,7 @@ export const webRuntimeIdentity = Object.freeze({
   locale: "en-US",
   timezone: "UTC",
   colorProfile: "srgb",
+  rasterization: "software",
   colorScheme: "dark",
   reducedMotion: "reduce",
   fonts: Object.freeze([

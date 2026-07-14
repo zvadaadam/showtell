@@ -201,6 +201,9 @@ async function launchBrowser(): Promise<Browser> {
             "--font-render-hinting=none",
             "--disable-lcd-text",
             "--hide-scrollbars",
+            // GPU rasterization varies across (virtualized) GPUs and runs;
+            // byte-stable frames require the software raster path.
+            "--disable-gpu",
           ],
         });
         try {
