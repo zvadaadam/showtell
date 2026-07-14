@@ -1,5 +1,5 @@
-import { test, expect } from "bun:test";
-import { existsSync, mkdtempSync, statSync, readFileSync } from "node:fs";
+import { test, expect, afterAll } from "bun:test";
+import { existsSync, mkdtempSync, rmSync, statSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -9,8 +9,14 @@ import { renderVideo, probeDurationMs } from "../src/index.ts";
 const RENDER_TIMEOUT_MS = 90_000;
 const DOUBLE_RENDER_TIMEOUT_MS = 180_000;
 
+const harnessRoots: string[] = [];
+afterAll(() => {
+  for (const root of harnessRoots) rmSync(root, { recursive: true, force: true });
+});
+
 function createRenderHarness(label: string): { outDir: string; cacheDir: string } {
   const root = mkdtempSync(join(tmpdir(), `showtell-test-video-${label}-`));
+  harnessRoots.push(root);
   return { outDir: join(root, "out"), cacheDir: join(root, "cache") };
 }
 

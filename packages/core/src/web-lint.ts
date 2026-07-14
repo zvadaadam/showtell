@@ -77,7 +77,8 @@ function memberPath(expression: ts.Expression): string[] | undefined {
   return undefined;
 }
 
-function lintScript(source: string, path: string, errors: BundleError[], reported: Set<string>): void {
+function lintScript(source: string, path: string, errors: BundleError[], reported: Set<string>): boolean {
+  let assignsTimeline = false;
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
   const report = (api: string, hint: string): void => {
     if (reported.has(`api:${api}`)) return;
@@ -112,12 +113,20 @@ function lintScript(source: string, path: string, errors: BundleError[], reporte
     if (ts.isNewExpression(node)) {
       const name = calledName(node.expression);
       if (name === "Date") report("new Date", "Use window.__showtell.time instead of wall-clock time.");
+      if (name === "Function") report("new Function", "Author literal deterministic JavaScript instead.");
       if (name === "Animation" || name === "KeyframeEffect") {
         report(`new ${name}`, "Put all motion on the paused GSAP timeline so Showtell can seek it exactly.");
       }
       if (["WebSocket", "EventSource", "XMLHttpRequest", "Worker", "SharedWorker"].includes(name ?? "")) {
         report(name!, "Browser network and background workers are disabled; use declared inputs.");
       }
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      memberPath(node.left)?.at(-1) === "timeline"
+    ) {
+      assignsTimeline = true;
     }
     if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
       const root = memberRoot(node.expression);
@@ -130,6 +139,7 @@ function lintScript(source: string, path: string, errors: BundleError[], reporte
     ts.forEachChild(node, visit);
   };
   visit(file);
+  return assignsTimeline;
 }
 
 function lintStyle(source: string, path: string, errors: BundleError[], reported: Set<string>): void {
@@ -141,10 +151,10 @@ function lintStyle(source: string, path: string, errors: BundleError[], reported
   if (/@import\b/i.test(source)) {
     report("import", "Web visual CSS uses @import.", "Inline styles and use renderer-provided font/theme variables.");
   }
-  if (/url\(\s*["']?(?!data:)/i.test(source)) {
+  if (/url\(\s*(?!["']?\s*data:)/i.test(source)) {
     report("url", "Web visual CSS loads a URL.", "Use declared assets through renderer-owned web components.");
   }
-  if (/(?:^|[;{])\s*(?:animation|transition)(?:-[\w-]+)?\s*:/im.test(source)) {
+  if (/(?:^|[;{])\s*(?:-(?:webkit|moz|ms|o)-)?(?:animation|transition)(?:-[\w-]+)?\s*:/im.test(source)) {
     report(
       "ambient-motion",
       "Web visual CSS declares an animation or transition.",
@@ -160,6 +170,7 @@ export function validateWebSource(
   document: WebDocument = parseWebDocument(source),
 ): void {
   const reported = new Set<string>();
+  let assignsTimeline = false;
 
   visitWebNodes(document, (node) => {
     if (isWebElement(node)) {
@@ -207,11 +218,22 @@ export function validateWebSource(
         }
       }
       if (node.tagName === "script" && webAttribute(node, "type")?.toLowerCase() !== WEB_MANIFEST_SCRIPT_TYPE) {
-        lintScript(webElementText(node), path, errors, reported);
+        if (lintScript(webElementText(node), path, errors, reported)) assignsTimeline = true;
       }
       if (node.tagName === "style") lintStyle(webElementText(node), path, errors, reported);
       const inlineStyle = webAttribute(node, "style");
       if (inlineStyle) lintStyle(inlineStyle, path, errors, reported);
     }
   });
+
+  if (!assignsTimeline) {
+    errors.push(
+      error(
+        "MISSING_WEB_TIMELINE",
+        path,
+        "Web visual never assigns window.__showtell.timeline.",
+        "Assign the single paused timeline: const timeline = gsap.timeline({ paused: true }); ... window.__showtell.timeline = timeline;",
+      ),
+    );
+  }
 }

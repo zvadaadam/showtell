@@ -79,6 +79,7 @@ export function stageInstalledBrowser(target: ReleaseTarget, stageDir: string): 
     `${JSON.stringify(
       {
         ...webRuntimeIdentity,
+        target: target.id,
         executable: join(basename(sourceRoot), relative(sourceRoot, executable)).replaceAll("\\", "/"),
       },
       null,
@@ -103,10 +104,19 @@ export function extractBrowserArchive(target: ReleaseTarget, archiveDir: string,
   run(["tar", "-xzf", archive, "-C", stageDir]);
   const manifest = join(stageDir, "browser", "runtime.json");
   if (!existsSync(manifest)) throw new Error(`Browser archive did not contain browser/runtime.json: ${archive}`);
-  const runtime = JSON.parse(readFileSync(manifest, "utf-8")) as { chromiumRevision?: string; executable?: string };
+  const runtime = JSON.parse(readFileSync(manifest, "utf-8")) as {
+    chromiumRevision?: string;
+    executable?: string;
+    target?: string;
+  };
   if (runtime.chromiumRevision !== webRuntimeIdentity.chromiumRevision || !runtime.executable) {
     throw new Error(
       `Browser archive runtime identity does not match pinned Chromium ${webRuntimeIdentity.chromiumRevision}.`,
+    );
+  }
+  if (runtime.target !== target.id) {
+    throw new Error(
+      `Browser archive is for ${runtime.target ?? "an unknown target"}, not ${target.id}; rebuild or fetch the matching ${browserArchiveName(target)}.`,
     );
   }
   const browserRoot = resolve(stageDir, "browser");

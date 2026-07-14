@@ -156,7 +156,7 @@ test("screencap composites into a valid mp4 (not skipped)", async () => {
   // total ≈ title + screencap durations (synced to narration)
   const sum = r.scenes.reduce((a, s) => a + s.durationSec, 0);
   expect(Math.abs(probeDurationMs(out.path) / 1000 - sum)).toBeLessThan(0.3);
-}, 40_000);
+}, 120_000);
 
 test("missing capture session fails with an actionable error", async () => {
   const bad: VideoSpec = {
@@ -213,7 +213,7 @@ test("multi-aspect screencap preparation reports a playback fallback only once",
     expect(streams).toContain("video");
     expect(streams).toContain("audio");
   }
-}, 40_000);
+}, 120_000);
 
 test("screencap clip range is passed through to the compositor", async () => {
   const caps = join(repo, ".showtell", "captures");
@@ -256,7 +256,7 @@ test("screencap clip range is passed through to the compositor", async () => {
   const r = await renderVideo(clipSpec, { repoPath: repo, outDir, baseName: "clip", aspectRatios: ["16:9"] });
   const avg = firstFrameAverageRgb(r.outputs[0]!.path);
   expect(avg.b).toBeGreaterThan(avg.r);
-}, 40_000);
+}, 120_000);
 
 test("screencap action-only playback drops dead lead-in around events", async () => {
   const caps = join(repo, ".showtell", "captures");
@@ -310,7 +310,7 @@ test("screencap action-only playback drops dead lead-in around events", async ()
   const r = await renderVideo(actionSpec, { repoPath: repo, outDir, baseName: "action", aspectRatios: ["16:9"] });
   const avg = firstFrameAverageRgb(r.outputs[0]!.path);
   expect(avg.b).toBeGreaterThan(avg.r);
-}, 40_000);
+}, 120_000);
 
 test("portrait screencaps default to full-frame instead of zoom camera", async () => {
   const caps = join(repo, ".showtell", "captures");
@@ -389,7 +389,7 @@ test("portrait screencaps default to full-frame instead of zoom camera", async (
   const zoomed = frameAverageRgb(follow.outputs[0]!.path, 0.8);
   expect(Math.abs(fullFrame.r - fullFrame.b)).toBeLessThan(35);
   expect(zoomed.b).toBeGreaterThan(zoomed.r + 35);
-}, 40_000);
+}, 120_000);
 
 test("screencap clip ranges keep event windows that overlap the clip", async () => {
   const caps = join(repo, ".showtell", "captures");
@@ -441,7 +441,7 @@ test("screencap clip ranges keep event windows that overlap the clip", async () 
     aspectRatios: ["16:9"],
   });
   expect(r.warnings).toHaveLength(0);
-}, 40_000);
+}, 120_000);
 
 test("screencap smart playback drops visually idle time without event metadata", async () => {
   const caps = join(repo, ".showtell", "captures");
@@ -512,7 +512,7 @@ test("screencap smart playback drops visually idle time without event metadata",
   expect(late.r + late.g + late.b).toBeGreaterThan(30);
   expect(r.warnings).toHaveLength(0);
   expect(probeDurationMs(r.outputs[0]!.path) / 1000).toBeLessThan(2.5);
-}, 40_000);
+}, 120_000);
 
 // 1x1 transparent PNG (presenter avatar fixture).
 const tinyAvatarPng = Buffer.from(

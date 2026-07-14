@@ -365,7 +365,12 @@ test.skipIf(!browserAvailable)(
   async () => {
     const fixture = webFixture();
     const sourcePath = join(fixture.bundleDir, "hyperframes", "motion.html");
-    writeFileSync(sourcePath, readFileSync(sourcePath, "utf-8").replace("window.__showtell.timeline=tl;", "void tl;"));
+    // Assign a non-seekable value: static lint sees an assignment, so the
+    // independent runtime guard is what must reject the missing pause()/seek().
+    writeFileSync(
+      sourcePath,
+      readFileSync(sourcePath, "utf-8").replace("window.__showtell.timeline=tl;", "window.__showtell.timeline={};"),
+    );
     const runtime = await compileBundle(fixture.bundleDir, { cacheDir: fixture.cacheDir });
     const scene = runtime.spec.scenes[0]!;
     const planScene = runtime.plan.scenes[0]!;

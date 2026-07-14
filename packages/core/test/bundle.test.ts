@@ -729,6 +729,25 @@ test("bundle v3 accepts web as its only designed visual runtime", () => {
   expect(validateBundle(web).ok).toBe(true);
 });
 
+test("bundle v3 web visuals must assign the paused showtell timeline", () => {
+  const dir = writeBundle({
+    version: 3,
+    meta: { title: "No timeline", repo: { path: ROOT } },
+    scenes: [sceneWithVisual({ kind: "web", src: "web/app.html" })],
+  });
+  mkdirSync(join(dir, "web"), { recursive: true });
+  const html = webHtml({ inputs: {} }).replace(
+    "<script>window.__showtell.timeline = gsap.timeline({ paused: true });</script>",
+    "",
+  );
+  writeFileSync(join(dir, "web", "app.html"), html);
+  const result = validateBundle(dir);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errors).toContainEqual(expect.objectContaining({ code: "MISSING_WEB_TIMELINE" }));
+  }
+});
+
 test("bundle v3 screencap keeps simple-spec validation semantics", () => {
   for (const visual of [
     { kind: "screencap", sessionRef: "../recording" },
@@ -997,6 +1016,7 @@ function webHtml(manifest: Record<string, unknown>): string {
   return [
     '<!doctype html><html><body><div id="root"></div>',
     `<script type="application/showtell+json">${JSON.stringify({ schemaVersion: 3, ...manifest })}</script>`,
+    "<script>window.__showtell.timeline = gsap.timeline({ paused: true });</script>",
     "</body></html>",
   ].join("");
 }

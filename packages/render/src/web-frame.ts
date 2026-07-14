@@ -125,6 +125,7 @@ function browserFromBundle(browserDir: string): string | undefined {
     chromiumRevision?: string;
     browserVersion?: string;
     executable?: string;
+    target?: string;
   };
   if (
     manifest.chromiumRevision !== webRuntimeIdentity.chromiumRevision ||
@@ -132,6 +133,12 @@ function browserFromBundle(browserDir: string): string | undefined {
   ) {
     throw new Error(
       `Bundled Chromium identity mismatch at ${manifestPath}; expected revision ${webRuntimeIdentity.chromiumRevision}.`,
+    );
+  }
+  const hostTarget = `${process.platform}-${process.arch}`;
+  if (manifest.target && manifest.target !== hostTarget) {
+    throw new Error(
+      `Bundled Chromium at ${manifestPath} is built for ${manifest.target}, not ${hostTarget}. Reinstall the Showtell platform package for this machine.`,
     );
   }
   if (!manifest.executable) throw new Error(`Bundled Chromium manifest has no executable path: ${manifestPath}`);

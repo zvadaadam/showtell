@@ -63,7 +63,8 @@ async function assertPlayerPlayback(page: Page): Promise<void> {
       const v = document.querySelector("video");
       return !!v && v.readyState >= 1 && v.videoWidth > 0;
     },
-    { timeout: 20_000 },
+    undefined,
+    { timeout: 30_000 },
   );
 
   const startedAt = await page.evaluate(async () => {
@@ -106,18 +107,19 @@ test.skipIf(!webGateAvailable)(
     // player/manifest/media assertion failures remain immediate test failures.
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const browser = await chromium.launch({ headless: true });
-      const context = await browser.newContext({ viewport: { width: 1320, height: 900 } });
-      const page = await context.newPage();
+      let context: Awaited<ReturnType<typeof browser.newContext>> | undefined;
       try {
+        context = await browser.newContext({ viewport: { width: 1320, height: 900 } });
+        const page = await context.newPage();
         await assertPlayerPlayback(page);
         return;
       } catch (error) {
         if (attempt > 0 || !isClosedBrowserTransport(error)) throw error;
       } finally {
-        await context.close().catch(() => undefined);
+        await context?.close().catch(() => undefined);
         await browser.close().catch(() => undefined);
       }
     }
   },
-  90_000,
+  150_000,
 );

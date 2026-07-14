@@ -128,7 +128,9 @@ export async function renderFrames(
       aspectRatios,
       watermark: watermarkText(spec),
     });
-    const sourceById = new Map(sceneMap.map((sourceIndex) => [simpleSceneId(sourceIndex), sourceIndex]));
+    const sourceById = new Map(
+      sceneMap.map((sourceIndex) => [spec.scenes[sourceIndex]!.id ?? simpleSceneId(sourceIndex), sourceIndex]),
+    );
     const frames: FrameInfo[] = [];
     const resolvedCode: ResolvedInfo[] = [];
     const resolvedKeys = new Set<string>();

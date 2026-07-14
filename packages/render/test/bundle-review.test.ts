@@ -1,12 +1,23 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChartScene, TitleScene } from "@showtell/core";
 import { BundleReviewError, reviewBundle } from "../src/index.ts";
 import { simpleWebDocument, simpleWebProps } from "../src/simple-web-templates.ts";
+
+const tmpRoots: string[] = [];
+afterAll(() => {
+  for (const root of tmpRoots) rmSync(root, { recursive: true, force: true });
+});
+
+function trackedTmpDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tmpRoots.push(dir);
+  return dir;
+}
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 
@@ -34,7 +45,7 @@ function seedSay(cacheDir: string, texts: string[]): void {
 }
 
 function reviewFixture(): { dir: string; cacheDir: string } {
-  const dir = mkdtempSync(join(tmpdir(), "showtell-review-"));
+  const dir = trackedTmpDir("showtell-review-");
   const cacheDir = join(dir, "cache");
   const texts = ["This line is sampled at exact video timestamps.", "The scene filter selects stable ids."];
   seedSay(cacheDir, texts);
@@ -103,7 +114,7 @@ function reviewFixture(): { dir: string; cacheDir: string } {
 test("reviewBundle writes a gallery and exact monotonic frame samples", async () => {
   const fixture = reviewFixture();
   const result = await reviewBundle(fixture.dir, {
-    outDir: mkdtempSync(join(tmpdir(), "showtell-review-out-")),
+    outDir: trackedTmpDir("showtell-review-out-"),
     aspectRatios: ["16:9"],
     cacheDir: fixture.cacheDir,
     samplesPerLine: 5,
@@ -129,7 +140,7 @@ test("reviewBundle writes a gallery and exact monotonic frame samples", async ()
 test("reviewBundle filters scenes and reports valid ids for an unknown filter", async () => {
   const fixture = reviewFixture();
   const result = await reviewBundle(fixture.dir, {
-    outDir: mkdtempSync(join(tmpdir(), "showtell-review-filter-")),
+    outDir: trackedTmpDir("showtell-review-filter-"),
     aspectRatios: ["16:9"],
     cacheDir: fixture.cacheDir,
     sceneId: "second",

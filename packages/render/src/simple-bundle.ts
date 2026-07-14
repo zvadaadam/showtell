@@ -45,7 +45,7 @@ function lowerWebScene(scene: SimpleWebScene, sourceIndex: number): BundleScene 
   const source = repoRef(scene);
   const dataId = chartAssetId(sourceIndex);
   return {
-    id: simpleSceneId(sourceIndex),
+    id: scene.id ?? simpleSceneId(sourceIndex),
     duration: scene.duration,
     narration: { lines: [{ id: "l1", text: scene.narration }] },
     refs: source ? { source } : {},
@@ -68,7 +68,7 @@ function lowerWebScene(scene: SimpleWebScene, sourceIndex: number): BundleScene 
 function lowerScene(scene: Scene, sourceIndex: number): BundleScene {
   if (scene.kind !== "screencap") return lowerWebScene(scene, sourceIndex);
   return {
-    id: simpleSceneId(sourceIndex),
+    id: scene.id ?? simpleSceneId(sourceIndex),
     duration: scene.duration,
     narration: { lines: [{ id: "l1", text: scene.narration }] },
     refs: {},

@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 /** Resolve Playwright's pinned headless-shell executable beside full Chromium. */
 export function headlessShellExecutable(
@@ -9,10 +9,10 @@ export function headlessShellExecutable(
 ): string {
   let chromiumRoot = dirname(chromiumExecutable);
   const rootName = `chromium-${revision}`;
-  while (dirname(chromiumRoot) !== chromiumRoot && !chromiumRoot.endsWith(rootName)) {
+  while (dirname(chromiumRoot) !== chromiumRoot && basename(chromiumRoot) !== rootName) {
     chromiumRoot = dirname(chromiumRoot);
   }
-  if (!chromiumRoot.endsWith(rootName)) {
+  if (basename(chromiumRoot) !== rootName) {
     throw new Error(`Playwright Chromium path is not inside ${rootName}: ${chromiumExecutable}`);
   }
   const shellRoot = join(dirname(chromiumRoot), `chromium_headless_shell-${revision}`);

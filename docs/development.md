@@ -37,7 +37,7 @@ player. Inspect both packages before publishing:
 
 ```bash
 npm publish ./dist/npm/showtell --dry-run
-npm publish ./dist/npm/showtell-<platform> --dry-run
+npm publish "./dist/npm/showtell-$TARGET" --dry-run
 ```
 
 For a local dry run, `build:release` builds archives for the current host. A
