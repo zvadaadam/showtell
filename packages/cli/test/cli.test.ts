@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 import rootManifest from "../../../package.json" with { type: "json" };
 
 const CLI = join(import.meta.dir, "..", "src", "index.ts");

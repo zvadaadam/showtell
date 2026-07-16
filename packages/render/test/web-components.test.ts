@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 import { compileBundle, exactBundleFrameAt, lineSampleTimeMs } from "../src/bundle.ts";
 import { webComponentManifest, webCssVariables, webRuntimeIdentity } from "../src/web-authoring.ts";
 import { webComponentsSource } from "../src/web-components.ts";

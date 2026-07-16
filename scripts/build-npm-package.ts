@@ -88,10 +88,10 @@ function stagePlatformPackage(target: ReleaseTarget, binarySource: string, brows
   return stageDir;
 }
 
-function compile(target: ReleaseTarget): string {
+async function compile(target: ReleaseTarget): Promise<string> {
   const binaryDir = join(root, "dist", "bin");
   const binary = join(binaryDir, `showtell-${target.id}`);
-  return compileCli(binary, target.bunTarget);
+  return await compileCli(binary, target.bunTarget);
 }
 
 function hostTarget(): ReleaseTarget {
@@ -170,7 +170,7 @@ if (binaryDir) {
     throw new Error(`Unknown --target ${targetId}. Valid targets: ${RELEASE_TARGETS.map(({ id }) => id).join(", ")}`);
   }
   if (suppliedBinary && !targetId) throw new Error("--binary requires --target.");
-  staged.push(stagePlatformPackage(target, suppliedBinary ?? compile(target)));
+  staged.push(stagePlatformPackage(target, suppliedBinary ?? (await compile(target))));
 }
 
 process.stdout.write(`${JSON.stringify({ ok: true, version: rootManifest.version, npmDir, staged }, null, 2)}\n`);

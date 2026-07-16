@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { bundleWebFile, type AspectRatio, type BundleScene } from "@showtell/core";
 import { captionSafeArea, dimsFor, presenterSafeArea } from "@showtell/compose";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
 import gsapSource from "gsap/dist/gsap.min.js" with { type: "text" };
 import inter400 from "@fontsource/inter/files/inter-latin-400-normal.woff2" with { type: "file" };
 import inter500 from "@fontsource/inter/files/inter-latin-500-normal.woff2" with { type: "file" };

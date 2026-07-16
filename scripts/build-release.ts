@@ -43,7 +43,7 @@ mkdirSync(binaryDir, { recursive: true });
 
 if (!suppliedBinaryDir) {
   const platform = selectedPlatforms[0]!;
-  compileCli(join(binaryDir, `showtell-${platform}`), releaseTarget(platform)!.bunTarget);
+  await compileCli(join(binaryDir, `showtell-${platform}`), releaseTarget(platform)!.bunTarget);
 }
 
 const artifacts: string[] = [];

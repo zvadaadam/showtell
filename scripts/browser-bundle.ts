@@ -1,6 +1,6 @@
 import { existsSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 import { webRuntimeIdentity } from "../packages/render/src/web-authoring.ts";
 import { headlessShellExecutable } from "../packages/render/src/chromium-path.ts";
 import type { ReleaseTarget } from "./release-targets.ts";

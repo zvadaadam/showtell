@@ -92,6 +92,9 @@ jobs:
         run: bun scripts/build-npm-package.ts --target ${{ matrix.target }}
       - name: Smoke test native binary
         run: |
+          # Packaged binaries must run without the workspace node_modules.
+          mv node_modules .nm-hidden
+          trap 'mv .nm-hidden node_modules' EXIT
           ./dist/bin/showtell-${{ matrix.target }} version
           ./dist/bin/showtell-${{ matrix.target }} bundle components > /dev/null
           test -f dist/bin/showtell-${{ matrix.target }}-browser.tar.gz
@@ -135,6 +138,8 @@ jobs:
         run: bun scripts/build-release.ts --binary-dir dist/bin
       - name: Smoke test the macOS archive
         run: |
+          mv node_modules .nm-hidden
+          trap 'mv .nm-hidden node_modules' EXIT
           mkdir -p dist/release/native-smoke
           tar -xzf dist/release/showtell-v*-darwin-arm64.tar.gz -C dist/release/native-smoke
           ./dist/release/native-smoke/showtell version
@@ -150,6 +155,8 @@ jobs:
       - name: Smoke test npm platform selection
         run: |
           VERSION=$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')
+          mv node_modules .nm-hidden
+          trap 'mv .nm-hidden node_modules' EXIT
           mkdir -p dist/release/npm-smoke
           npm install --prefix dist/release/npm-smoke ./dist/release/showtell-$VERSION.tgz ./dist/release/showtell-darwin-arm64-$VERSION.tgz --ignore-scripts
           ./dist/release/npm-smoke/node_modules/.bin/showtell version

@@ -32,6 +32,10 @@ jobs:
           ./dist/showtell version
           bun run build:npm
           test -f dist/npm/showtell-darwin-arm64/browser/runtime.json
+          # Run every packaged-binary smoke without the workspace node_modules:
+          # a compiled binary must not resolve anything from the build tree.
+          mv node_modules .nm-hidden
+          trap 'mv .nm-hidden node_modules' EXIT
           ./dist/npm/showtell-darwin-arm64/bin/showtell bundle runtime > /dev/null
           ./dist/npm/showtell-darwin-arm64/bin/showtell bundle render examples/bundle-v3 --out dist/npm/v3-smoke-a --aspect 16:9 > /dev/null
           ./dist/npm/showtell-darwin-arm64/bin/showtell bundle render examples/bundle-v3 --out dist/npm/v3-smoke-b --aspect 16:9 > /dev/null
@@ -69,6 +73,9 @@ jobs:
       - name: Build and exercise the native package
         run: |
           bun scripts/build-npm-package.ts --target ${{ matrix.target }}
+          # Exercise packaged binaries without the workspace node_modules.
+          mv node_modules .nm-hidden
+          trap 'mv .nm-hidden node_modules' EXIT
           ./dist/npm/showtell-${{ matrix.target }}/bin/showtell version
           test -f dist/npm/showtell-${{ matrix.target }}/browser/runtime.json
           ./dist/npm/showtell-${{ matrix.target }}/bin/showtell bundle runtime > /dev/null

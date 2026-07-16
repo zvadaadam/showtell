@@ -9,15 +9,15 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@showtell/capture": "workspace:*",
-    "@showtell/compose": "workspace:*",
-    "@showtell/core": "workspace:*",
-    "@showtell/providers": "workspace:*",
     "@fontsource/inter": "5.2.8",
     "@fontsource/jetbrains-mono": "5.2.8",
     "@fontsource/league-gothic": "5.2.8",
     "@fontsource/space-mono": "5.2.8",
+    "@showtell/capture": "workspace:*",
+    "@showtell/compose": "workspace:*",
+    "@showtell/core": "workspace:*",
+    "@showtell/providers": "workspace:*",
     "gsap": "3.14.2",
-    "playwright": "1.61.1"
+    "playwright-core": "1.61.1"
   }
 }

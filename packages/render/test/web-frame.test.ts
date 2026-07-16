@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 import { compileBundle, exactBundleFrameAt, lineSampleTimeMs, renderBundle } from "../src/bundle.ts";
 import { createBundleFrameProducer } from "../src/frame-producer.ts";
 import { reviewBundle } from "../src/review.ts";
